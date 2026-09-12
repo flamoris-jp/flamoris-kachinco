@@ -54,8 +54,9 @@ transient. Project replacement clears history and increments session revision.
 ## Canonical time
 
 Decision: **35,280,000 integer ticks/second**, shared by video, audio and captions.
-This represents 44.1/48/96/192 kHz sample boundaries and common integer/1001 FPS
+This represents 44.1/48 kHz sample boundaries and common integer/1001 FPS
 frame boundaries exactly, unlike simply copying 2D's 120,000 ticks/second.
+Other sample rates use the same rounded conversion, not a separate clock.
 FPS is a reduced positive integer numerator/denominator, never a double.
 Conversions use BigInteger intermediates and round-half-up for nonnegative times;
 overflow is rejected. No accumulated frame-step rounding: frame n is independently

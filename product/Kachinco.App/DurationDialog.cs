@@ -24,7 +24,8 @@ internal sealed class DurationDialog : Window
             if (!decimal.TryParse(input.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out decimal seconds) || seconds <= 0 ||
                 seconds > (decimal)long.MaxValue / TimelineTime.TicksPerSecond)
             { error.Text = "有効な正の秒数を入力してください。"; return; }
-            DurationTicks = checked((long)decimal.Round(seconds * TimelineTime.TicksPerSecond, 0, MidpointRounding.AwayFromZero));
+            try { DurationTicks = TimelineTime.SecondsToTicks(seconds); }
+            catch (OverflowException) { error.Text = "長さが大きすぎます。"; return; }
             if (DurationTicks <= 0) { error.Text = "長さが短すぎます。"; return; }
             DialogResult = true;
         };

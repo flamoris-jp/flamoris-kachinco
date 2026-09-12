@@ -126,9 +126,9 @@ public partial class MainWindow : Window
         var snapshot = session.GetProject();
         var project = snapshot.Project;
         var mediaId = (MediaList.SelectedItem as MediaAsset)?.Id;
-        MediaList.ItemsSource = project is null ? [] : TimelineQueries.ListMediaAssets(project);
+        MediaList.ItemsSource = project is null ? Array.Empty<MediaAsset>() : TimelineQueries.ListMediaAssets(project);
         if (project is not null) MediaList.SelectedItem = project.Assets.FirstOrDefault(a => a.Id == mediaId);
-        SequenceList.ItemsSource = project is null ? [] : TimelineQueries.ListSequences(project);
+        SequenceList.ItemsSource = project is null ? Array.Empty<Sequence>() : TimelineQueries.ListSequences(project);
         var sequence = project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId) ?? project?.Sequences.FirstOrDefault();
         selectedSequenceId = sequence?.Id; SequenceList.SelectedItem = sequence;
         var rows = new List<TimelineRow>();

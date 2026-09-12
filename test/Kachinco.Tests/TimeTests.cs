@@ -8,6 +8,14 @@ namespace Kachinco.Tests;
 public sealed class TimeTests
 {
     [TestMethod]
+    public void DecimalSecondsUseCanonicalConversionAndRejectOverflow()
+    {
+        Assert.AreEqual(Fixture.T, TimelineTime.SecondsToTicks(1m));
+        Assert.AreEqual(0L, TimelineTime.SecondsToTicks(0.000000001m));
+        Assert.ThrowsExactly<OverflowException>(() => TimelineTime.SecondsToTicks(decimal.MaxValue));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TimelineTime.SecondsToTicks(-1));
+    }
+    [TestMethod]
     public void FrameRateReducesAndRejectsInvalidInputs()
     {
         Assert.AreEqual(new FrameRate(30000, 1001), FrameRate.Create(60000, 2002));

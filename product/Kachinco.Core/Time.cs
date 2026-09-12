@@ -22,6 +22,13 @@ public static class TimelineTime
 {
     public const long TicksPerSecond = 35_280_000;
 
+    // Decimal seconds are an input/display adapter, never persistent authority.
+    public static long SecondsToTicks(decimal seconds)
+    {
+        if (seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        return checked((long)decimal.Round(checked(seconds * TicksPerSecond), 0, MidpointRounding.AwayFromZero));
+    }
+
     public static long RoundHalfUp(BigInteger numerator, BigInteger denominator)
     {
         if (numerator < 0 || denominator <= 0) throw new ArgumentOutOfRangeException(nameof(numerator));

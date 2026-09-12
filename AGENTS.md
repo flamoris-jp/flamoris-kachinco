@@ -241,3 +241,15 @@ At repository inception:
 - accepted ADRs under `docs/decisions/` will become authority for durable architectural decisions.
 
 As the project grows, add a `docs/README.md` index and explicit architecture documents rather than allowing design knowledge to fragment across issues and chat.
+
+## 15. Implemented foundation authority (Issue #1)
+
+- `docs/production-architecture.md` defines the implemented architecture; `docs/roadmap.md` is the active delivery order. The older project plan is the long-term vision.
+- Use .NET 10, WPF only in `product/Kachinco.App`, and headless Core/Infrastructure. Physical boundaries follow section 3.
+- Canonical time is 35,280,000 ticks/second. Use `TimelineTime` for all conversions, reduced rational FPS, and half-open ranges. Never copy 2D's timebase into this product.
+- All editing goes through `EditorSession.Execute(EditBatch)`; `ReplaceProject` is explicit Open/New lifecycle, not an editing shortcut. Use immutable snapshots and explicit expected revisions for concurrent clients.
+- Keep `ProjectFormatV1` DTOs separate from Core records. Required fields, decimal-string ticks, version dispatch and unknown-field rejection are compatibility contracts. Changes require a schema decision and regression tests.
+- Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` is deliberately not implemented and must not claim successful output.
+- Current scope does not implement Clappers/Recipes/Python, decoding/playback, production image rendering or live MCP. Do not infer those capabilities from the product vision.
+- Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
+- Use `staging/windows-foundation.md` for human interaction/layout acceptance; an automated startup smoke is not visual QA.
