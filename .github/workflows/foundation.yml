@@ -1,0 +1,52 @@
+name: Foundation
+on:
+  push:
+    branches-ignore: [main]
+    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', '.github/workflows/foundation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: foundation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  headless-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=foundation.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-test-results
+          path: test/Kachinco.Tests/TestResults/*.trx
+  windows-shell:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build product/Kachinco.App/Kachinco.App.csproj -c Release
+      - name: Launch shell smoke
+        shell: pwsh
+        run: |
+          $app = Resolve-Path 'product/Kachinco.App/bin/Release/net10.0-windows/Kachinco.App.exe'
+          $process = Start-Process $app -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 20; $attempt++) {
+              Start-Sleep -Milliseconds 500
+              $process.Refresh()
+              if ($process.HasExited) { throw "Shell exited with $($process.ExitCode)" }
+              if ($process.MainWindowHandle -ne 0) { $ready = $true; break }
+            }
+            if (-not $ready) { throw 'Shell did not create its main window.' }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
