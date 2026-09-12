@@ -10,9 +10,29 @@ The core idea is simple:
 
 Kachinco is not intended to reproduce Premiere Pro or After Effects feature-for-feature. Its design starts from a different assumption: **AI is a first-class editor from day one.**
 
+## Initial product constraints
+
+The first product is deliberately narrow.
+
+- Primary implementation language: **C#**.
+- Initial desktop target: **Windows**.
+- Project/output formats are initially limited to:
+  - **1920x1080, 16:9** for normal YouTube video.
+  - **1080x1920, 9:16** for YouTube Shorts / vertical video.
+- Initial media import is intentionally limited to:
+  - **MOV** video.
+  - **WAV** audio.
+- The manual editor only needs the practical **basic NLE feature set** expected from a simple Premiere-like workflow: media import, timeline tracks, playback/scrubbing, clip insert/move/trim/split/delete, basic transforms/opacity, audio placement, captions/subtitles, Undo/Redo, save/reopen, and export.
+- **MCP is a foundational product surface**, not an optional automation layer added later. UI and MCP operate on the same project/domain model and command/history system.
+- The compositor must support at least **Normal, Screen, Add, Multiply, Alpha and opacity** workflows. **Screen blend mode is required from the early product** so black-background light/fire/spark assets can be composited naturally.
+- Python is used for programmable, open-ended effect authoring. Generated results are rendered into ordinary timeline clips and remain reproducible through their Recipe provenance.
+- Future integrations such as **Kinetai** and **AudioAnalyzer** are expected, but they must connect through explicit integration boundaries rather than becoming dependencies of the editor core.
+
+The narrow codec/resolution scope is intentional. Kachinco should first prove fast, reliable AI-assisted editing before expanding into a broad compatibility matrix.
+
 ## Core workflow
 
-1. Import source video, audio, images, lyrics, and subtitle text.
+1. Import MOV video and WAV audio.
 2. Arrange normal clips on a timeline.
 3. Create a named **Clapper** that binds a time range and, optionally, a canvas region/path and target track.
 4. Ask an AI assistant for an edit using that name.
@@ -75,6 +95,7 @@ Instead, it exposes a small set of powerful rendering primitives such as:
 - image/layer composition
 - text and captions
 - transforms and opacity
+- blend modes including Screen
 - masks and mattes
 - blur and filtering
 - color operations
@@ -116,8 +137,8 @@ Initial capability groups are expected to include:
 
 ### Timeline mutation commands
 
-- import/register media
-- insert/replace/move/trim clips
+- import/register MOV and WAV media
+- insert/replace/move/trim/split clips
 - create subtitle tracks and captions
 - attach generated output to a Recipe and Clapper
 - perform compound edits transactionally with Undo/Redo support
@@ -157,7 +178,7 @@ Kachinco should eventually support requests such as:
    Randomness must be seeded; external AI-generated assets are explicit inputs rather than invisible runtime dependencies.
 
 8. **Safe programmable rendering**  
-   Python Recipes execute in a restricted environment with explicit APIs, resource limits, and no arbitrary OS access.
+   Python Recipes execute in a restricted environment with explicit APIs, resource limits, and no arbitrary OS access. Prefer a separate worker/process boundary from the C# editor runtime.
 
 9. **Undo/Redo and transactions from the beginning**  
    MCP and UI mutations share the same command/history model.
@@ -179,7 +200,7 @@ Human / ChatGPT
  Timeline / Clapper      Recipe API            Project Queries
  Commands                   |                      |
       |                      v                      |
-      |              Restricted Python             |
+      |              Restricted Python Worker       |
       |                      |                      |
       |                Render Commands / IR         |
       |                      |                      |
@@ -193,7 +214,9 @@ Human / ChatGPT
                      Timeline Clip
 ```
 
-Python is an authoring language, not the renderer itself. The renderer owns deterministic evaluation, composition, timing, and output.
+The editor/application core is C#. Python is an authoring language, not the renderer itself. The renderer owns deterministic evaluation, composition, timing, blend behavior, and output.
+
+Future systems such as Kinetai or AudioAnalyzer should connect through explicit integration adapters and feed normal project media/metadata/commands into Kachinco rather than bypassing the domain model.
 
 ## Repository status
 
