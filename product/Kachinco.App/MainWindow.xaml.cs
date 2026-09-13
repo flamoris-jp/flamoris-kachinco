@@ -143,7 +143,8 @@ public partial class MainWindow : Window
         TimelineGrid.ItemsSource = rows;
         PreviewInfo.Text = sequence is null ? "シーケンスがありません" :
             $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} 秒";
-        UndoButton.IsEnabled = snapshot.CanUndo; RedoButton.IsEnabled = snapshot.CanRedo;
+        UndoButton.IsEnabled = UndoMenuItem.IsEnabled = snapshot.CanUndo;
+        RedoButton.IsEnabled = RedoMenuItem.IsEnabled = snapshot.CanRedo;
         Title = $"{(IsDirty() ? "* " : "")}{project?.Name ?? "FLAMORIS Kachinco"} — Kachinco";
         if (message is not null) Status.Text = message;
         refreshing = false;

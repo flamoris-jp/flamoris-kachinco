@@ -3,20 +3,43 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FLAMORIS Kachinco" Width="1200" Height="780" MinWidth="850" MinHeight="580"
         Background="#F2F3F5" Closing="Window_Closing">
-  <DockPanel Margin="12">
-    <StackPanel DockPanel.Dock="Top">
-      <TextBlock Text="FLAMORIS Kachinco" FontSize="23" FontWeight="SemiBold" Margin="4,2,4,10" />
-      <WrapPanel>
-        <Button Content="新規・横長" Click="NewLandscape_Click" />
-        <Button Content="新規・縦長" Click="NewPortrait_Click" />
-        <Button Content="開く" Click="Open_Click" />
-        <Button Content="名前を付けて保存" Click="Save_Click" />
-        <Button x:Name="UndoButton" Content="元に戻す" Click="Undo_Click" />
-        <Button x:Name="RedoButton" Content="やり直す" Click="Redo_Click" />
-      </WrapPanel>
-    </StackPanel>
-    <TextBlock x:Name="Status" DockPanel.Dock="Bottom" Margin="4,12,4,4" TextWrapping="Wrap" />
-    <Grid Margin="0,12,0,0">
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="ファイル(_F)">
+        <MenuItem Header="新規・横長(_L)" Click="NewLandscape_Click" />
+        <MenuItem Header="新規・縦長(_P)" Click="NewPortrait_Click" />
+        <Separator />
+        <MenuItem Header="開く(_O)…" Click="Open_Click" InputGestureText="Ctrl+O" />
+        <MenuItem Header="名前を付けて保存(_A)…" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
+      </MenuItem>
+      <MenuItem Header="編集(_E)">
+        <MenuItem x:Name="UndoMenuItem" Header="元に戻す(_U)" Click="Undo_Click" InputGestureText="Ctrl+Z" />
+        <MenuItem x:Name="RedoMenuItem" Header="やり直す(_R)" Click="Redo_Click" InputGestureText="Ctrl+Y" />
+      </MenuItem>
+      <MenuItem Header="クリップ(_C)">
+        <MenuItem Header="選択クリップを削除(_D)" Click="Delete_Click" InputGestureText="Delete" />
+      </MenuItem>
+      <MenuItem Header="シーケンス(_S)" />
+      <MenuItem Header="表示(_V)" />
+      <MenuItem Header="ヘルプ(_H)" />
+    </Menu>
+    <ToolBarTray DockPanel.Dock="Top" Background="#E8E9EC">
+      <ToolBar Band="0" BandIndex="0">
+        <Button x:Name="UndoButton" Content="↶ 元に戻す" Click="Undo_Click" />
+        <Button x:Name="RedoButton" Content="↷ やり直す" Click="Redo_Click" />
+        <Separator />
+        <Button Content="分割" IsEnabled="False" ToolTip="Phase 1のタイムライン選択時に使用できます" />
+        <Separator />
+        <Button Content="｜◀" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <Button Content="▶" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <Button Content="■" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <Button Content="▶｜" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+      </ToolBar>
+    </ToolBarTray>
+    <Border DockPanel.Dock="Bottom" Background="#E4E6EA" Padding="8,5">
+      <TextBlock x:Name="Status" TextWrapping="Wrap" />
+    </Border>
+    <Grid Margin="12">
       <Grid.RowDefinitions><RowDefinition Height="3*"/><RowDefinition Height="6"/><RowDefinition Height="2*"/></Grid.RowDefinitions>
       <Grid.ColumnDefinitions><ColumnDefinition Width="270"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Border Background="White" Padding="12">
