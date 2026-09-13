@@ -23,7 +23,7 @@
         <MenuItem Header="再生ヘッド位置で分割(_S)" Click="Split_Click" />
         <MenuItem Header="選択クリップを削除(_D)" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
-      <MenuItem Header="シーケンス(_S)" />
+      <MenuItem Header="シーケンス(_S)"><MenuItem Header="長さを変更…" Click="SequenceDuration_Click" /></MenuItem>
       <MenuItem Header="表示(_V)">
         <MenuItem x:Name="SnappingMenuItem" Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
         <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
@@ -37,10 +37,6 @@
         <Button x:Name="RedoButton" Content="↷ やり直す" Click="Redo_Click" />
         <Separator />
         <Button x:Name="SplitButton" Content="✂ 分割" Click="Split_Click" />
-        <ToggleButton x:Name="SnappingButton" Content="磁石 スナップ" IsChecked="True" Click="Snapping_Click" />
-        <Button Content="−" Click="ZoomOut_Click" ToolTip="タイムラインを縮小" />
-        <TextBlock x:Name="ZoomText" VerticalAlignment="Center" MinWidth="62" TextAlignment="Center" />
-        <Button Content="＋" Click="ZoomIn_Click" ToolTip="タイムラインを拡大" />
         <Separator />
         <Button Content="|◀" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
         <Button Content="▶" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
@@ -70,7 +66,7 @@
             </WrapPanel>
           </StackPanel>
           <ListBox x:Name="MediaList" Margin="0,8,0,0" SelectionChanged="Media_Changed"
-                   MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
+                   PreviewMouseLeftButtonDown="Media_MouseDown" PreviewMouseMove="Media_MouseMove" MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid Margin="3">
@@ -132,11 +128,16 @@
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="タイムライン" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
               <ComboBox x:Name="SequenceList" Width="230" DisplayMemberPath="Name" SelectionChanged="Sequence_Changed" />
+        <ToggleButton x:Name="SnappingButton" Content="磁石 スナップ" IsChecked="True" Click="Snapping_Click" />
+        <Button Content="−" Click="ZoomOut_Click" ToolTip="タイムラインを縮小" />
+        <TextBlock x:Name="ZoomText" VerticalAlignment="Center" MinWidth="62" TextAlignment="Center" />
+        <Button Content="＋" Click="ZoomIn_Click" ToolTip="タイムラインを拡大" />
+              <Button Content="全体" Click="FitTimeline_Click" ToolTip="シーケンス全体を表示" />
               <TextBlock x:Name="PlayheadText" Foreground="#D5DAE1" VerticalAlignment="Center" Margin="14,0,0,0" />
             </StackPanel>
           </Border>
           <local:TimelineSurface x:Name="Timeline" CommandRequested="Timeline_CommandRequested"
-                                 ClipSelectionChanged="Timeline_ClipSelectionChanged"
+                                 ClipSelectionChanged="Timeline_ClipSelectionChanged" MediaPlacementRequested="Timeline_MediaPlacementRequested" PlayheadChanged="Timeline_PlayheadChanged"
                                  InteractionFailed="Timeline_InteractionFailed" />
         </DockPanel>
       </Border>

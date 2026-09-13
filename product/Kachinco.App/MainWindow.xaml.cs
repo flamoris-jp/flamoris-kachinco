@@ -25,6 +25,8 @@ public partial class MainWindow : Window
     private Guid? selectedClipId;
     private bool refreshing;
     private bool busy;
+    private Point mediaDragStart;
+    private Guid? draggedMediaId;
 
     public MainWindow()
     {
@@ -116,21 +118,51 @@ public partial class MainWindow : Window
         var sequence = project.Sequences.First(s => s.Id == sequenceId);
         var kind = row.Asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
         var track = sequence.Tracks.FirstOrDefault(x => x.Kind == kind);
-        var start = Math.Clamp(Timeline.PlayheadTicks, 0, sequence.DurationTicks);
-        long remaining = sequence.DurationTicks - start;
-        long duration = Math.Min(row.Asset.DurationTicks, remaining);
-        if (duration <= 0) { Refresh("再生ヘッドがシーケンス終端にあります。"); return; }
-        var clip = new Clip(Guid.NewGuid(), row.Asset.Id, start, 0, duration, true,
-            ClipAppearance.Default, AudioProperties.Default);
-        selectedClipId = clip.Id;
-        if (track is null)
-        {
-            var trackId = Guid.NewGuid();
-            Apply("素材をタイムラインへ配置しました。",
-                new AddTrack(sequenceId, trackId, kind == TrackKind.Video ? "映像" : "音声", kind),
-                new InsertClip(sequenceId, trackId, clip));
-        }
-        else Apply("素材をタイムラインへ配置しました。", new InsertClip(sequenceId, track.Id, clip));
+        if (track is null) { Refresh("互換トラックがありません。"); return; }
+        PlaceMedia(row.Asset.Id, track.Id, Timeline.PlayheadTicks);
+    }
+
+    private void PlaceMedia(Guid mediaId, Guid trackId, long startTicks)
+    {
+        var snapshot = session.GetProject();
+        if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return;
+        var clipId = Guid.NewGuid();
+        var planned = TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
+        if (!planned.Success) { ShowErrors(planned.Diagnostics); return; }
+        var result = session.Execute(planned.Value!);
+        if (result.Success) selectedClipId = clipId;
+        Show(result, "素材をタイムラインへ配置しました。");
+    }
+
+    private void Media_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        mediaDragStart = e.GetPosition(MediaList);
+        draggedMediaId = (ItemsControl.ContainerFromElement(MediaList, e.OriginalSource as DependencyObject) as ListBoxItem)?.DataContext is MediaAssetRow row ? row.Asset.Id : null;
+    }
+    private void Media_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || draggedMediaId is not { } id) return;
+        var point = e.GetPosition(MediaList);
+        if (Math.Abs(point.X - mediaDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(point.Y - mediaDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        draggedMediaId = null;
+        DragDrop.DoDragDrop(MediaList, new DataObject(TimelineSurface.MediaDragFormat, id), DragDropEffects.Copy);
+    }
+    private void Timeline_MediaPlacementRequested(object sender, MediaPlacementEventArgs e) => PlaceMedia(e.MediaId, e.TrackId, e.StartTicks);
+    private void Timeline_PlayheadChanged(object? sender, EventArgs e) => RefreshTimelineStatus();
+    private void FitTimeline_Click(object sender, RoutedEventArgs e) { Timeline.FitSequence(); RefreshTimelineStatus(); }
+    private void SequenceDuration_Click(object sender, RoutedEventArgs e)
+    {
+        var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
+        if (sequence is null) return;
+        var input = new TextBox { Text = Seconds(sequence.DurationTicks), Margin = new Thickness(12) };
+        var ok = new Button { Content = "適用", IsDefault = true, Margin = new Thickness(12) };
+        var panel = new StackPanel(); panel.Children.Add(input); panel.Children.Add(ok);
+        var dialog = new Window { Owner = this, Title = "シーケンスの長さ（秒）", Width = 320, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
+        ok.Click += (_, _) => { if (TrySeconds(input.Text, out var ticks) && ticks > 0) dialog.DialogResult = true; };
+        if (dialog.ShowDialog() == true && TrySeconds(input.Text, out var duration))
+            Apply("シーケンスの長さを変更しました。", new SetSequenceDuration(sequence.Id, duration));
     }
 
     private async void Relink_Click(object sender, RoutedEventArgs e)

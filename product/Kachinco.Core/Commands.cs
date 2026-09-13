@@ -6,6 +6,7 @@ namespace Kachinco.Core;
 public abstract record EditCommand;
 public sealed record CreateProject(Guid ProjectId, string Name) : EditCommand;
 public sealed record CreateSequence(Guid SequenceId, string Name, SequenceSettings Settings, long DurationTicks) : EditCommand;
+public sealed record SetSequenceDuration(Guid SequenceId, long DurationTicks) : EditCommand;
 public sealed record RegisterMedia(MediaAsset Asset) : EditCommand;
 public sealed record RelinkMedia(Guid MediaAssetId, string SourcePath, long DurationTicks,
     int? SampleRate = null, int? Channels = null) : EditCommand;
@@ -61,6 +62,7 @@ internal static class CommandApplier
 
         return command switch
         {
+            SetSequenceDuration c => ChangeSequence(project, c.SequenceId, s => s with { DurationTicks = c.DurationTicks }),
             AddTrack c => ChangeSequence(project, c.SequenceId, s => s with { Tracks = s.Tracks.Add(new(c.TrackId, c.Name, c.Kind, true, [], [])) }),
             InsertClip c => ChangeSequence(project, c.SequenceId, s => ChangeTrack(s, c.TrackId, t => t with { Clips = t.Clips.Add(c.Clip) })),
             MoveClip c => ChangeSequence(project, c.SequenceId, s =>

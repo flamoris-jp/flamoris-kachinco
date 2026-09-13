@@ -71,6 +71,34 @@ public enum TrimEdge { Start, End }
 
 public static class TimelineEditPlanner
 {
+    // Placement extends the sequence before insertion in one undoable transaction.
+    public static Result<EditBatch> Place(Project project, Guid sequenceId, Guid mediaId,
+        Guid trackId, Guid clipId, long startTicks, long? revision = null)
+    {
+        var sequence = project.Sequences.FirstOrDefault(x => x.Id == sequenceId);
+        var asset = project.Assets.FirstOrDefault(x => x.Id == mediaId);
+        var track = sequence?.Tracks.FirstOrDefault(x => x.Id == trackId);
+        if (sequence is null || asset is null || track is null)
+            return Result<EditBatch>.Fail(Diagnostic.Error("PLACEMENT_TARGET_NOT_FOUND", "Choose an existing asset, sequence and track."));
+        if (!Compatible(track.Kind, asset.Kind))
+            return Result<EditBatch>.Fail(Diagnostic.Error("TRACK_MEDIA_MISMATCH", "Choose a compatible video or audio track.", trackId));
+        if (startTicks < 0 || clipId == Guid.Empty || ProjectValidator.ContainsId(project, clipId))
+            return Result<EditBatch>.Fail(Diagnostic.Error("INVALID_PLACEMENT", "Invalid clip identity or start time.", clipId));
+        try
+        {
+            long end = checked(startTicks + asset.DurationTicks);
+            var commands = ImmutableArray.CreateBuilder<EditCommand>();
+            if (end > sequence.DurationTicks) commands.Add(new SetSequenceDuration(sequenceId, end));
+            commands.Add(new InsertClip(sequenceId, trackId,
+                new(clipId, mediaId, startTicks, 0, asset.DurationTicks, true, ClipAppearance.Default, AudioProperties.Default)));
+            return Result<EditBatch>.Ok(new(commands.ToImmutable(), revision));
+        }
+        catch (OverflowException)
+        {
+            return Result<EditBatch>.Fail(Diagnostic.Error("TIME_OVERFLOW", "Placement exceeds supported time."));
+        }
+    }
+
     public static Result<MoveClip> Move(Project project, Guid sequenceId, Guid clipId,
         Guid targetTrackId, long startTicks)
     {
