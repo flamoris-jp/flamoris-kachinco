@@ -1,8 +1,9 @@
 <Window x:Class="Kachinco.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="FLAMORIS Kachinco" Width="1200" Height="780" MinWidth="850" MinHeight="580"
-        Background="#F2F3F5" Closing="Window_Closing">
+        xmlns:local="clr-namespace:Kachinco.App"
+        Title="FLAMORIS Kachinco" Width="1320" Height="820" MinWidth="980" MinHeight="640"
+        Background="#F2F3F5" Closing="Window_Closing" PreviewKeyDown="Window_PreviewKeyDown">
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="ファイル(_F)">
@@ -11,71 +12,132 @@
         <Separator />
         <MenuItem Header="開く(_O)…" Click="Open_Click" InputGestureText="Ctrl+O" />
         <MenuItem Header="名前を付けて保存(_A)…" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
+        <Separator />
+        <MenuItem Header="素材を読み込む(_I)…" Click="Register_Click" />
       </MenuItem>
       <MenuItem Header="編集(_E)">
         <MenuItem x:Name="UndoMenuItem" Header="元に戻す(_U)" Click="Undo_Click" InputGestureText="Ctrl+Z" />
         <MenuItem x:Name="RedoMenuItem" Header="やり直す(_R)" Click="Redo_Click" InputGestureText="Ctrl+Y" />
       </MenuItem>
       <MenuItem Header="クリップ(_C)">
+        <MenuItem Header="再生ヘッド位置で分割(_S)" Click="Split_Click" />
         <MenuItem Header="選択クリップを削除(_D)" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
       <MenuItem Header="シーケンス(_S)" />
-      <MenuItem Header="表示(_V)" />
+      <MenuItem Header="表示(_V)">
+        <MenuItem Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
+        <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
+        <MenuItem Header="縮小(_O)" Click="ZoomOut_Click" />
+      </MenuItem>
       <MenuItem Header="ヘルプ(_H)" />
     </Menu>
     <ToolBarTray DockPanel.Dock="Top" Background="#E8E9EC">
-      <ToolBar Band="0" BandIndex="0">
+      <ToolBar>
         <Button x:Name="UndoButton" Content="↶ 元に戻す" Click="Undo_Click" />
         <Button x:Name="RedoButton" Content="↷ やり直す" Click="Redo_Click" />
         <Separator />
-        <Button Content="分割" IsEnabled="False" ToolTip="Phase 1のタイムライン選択時に使用できます" />
+        <Button x:Name="SplitButton" Content="✂ 分割" Click="Split_Click" />
+        <ToggleButton x:Name="SnappingButton" Content="磁石 スナップ" IsChecked="True" Click="Snapping_Click" />
+        <Button Content="−" Click="ZoomOut_Click" ToolTip="タイムラインを縮小" />
+        <TextBlock x:Name="ZoomText" VerticalAlignment="Center" MinWidth="62" TextAlignment="Center" />
+        <Button Content="＋" Click="ZoomIn_Click" ToolTip="タイムラインを拡大" />
         <Separator />
-        <Button Content="｜◀" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <Button Content="|◀" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
         <Button Content="▶" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
         <Button Content="■" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
-        <Button Content="▶｜" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <Button Content="▶|" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
+        <TextBlock Text="再生は Phase 2" Foreground="#737983" VerticalAlignment="Center" Margin="8,0" />
       </ToolBar>
     </ToolBarTray>
     <Border DockPanel.Dock="Bottom" Background="#E4E6EA" Padding="8,5">
       <TextBlock x:Name="Status" TextWrapping="Wrap" />
     </Border>
-    <Grid Margin="12">
-      <Grid.RowDefinitions><RowDefinition Height="3*"/><RowDefinition Height="6"/><RowDefinition Height="2*"/></Grid.RowDefinitions>
-      <Grid.ColumnDefinitions><ColumnDefinition Width="270"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border Background="White" Padding="12">
+
+    <Grid Margin="10">
+      <Grid.RowDefinitions><RowDefinition Height="3*"/><RowDefinition Height="6"/><RowDefinition Height="2.4*"/></Grid.RowDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="270"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="6"/><ColumnDefinition Width="280"/>
+      </Grid.ColumnDefinitions>
+
+      <Border Background="White" Padding="10">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top">
-            <TextBlock Text="素材" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10"/>
-            <Button Content="MOV / WAV を登録" Click="Register_Click" />
-            <Button Content="選択素材をタイムラインに追加" Click="Insert_Click" />
+            <TextBlock Text="プロジェクト / 素材" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <WrapPanel>
+              <Button Content="MOV / WAV を読み込む" Click="Register_Click" />
+              <Button Content="配置" Click="Insert_Click" ToolTip="再生ヘッド位置の互換トラックへ配置" />
+            </WrapPanel>
           </StackPanel>
-          <ListBox x:Name="MediaList" DisplayMemberPath="Name" Margin="0,10,0,0" />
+          <ListBox x:Name="MediaList" Margin="0,8,0,0" SelectionChanged="Media_Changed"
+                   MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="3">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Details}" Foreground="#68717E" FontSize="11" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding State}" Foreground="{Binding StateBrush}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
         </DockPanel>
       </Border>
       <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" />
+
       <Border Grid.Column="2" Background="#171B23" Padding="24">
         <StackPanel VerticalAlignment="Center">
           <TextBlock Text="プレビュー" Foreground="White" FontSize="22" HorizontalAlignment="Center" />
           <TextBlock x:Name="PreviewInfo" Foreground="#B7C4D8" TextAlignment="Center" TextWrapping="Wrap" Margin="0,20" />
-          <TextBlock Text="映像再生・動画書き出しは今後の版で対応予定です。" Foreground="#9CA8BC" TextAlignment="Center" TextWrapping="Wrap" />
+          <TextBlock Text="Phase 1 は編集のみ。映像・音声の再生は Phase 2 で同じ evaluator に接続します。"
+                     Foreground="#9CA8BC" TextAlignment="Center" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
-      <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" Height="6" HorizontalAlignment="Stretch" />
-      <Border Grid.Row="2" Grid.ColumnSpan="3" Background="White" Padding="12">
+      <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" />
+
+      <Border Grid.Column="4" Background="White" Padding="10">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <TextBlock Text="インスペクター" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10" />
+            <TextBlock x:Name="InspectorEmpty" Text="素材またはクリップを選択してください。" Foreground="#68717E" TextWrapping="Wrap" />
+            <StackPanel x:Name="AssetInspector" Visibility="Collapsed">
+              <TextBlock Text="素材" Foreground="#68717E" />
+              <TextBlock x:Name="AssetNameText" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock x:Name="AssetIdText" FontSize="10" Foreground="#68717E" TextWrapping="Wrap" Margin="0,3" />
+              <TextBlock x:Name="AssetPathText" TextWrapping="Wrap" Margin="0,4" />
+              <TextBlock x:Name="AssetMetadataText" TextWrapping="Wrap" />
+              <Button x:Name="RelinkButton" Content="素材を再リンク…" Click="Relink_Click" Margin="0,8,0,0" />
+            </StackPanel>
+            <StackPanel x:Name="ClipInspector" Visibility="Collapsed">
+              <TextBlock Text="クリップ" Foreground="#68717E" />
+              <TextBlock x:Name="ClipNameText" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock x:Name="ClipIdText" FontSize="10" Foreground="#68717E" TextWrapping="Wrap" Margin="0,3,0,8" />
+              <TextBlock Text="開始（秒）" /><TextBox x:Name="ClipStartBox" />
+              <TextBlock Text="ソースイン（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipSourceInBox" />
+              <TextBlock Text="長さ（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipDurationBox" />
+              <CheckBox x:Name="ClipEnabledBox" Content="有効" Margin="0,8,0,0" />
+              <Button Content="変更を適用" Click="ApplyInspector_Click" Margin="0,8,0,0" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" Height="6" HorizontalAlignment="Stretch" />
+      <Border Grid.Row="2" Grid.ColumnSpan="5" Background="#20242B" BorderBrush="#545B66" BorderThickness="1">
         <DockPanel>
-          <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-            <TextBlock Text="タイムライン" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,15,0" />
-            <ComboBox x:Name="SequenceList" Width="230" DisplayMemberPath="Name" SelectionChanged="Sequence_Changed" Margin="3" />
-            <Button Content="選択クリップを削除" Click="Delete_Click" />
-          </WrapPanel>
-          <DataGrid x:Name="TimelineGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="トラック" Binding="{Binding TrackName}" Width="160" />
-              <DataGridTextColumn Header="素材 / 字幕" Binding="{Binding Name}" Width="*" />
-              <DataGridTextColumn Header="開始（秒）" Binding="{Binding Start}" Width="120" />
-              <DataGridTextColumn Header="長さ（秒）" Binding="{Binding Duration}" Width="120" />
-            </DataGrid.Columns>
-          </DataGrid>
+          <Border DockPanel.Dock="Top" Background="#303640" Padding="8,5">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="タイムライン" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <ComboBox x:Name="SequenceList" Width="230" DisplayMemberPath="Name" SelectionChanged="Sequence_Changed" />
+              <TextBlock x:Name="PlayheadText" Foreground="#D5DAE1" VerticalAlignment="Center" Margin="14,0,0,0" />
+            </StackPanel>
+          </Border>
+          <local:TimelineSurface x:Name="Timeline" CommandRequested="Timeline_CommandRequested"
+                                 ClipSelectionChanged="Timeline_ClipSelectionChanged"
+                                 InteractionFailed="Timeline_InteractionFailed" />
         </DockPanel>
       </Border>
     </Grid>
