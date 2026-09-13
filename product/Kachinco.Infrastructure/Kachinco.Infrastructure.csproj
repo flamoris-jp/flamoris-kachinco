@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Kachinco.Core/Kachinco.Core.csproj" />
+  </ItemGroup>
+</Project>

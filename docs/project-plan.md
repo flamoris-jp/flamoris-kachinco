@@ -1,7 +1,12 @@
 # FLAMORIS Kachinco Project Plan
 
-Status: **Initial proposal / v0.1 requirements captured**  
+Status: **Long-term product vision / v0.1 requirements captured**
 Repository: `flamoris-jp/flamoris-kachinco`
+
+Issue #1's implemented contracts are in [production-architecture.md](production-architecture.md).
+Use [roadmap.md](roadmap.md) for the active delivery order. The phases below retain
+the original concept; they do not indicate completed functionality. FFmpeg is the
+required production encoding/mux backend, as clarified by Issue #1.
 
 ## 1. Product goal
 
