@@ -333,6 +333,7 @@ public partial class MainWindow : Window
 
     private void RefreshTimelineStatus()
     {
+        RefreshClapperOverlay();
         PlayheadText.Text = $"再生ヘッド {Seconds(Timeline.PlayheadTicks)} 秒";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         SplitButton.IsEnabled = selectedClipId is not null;

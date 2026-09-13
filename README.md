@@ -220,34 +220,31 @@ Future systems such as Kinetai or AudioAnalyzer should connect through explicit 
 
 ## Repository status
 
-**Issue #1 foundation and Issue #3 Phase 1 authoring are implemented.** The
-long-term workflow above describes the product direction; Clappers, Recipes, real
-playback and production export are future milestones. This version provides:
+**The Issue #5 production slice is implemented on the feature branch for review.**
+It extends the reviewed Phase 0/1 foundation with:
 
-- independent .NET 10 C# domain and Japanese WPF Windows shell;
-- real MOV/WAV metadata probing through ffprobe, missing-media reporting and relink;
-- a media bin, selected-asset/clip inspector and video/audio/subtitle tracks;
-- a Premiere-like ruler/timeline with deterministic zoom, scroll, snapping,
-  move, trim, split and delete authoring;
-- insert/move/trim/split/delete, properties, track order and caption commands;
-- immutable queries, stable IDs, atomic batches, Undo/Redo, expected-revision checks and dry-run;
-- rational FPS and one integer timebase for video/audio/subtitles;
-- validated `.fkproj` JSON save/open with a strict versioned contract;
-- shared frame/audio evaluation, Normal/Screen reference semantics, renderer and FFmpeg boundaries;
-- headless tests and a Windows build/startup smoke gate.
+- full-length media-bin drops, atomic sequence extension, timeline-local navigation;
+- shared MOV/WAV decoding, Normal/Screen RGBA composition and stereo audio mixing;
+- render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
+- SRT round trips, caption editing and shared outlined Japanese text rendering;
+- stdio MCP bridge to the same running editor session, shared history and jobs;
+- named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
+- alpha MOV Recipe clips with source/output hashes and explicit regeneration;
+- self-contained Windows portable publishing and automated Windows raster checks.
 
-**No MOV/WAV decoder, live playback, actual image compositor, FFmpeg encoder or MCP
-server runs yet.** Disabled toolbar transport controls explicitly reserve Phase 2
-product grammar without faking playback. New shell sequences are 60 seconds at
-30 fps; the core accepts explicit sequence durations and reduced rational FPS.
-MOV embedded audio is inspected but is not silently created as an editable audio
-clip. The FFmpeg export placeholder returns an explicit
-`EXPORT_NOT_IMPLEMENTED` diagnostic and writes nothing.
+Preview preparation uses the same snapshot renderer as export. It is not a claim
+of real-time full-resolution composition: independent per-frame decoding is an
+initial implementation and can be slow. Recipe proof supports text and particles,
+up to 10 seconds, not arbitrary Python or a complete effects system. FFmpeg and
+Python are external prerequisites. MOV embedded audio is not mixed; use WAV.
+Human Windows visual/playback acceptance remains separate from CI.
+
+See [Windows production workflow and limitations](staging/windows-production.md).
 
 ### Build and test
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
-Install FFmpeg/ffprobe or place `ffprobe.exe` on `PATH`; media import reports a
+Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
 structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.
 On Windows:
 
@@ -257,19 +254,21 @@ dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release
 dotnet run --project product/Kachinco.App/Kachinco.App.csproj
 ```
 
-The test project also runs on Linux/macOS without WPF, FFmpeg or private media.
+The headless test project runs without WPF or private media; real codec tests
+require FFmpeg/ffprobe and Recipe tests require Python 3.
 The two CI jobs protect distinct risks: headless contracts on Linux and WPF
-build/startup on Windows. CI runs on non-main branch pushes touching Product/Test
+build/startup, restricted worker, repeatable rasterization and portable publish on Windows. CI runs on non-main branch pushes touching Product/Test
 or build files; it does not duplicate the same suite on PR creation or main.
 
 Current documentation:
 
 - [Production architecture](docs/production-architecture.md)
 - [Active roadmap](docs/roadmap.md)
-- [Typed editing / future MCP contract](docs/api-contract.md)
-- [Project file v1](docs/project-format-v1.md)
+- [Typed editing / live MCP contract](docs/api-contract.md)
+- [Project file v1](docs/project-format-v1.md) and [v2 migration](docs/decisions/0004-authoring-v2.md)
 - [Manual Windows acceptance](staging/windows-foundation.md)
 - [Phase 1 Windows acceptance](staging/windows-phase1.md)
+- [Production Windows acceptance](staging/windows-production.md)
 - [Original product vision](docs/project-plan.md)
 
 ## Working name

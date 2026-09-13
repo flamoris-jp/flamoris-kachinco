@@ -126,6 +126,25 @@ public partial class MainWindow
         finally { done = true; progressWindow.Close(); busy = false; IsEnabled = true; }
     }
 
+    private void RefreshClapperOverlay()
+    {
+        if (ClapperCanvas is null) return;
+        ClapperCanvas.Children.Clear();
+        var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(s=>s.Id==selectedSequenceId);
+        if(sequence is null) return;
+        ClapperCanvas.Width=sequence.Settings.Width; ClapperCanvas.Height=sequence.Settings.Height;
+        foreach(var clapper in sequence.Clappers.Where(c=>c.Geometry is not null && TimelineTime.Contains(c.StartTicks,c.DurationTicks,Timeline.PlayheadTicks)))
+        {
+            var g=clapper.Geometry!;
+            System.Windows.Shapes.Shape shape = g.Kind == ClapperGeometryKind.Rectangle ?
+                new System.Windows.Shapes.Rectangle { Width=g.Width, Height=g.Height } : new System.Windows.Shapes.Ellipse { Width=12, Height=12 };
+            shape.Stroke=Brushes.Gold;shape.StrokeThickness=3;
+            Canvas.SetLeft(shape,g.X);Canvas.SetTop(shape,g.Y);ClapperCanvas.Children.Add(shape);
+            var label=new TextBlock{Text=clapper.Name,Foreground=Brushes.Gold,FontSize=28,Background=Brushes.Black};
+            Canvas.SetLeft(label,g.X);Canvas.SetTop(label,Math.Max(0,g.Y-36));ClapperCanvas.Children.Add(label);
+        }
+    }
+
     private void Authoring_Click(object sender, RoutedEventArgs e)
     {
         if (selectedSequenceId is not { } id) return;

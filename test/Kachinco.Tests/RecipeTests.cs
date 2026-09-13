@@ -26,6 +26,40 @@ public sealed class RecipeTests
         Assert.IsFalse(result.Success);
     }
     [TestMethod]
+    public async Task GeneratedClipRegeneratesWithoutLosingManualPlacementAndUndoesOnce()
+    {
+        var folder=Path.Combine(Path.GetTempPath(),"kachinco-recipe-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        try
+        {
+            var f=new Fixture();var clapper=new Clapper(Fixture.Id(20),"A-1",0,Fixture.T/10,null,f.VideoTrackId,null,"");
+            Assert.IsTrue(f.Edit(new AddClapper(f.SequenceId,clapper)).Success);
+            var recipe=new Recipe(Fixture.Id(21),clapper.Id,"text(text='x')",1,42,"1","1");
+            var service=new RecipeGenerationService(new RecipeCompiler(),new SolidRecipeRasterizer());
+            var first=await service.PrepareAsync(f.Session.GetProject(),f.SequenceId,recipe,Path.Combine(folder,"first.mov"));
+            Assert.IsTrue(first.Success,string.Join(";",first.Diagnostics.Select(d=>d.Message)));
+            Assert.IsTrue(f.Session.Execute(first.Value!.Batch).Success);
+            Assert.IsTrue(f.Edit(new MoveClip(f.SequenceId,first.Value.ClipId,f.VideoTrackId,2*Fixture.T)).Success);
+            var before=ProjectJson.Serialize(f.Project).Value;
+            var second=await service.PrepareAsync(f.Session.GetProject(),f.SequenceId,recipe with {Revision=2,Source="text(text='y')"},Path.Combine(folder,"second.mov"),first.Value.MediaAssetId);
+            Assert.IsTrue(second.Success,string.Join(";",second.Diagnostics.Select(d=>d.Message)));
+            Assert.IsTrue(f.Session.Execute(second.Value!.Batch).Success);
+            var clip=f.Project.Sequences[0].Tracks[0].Clips.Single(c=>c.Id==first.Value.ClipId);
+            Assert.AreEqual(2*Fixture.T,clip.StartTicks);Assert.AreEqual(first.Value.MediaAssetId,clip.MediaAssetId);
+            Assert.IsTrue(f.Session.Undo().Success);Assert.AreEqual(before,ProjectJson.Serialize(f.Project).Value);
+            Assert.IsTrue(File.Exists(first.Value.OutputPath));Assert.IsTrue(File.Exists(second.Value.OutputPath));
+        }
+        finally { Directory.Delete(folder,true); }
+    }
+    private sealed class SolidRecipeRasterizer : IRecipeRasterizer
+    {
+        public ValueTask<System.Collections.Immutable.ImmutableArray<byte>> RenderAsync(RecipeIr ir,Recipe recipe,Clapper clapper,SequenceSettings settings,long localTicks,CancellationToken token)
+        {
+            var bytes=new byte[settings.Width*settings.Height*4];bytes[0]=255;bytes[3]=255;
+            return ValueTask.FromResult(System.Collections.Immutable.ImmutableArray.CreateRange(bytes));
+        }
+    }
+
+    [TestMethod]
     public void RecipeReferencesAndProvenanceSurviveRoundTrip()
     {
         var f=new Fixture(); var clapper=new Clapper(Fixture.Id(20),"A-1",0,Fixture.T,null,f.VideoTrackId,null,"");

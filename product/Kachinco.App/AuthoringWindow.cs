@@ -112,7 +112,9 @@ public sealed class AuthoringWindow : Window
             var service = new RecipeGenerationService(new RecipeCompiler(),new WindowsRecipeRasterizer(Dispatcher));
             var result = await Task.Run(() => service.PrepareAsync(snapshot,sequenceId,recipe,picker.FileName,asset?.Id,token));
             if (!result.Success) { status.Text = string.Join(" / ",result.Diagnostics.Select(d=>d.Message)); return; }
-            var prepared = result.Value!; var committed = session.Execute(prepared.Batch);
+            var prepared = result.Value!;
+            if(token.IsCancellationRequested) { File.Delete(prepared.OutputPath); status.Text="キャンセルしました。"; return; }
+            var committed = session.Execute(prepared.Batch);
             if (!committed.Success) { File.Delete(prepared.OutputPath); status.Text = "編集中に状態が変わりました。生成をやり直してください。"; return; }
             status.Text = "通常のクリップとして配置しました。Undo一回で戻せます。"; Refresh();
             recipes.SelectedItem = Sequence.Recipes.First(r => r.Id == recipe.Id);

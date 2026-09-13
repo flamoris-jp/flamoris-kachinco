@@ -96,6 +96,7 @@
       <Border Grid.Column="2" Background="#171B23" Padding="24">
         <Grid>
           <Image x:Name="PreviewImage" Stretch="Uniform" />
+          <Viewbox Stretch="Uniform" IsHitTestVisible="False"><Canvas x:Name="ClapperCanvas" Width="1920" Height="1080" /></Viewbox>
           <TextBlock x:Name="PreviewInfo" Foreground="#B7C4D8" TextAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" />
         </Grid>
       </Border>

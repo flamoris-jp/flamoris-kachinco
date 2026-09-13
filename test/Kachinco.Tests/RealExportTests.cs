@@ -52,6 +52,35 @@ public sealed class RealExportTests
         }
         finally { Directory.Delete(dir, true); }
     }
+    [TestMethod]
+    public async Task CancellationPreservesExistingOutputAndRemovesTemporaryMedia()
+    {
+        var folder=Path.Combine(Path.GetTempPath(),"kachinco-cancel-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        try
+        {
+            var output=Path.Combine(folder,"existing.mp4");await File.WriteAllTextAsync(output,"keep-existing");
+            using var token=new CancellationTokenSource();
+            var request=new EncodingRequest(Guid.NewGuid(),output,ExportPreset.YoutubeH264AacMp4,SequenceSettings.Landscape,2,48000,2,3200);
+            var result=await new FfmpegEncodingBackend().EncodeAsync(request,new OneFrameSource(),new(null),new CancelOnFrame(token),token.Token);
+            Assert.AreEqual(ExportStage.Cancelled,result.Stage);
+            Assert.AreEqual("keep-existing",await File.ReadAllTextAsync(output));
+            Assert.AreEqual(1,Directory.GetFileSystemEntries(folder).Length);
+        }
+        finally { Directory.Delete(folder,true); }
+    }
+    private sealed class CancelOnFrame(CancellationTokenSource token) : IProgress<ExportProgress>
+    { public void Report(ExportProgress value) { if(value.FramesCompleted>0) token.Cancel(); } }
+    private sealed class OneFrameSource : IRenderedMediaSource
+    {
+        public async IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var bytes=new byte[1920*1080*4];
+            yield return new(0,0,1920,1080,System.Collections.Immutable.ImmutableArray.CreateRange(bytes));
+            await Task.Yield();cancellationToken.ThrowIfCancellationRequested();
+        }
+        public IAsyncEnumerable<RenderedAudioBlock> ReadAudioAsync(CancellationToken cancellationToken) => throw new AssertFailedException("Cancelled export must not read audio.");
+    }
+
     private static async Task<string> Run(string executable, string[] args)
     {
         using var process = new Process { StartInfo = new(executable) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true } };

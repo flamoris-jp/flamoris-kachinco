@@ -39,7 +39,17 @@ public partial class MainWindow
                     var line = await ReadBoundedLine(reader, lifetime.Token);
                     if (line is null) break;
                     // This continuation executes on the WPF dispatcher, sharing the exact UI session.
-                    if (busy) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32000,\"message\":\"Editor is busy\"}}"); continue; }
+                    if (busy)
+                    {
+                        try
+                        {
+                            using var request=JsonDocument.Parse(line);
+                            if(request.RootElement.TryGetProperty("id",out var requestId))
+                                await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc="2.0",id=requestId,error=new {code=-32000,message="Editor is busy"} }));
+                        }
+                        catch(JsonException) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Invalid JSON\"}}"); }
+                        continue;
+                    }
                     var result = await adapter.HandleAsync(line);
                     if (result is not null) await writer.WriteLineAsync(result.AsMemory(), lifetime.Token);
                 }
@@ -62,6 +72,9 @@ public partial class MainWindow
     }
     private Task<object> McpJobAsync(string method, JsonElement args)
     {
+        if (method is "recipe_generate" or "export_start")
+            foreach(var old in exportJobs.Where(x=>x.Value.Result is not null).Take(Math.Max(0,exportJobs.Count-31)).Select(x=>x.Key).ToArray())
+            { exportJobs[old].Cancellation.Dispose();exportJobs.Remove(old); }
         if (method == "recipe_generate")
         {
             var snapshot = session.GetProject();
@@ -103,6 +116,7 @@ public partial class MainWindow
             var result = await Task.Run(() => service.PrepareAsync(snapshot,sequenceId,recipe,path,replace,job.Cancellation.Token));
             if (!result.Success) { job.Result = new(id,ExportStage.Failed,null,result.Diagnostics); return; }
             var prepared = result.Value!;
+            if(job.Cancellation.IsCancellationRequested) { File.Delete(prepared.OutputPath);job.Result=new(id,ExportStage.Cancelled,null,[]);return; }
             var committed = session.Execute(prepared.Batch);
             if (!committed.Success) { File.Delete(prepared.OutputPath); job.Result = new(id,ExportStage.Failed,null,committed.Diagnostics); return; }
             job.Result = new(id,ExportStage.Completed,prepared.OutputPath,[]); Refresh("Recipeクリップを生成しました。");
