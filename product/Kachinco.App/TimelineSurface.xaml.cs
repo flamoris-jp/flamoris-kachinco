@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Kachinco.Core;
+using Track = Kachinco.Core.Track;
 
 namespace Kachinco.App;
 

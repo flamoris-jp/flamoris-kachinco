@@ -42,7 +42,8 @@ public sealed class TimelineAuthoringTests
         var right = Fixture.Id(12);
         var split = TimelineEditPlanner.Split(f.Project, f.SequenceId, f.ClipId, 3 * Fixture.T, right);
         Assert.IsTrue(split.Success); Assert.IsTrue(f.Edit(split.Value!).Success);
-        Assert.AreEqual(new[] { f.ClipId, right }, TimelineQueries.ListClips(f.Project.Sequences[0].Tracks.First(x => x.Id == v2)).Select(x => x.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { f.ClipId, right },
+            TimelineQueries.ListClips(f.Project.Sequences[0].Tracks.First(x => x.Id == v2)).Select(x => x.Id).ToArray());
         Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(1, f.Project.Sequences[0].Tracks.First(x => x.Id == v2).Clips.Length);
         Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(2, f.Project.Sequences[0].Tracks.First(x => x.Id == v2).Clips.Length);
     }

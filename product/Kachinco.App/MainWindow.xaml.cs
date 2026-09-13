@@ -8,6 +8,7 @@ using System.Windows.Media;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Microsoft.Win32;
+using Track = Kachinco.Core.Track;
 
 namespace Kachinco.App;
 
