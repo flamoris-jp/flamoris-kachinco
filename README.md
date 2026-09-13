@@ -2,7 +2,7 @@
 
 **AI-native timeline editor and programmable compositor for reproducible video creation.**
 
-FLAMORIS Kachinco combines timeline editing, compositing, subtitles, named scene regions, MCP control, and deterministic Python rendering in one workflow.
+FLAMORIS Kachinco is being built to combine timeline editing, compositing, subtitles, named scene regions, MCP control, and restricted Python authoring with deterministic rendering in one workflow.
 
 The core idea is simple:
 
@@ -220,9 +220,52 @@ Future systems such as Kinetai or AudioAnalyzer should connect through explicit 
 
 ## Repository status
 
-This repository is at **project inception**. Architecture and file formats are not yet stable.
+**Issue #1 foundation is implemented.** The long-term workflow above describes the
+product direction; Clappers, Recipes, real playback and production export are
+future milestones. This version provides:
 
-See [`docs/project-plan.md`](docs/project-plan.md) for the proposed implementation phases.
+- independent .NET 10 C# domain and Japanese WPF Windows shell;
+- MOV/WAV metadata registration, sequences and video/audio/subtitle tracks;
+- insert/move/trim/split/delete, properties, track order and caption commands;
+- immutable queries, stable IDs, atomic batches, Undo/Redo, expected-revision checks and dry-run;
+- rational FPS and one integer timebase for video/audio/subtitles;
+- validated `.fkproj` JSON save/open with a strict versioned contract;
+- shared frame/audio evaluation, Normal/Screen reference semantics, renderer and FFmpeg boundaries;
+- headless tests and a Windows build/startup smoke gate.
+
+**No MOV/WAV decoder, live playback, actual image compositor, FFmpeg encoder or MCP
+server runs yet.** The shell asks for media duration explicitly and supports new
+landscape/portrait projects, registration, placement, deletion, Undo/Redo and
+save/open. Timeline editing beyond those controls is available through the typed
+headless API. New shell sequences are 60 seconds at 30 fps; the core accepts
+explicit sequence durations and reduced rational FPS. Registration does not verify
+codec bytes or detect duration. The FFmpeg placeholder returns an explicit
+`EXPORT_NOT_IMPLEMENTED` diagnostic and writes nothing.
+
+### Build and test
+
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+On Windows:
+
+```powershell
+dotnet build Kachinco.slnx -c Release
+dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release
+dotnet run --project product/Kachinco.App/Kachinco.App.csproj
+```
+
+The test project also runs on Linux/macOS without WPF, FFmpeg or private media.
+The two CI jobs protect distinct risks: headless contracts on Linux and WPF
+build/startup on Windows. CI runs on non-main branch pushes touching Product/Test
+or build files; it does not duplicate the same suite on PR creation or main.
+
+Current documentation:
+
+- [Production architecture](docs/production-architecture.md)
+- [Active roadmap](docs/roadmap.md)
+- [Typed editing / future MCP contract](docs/api-contract.md)
+- [Project file v1](docs/project-format-v1.md)
+- [Manual Windows acceptance](staging/windows-foundation.md)
+- [Original product vision](docs/project-plan.md)
 
 ## Working name
 
