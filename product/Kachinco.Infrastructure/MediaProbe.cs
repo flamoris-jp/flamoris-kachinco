@@ -119,12 +119,15 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
     {
         var buffer = new char[4096];
         var builder = new StringBuilder();
+        bool exceeded = false;
         int read;
         while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
         {
-            if (builder.Length + read > limit) throw new InvalidDataException("Probe output exceeds limit.");
-            builder.Append(buffer, 0, read);
+            int remaining = limit - builder.Length;
+            if (remaining > 0) builder.Append(buffer, 0, Math.Min(read, remaining));
+            if (read > remaining) exceeded = true;
         }
+        if (exceeded) throw new InvalidDataException("Probe output exceeds limit.");
         return builder.ToString();
     }
 
