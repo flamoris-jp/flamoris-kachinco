@@ -1,4 +1,4 @@
-name: Foundation
+name: Product
 on:
   push:
     branches-ignore: [main]
@@ -18,11 +18,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=foundation.trx"
+      - name: Ensure ffprobe test dependency
+        run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=product.trx"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: foundation-test-results
+          name: product-test-results
           path: test/Kachinco.Tests/TestResults/*.trx
   windows-shell:
     runs-on: windows-latest

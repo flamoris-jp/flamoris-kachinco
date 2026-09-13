@@ -220,12 +220,15 @@ Future systems such as Kinetai or AudioAnalyzer should connect through explicit 
 
 ## Repository status
 
-**Issue #1 foundation is implemented.** The long-term workflow above describes the
-product direction; Clappers, Recipes, real playback and production export are
-future milestones. This version provides:
+**Issue #1 foundation and Issue #3 Phase 1 authoring are implemented.** The
+long-term workflow above describes the product direction; Clappers, Recipes, real
+playback and production export are future milestones. This version provides:
 
 - independent .NET 10 C# domain and Japanese WPF Windows shell;
-- MOV/WAV metadata registration, sequences and video/audio/subtitle tracks;
+- real MOV/WAV metadata probing through ffprobe, missing-media reporting and relink;
+- a media bin, selected-asset/clip inspector and video/audio/subtitle tracks;
+- a Premiere-like ruler/timeline with deterministic zoom, scroll, snapping,
+  move, trim, split and delete authoring;
 - insert/move/trim/split/delete, properties, track order and caption commands;
 - immutable queries, stable IDs, atomic batches, Undo/Redo, expected-revision checks and dry-run;
 - rational FPS and one integer timebase for video/audio/subtitles;
@@ -234,17 +237,18 @@ future milestones. This version provides:
 - headless tests and a Windows build/startup smoke gate.
 
 **No MOV/WAV decoder, live playback, actual image compositor, FFmpeg encoder or MCP
-server runs yet.** The shell asks for media duration explicitly and supports new
-landscape/portrait projects, registration, placement, deletion, Undo/Redo and
-save/open. Timeline editing beyond those controls is available through the typed
-headless API. New shell sequences are 60 seconds at 30 fps; the core accepts
-explicit sequence durations and reduced rational FPS. Registration does not verify
-codec bytes or detect duration. The FFmpeg placeholder returns an explicit
+server runs yet.** Disabled toolbar transport controls explicitly reserve Phase 2
+product grammar without faking playback. New shell sequences are 60 seconds at
+30 fps; the core accepts explicit sequence durations and reduced rational FPS.
+MOV embedded audio is inspected but is not silently created as an editable audio
+clip. The FFmpeg export placeholder returns an explicit
 `EXPORT_NOT_IMPLEMENTED` diagnostic and writes nothing.
 
 ### Build and test
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+Install FFmpeg/ffprobe or place `ffprobe.exe` on `PATH`; media import reports a
+structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.
 On Windows:
 
 ```powershell
@@ -265,6 +269,7 @@ Current documentation:
 - [Typed editing / future MCP contract](docs/api-contract.md)
 - [Project file v1](docs/project-format-v1.md)
 - [Manual Windows acceptance](staging/windows-foundation.md)
+- [Phase 1 Windows acceptance](staging/windows-phase1.md)
 - [Original product vision](docs/project-plan.md)
 
 ## Working name
