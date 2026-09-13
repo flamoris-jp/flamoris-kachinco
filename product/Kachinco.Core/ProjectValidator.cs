@@ -4,6 +4,13 @@ namespace Kachinco.Core;
 
 public static class ProjectValidator
 {
+    public static bool ContainsId(Project project, Guid id)
+    {
+        if (project.Id == id || project.Assets.Any(x => x.Id == id) || project.Sequences.Any(x => x.Id == id)) return true;
+        return project.Sequences.SelectMany(x => x.Tracks).Any(track => track.Id == id ||
+            track.Clips.Any(clip => clip.Id == id) || track.Captions.Any(caption => caption.Id == id));
+    }
+
     public static ImmutableArray<Diagnostic> Validate(Project? project)
     {
         var errors = ImmutableArray.CreateBuilder<Diagnostic>();

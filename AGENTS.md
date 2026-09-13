@@ -253,3 +253,14 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Current scope does not implement Clappers/Recipes/Python, decoding/playback, production image rendering or live MCP. Do not infer those capabilities from the product vision.
 - Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
 - Use `staging/windows-foundation.md` for human interaction/layout acceptance; an automated startup smoke is not visual QA.
+
+## 16. Phase 1 media/timeline authority (Issue #3)
+
+- WPF imports through Infrastructure `IMediaProbe`; never construct ffprobe/FFmpeg arguments or parse probe JSON in UI code.
+- Probe/validate before `RegisterMedia` or `RelinkMedia`. Relink preserves `mediaAssetId`, clip IDs and timeline placement; missing files are warnings and never prevent project load.
+- `TimelineViewport`, `TimelineSnapping` and `TimelineEditPlanner` are transient authoring projections over `TimelineTime`, not a second timeline model.
+- Pointer gestures may preview in pixels, but commit exactly one typed move/trim/split command from the original committed range. Never accumulate per-event pixel deltas into Project state.
+- Track labels V1/A1/S1 are presentation only. Address tracks and clips by stable ID.
+- Selection, playhead/edit cursor, scroll, zoom, snap toggle, hover and drag state remain non-persistent.
+- Playback-looking toolbar buttons stay disabled until Phase 2's shared decoder/clock/evaluator architecture exists. Do not add a WPF timer or fake play state.
+- Run the Phase 1 headless media/relink/authoring tests, Windows build and startup smoke. Record physical Windows visual acceptance separately in `staging/windows-phase1.md`.

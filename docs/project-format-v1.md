@@ -36,9 +36,12 @@ order, clips/captions by start then ordinal UUID. Load preserves identity and
 meaning; source array order for clips is not a compositing override.
 
 Source paths are local absolute or project-relative references. No media is embedded
-or decoded. Opening does not check source existence. Relinking/probing will be
-explicit later. Save As retains the reference text in this foundation, so use
-absolute paths for portable Save As across directories until relocation is added.
+or decoded. Opening succeeds without touching media, after which the Phase 1 resolver
+reports availability by stable asset ID. Relative paths resolve against the opened
+`.fkproj` directory. Relink probes a compatible replacement and commits a typed
+`RelinkMedia` command that preserves the asset ID and every referencing clip ID and
+placement. Save As retains the reference text, so absolute paths remain preferable
+when moving a project between directories.
 
 No history, revision, UI state, caches or FFmpeg options are persisted. Read/write
 limit is 16 MiB for this milestone. Save validates first, writes/flushed a temporary

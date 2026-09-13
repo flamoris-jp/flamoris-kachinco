@@ -97,11 +97,45 @@ by timeline start then ordinal UUID. Overlapping clips are allowed and composite
 in that deterministic order. Audio overlaps mix; video MOV audio is not implicitly
 enabled. Dedicated WAV clips provide the initial audio path.
 
-MOV/WAV registration accepts explicit caller metadata; it does not pretend to
-probe or verify media bytes. References are absolute local paths or project-relative
-paths, not remote URLs. Opening a project does not access referenced media. The
-future media resolver resolves relative paths against the project file directory
-and reports missing/changed sources without silently changing asset IDs.
+Core MOV/WAV registration accepts explicit caller metadata and remains free of file
+and process IO. Phase 1 human import obtains that metadata through Infrastructure's
+`IMediaProbe`/`FfprobeMediaProbe`: argument-list process construction, bounded JSON
+and stderr reads, cancellation, structured failures, and one canonical decimal
+seconds → `TimelineTime` conversion. Probe success produces an ordinary
+`RegisterMedia`; no Project mutation occurs before that command validates.
+
+References are absolute local paths or project-relative paths, not remote URLs.
+Opening a project never fails merely because referenced media is absent. The media
+resolver resolves relative paths against the `.fkproj` directory and emits
+`MEDIA_MISSING`/`MEDIA_REFERENCE_UNRESOLVED` warnings keyed by `mediaAssetId`.
+Relink probes first and emits `RelinkMedia` only when kind and all existing source
+ranges remain compatible. It changes path/technical metadata on the existing asset,
+preserving asset and clip identities and timeline placement through Undo/Redo.
+
+MOV embedded audio remains probe metadata only in Phase 1. It is not silently
+turned into an independently editable audio clip; dedicated WAV remains the audio
+timeline source until an explicit domain contract changes that behavior.
+
+## Phase 1 timeline authoring projection
+
+The WPF shell now has a native menu, a separate toolbar, media bin, inspector and
+a multi-track timeline with fixed headers, ruler, horizontal/vertical scrolling,
+zoom, playhead and V/A/S presentation labels. Stable `trackId` remains authority;
+labels are never used to address edits. Selection, scroll, zoom, drag preview,
+snapping and playhead remain transient WPF state.
+
+`TimelineViewport` maps canonical ticks to decimal pixels and maps pointer deltas
+back with one explicit round-half-away-from-zero operation. Dragging always starts
+from the committed clip range, so successive pointer events cannot accumulate
+domain drift. `TimelineSnapping` compares integer tick distances against sequence
+start, other clip edges and playhead, resolving ties toward the lower tick. Gestures
+produce typed move/trim commands through `TimelineEditPlanner`; split uses an
+explicit tick and caller-generated right ID. The WPF surface raises command intent
+and never writes a Project record.
+
+Playback-shaped toolbar controls are disabled and labelled for Phase 2. Phase 1
+does not create a timer, decoder, UI-only playback cursor, audio engine or alternate
+clock. The transient edit cursor is only an explicit authoring position.
 
 ## Persistence v1
 
