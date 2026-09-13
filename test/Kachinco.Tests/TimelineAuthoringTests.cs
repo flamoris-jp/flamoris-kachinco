@@ -35,7 +35,7 @@ public sealed class TimelineAuthoringTests
     {
         var f = new Fixture(); Guid v2 = Fixture.Id(11);
         Assert.IsTrue(f.Edit(new AddTrack(f.SequenceId, v2, "V2", TrackKind.Video)).Success);
-        var move = TimelineEditPlanner.Move(f.Project, f.SequenceId, f.ClipId, v2, Fixture.T);
+        var move = TimelineEditPlanner.Move(f.Project, f.SequenceId, f.ClipId, v2, 0);
         Assert.IsTrue(move.Success); Assert.IsTrue(f.Edit(move.Value!).Success);
         var trim = TimelineEditPlanner.Trim(f.Project, f.SequenceId, f.ClipId, TrimEdge.End, 5 * Fixture.T);
         Assert.IsTrue(trim.Success); Assert.IsTrue(f.Edit(trim.Value!).Success);

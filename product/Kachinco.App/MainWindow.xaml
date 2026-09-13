@@ -25,7 +25,7 @@
       </MenuItem>
       <MenuItem Header="シーケンス(_S)" />
       <MenuItem Header="表示(_V)">
-        <MenuItem Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
+        <MenuItem x:Name="SnappingMenuItem" Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
         <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
         <MenuItem Header="縮小(_O)" Click="ZoomOut_Click" />
       </MenuItem>

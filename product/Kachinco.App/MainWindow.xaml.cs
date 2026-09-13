@@ -167,6 +167,7 @@ public partial class MainWindow : Window
         };
         if (desired != Timeline.SnappingEnabled) Timeline.ToggleSnapping();
         SnappingButton.IsChecked = Timeline.SnappingEnabled;
+        SnappingMenuItem.IsChecked = Timeline.SnappingEnabled;
         RefreshTimelineStatus();
     }
 
@@ -264,6 +265,7 @@ public partial class MainWindow : Window
         RedoButton.IsEnabled = RedoMenuItem.IsEnabled = snapshot.CanRedo;
         SplitButton.IsEnabled = selectedClipId is not null;
         SnappingButton.IsChecked = Timeline.SnappingEnabled;
+        SnappingMenuItem.IsChecked = Timeline.SnappingEnabled;
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         Title = $"{(IsDirty() ? "* " : "")}{project?.Name ?? "FLAMORIS Kachinco"} — Kachinco";
         if (message is not null) Status.Text = message;

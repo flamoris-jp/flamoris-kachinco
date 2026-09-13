@@ -376,9 +376,16 @@ public partial class TimelineSurface : UserControl
     private string AssetName(Guid id) => project?.Assets.FirstOrDefault(x => x.Id == id)?.Name ?? "Missing media";
     private long ChooseRulerSeconds()
     {
-        foreach (long value in new long[] { 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200 })
-            if (viewport.PixelsPerSecond * value >= 72) return value;
-        return 14400;
+        long secondsForPixels = checked((long)decimal.Ceiling(72m / viewport.PixelsPerSecond));
+        long totalSeconds = checked((long)(((BigInteger)sequence!.DurationTicks + TimelineTime.TicksPerSecond - 1) /
+            TimelineTime.TicksPerSecond));
+        long secondsForCount = Math.Max(1, (totalSeconds + 999) / 1000);
+        long required = Math.Max(secondsForPixels, secondsForCount);
+        long magnitude = 1;
+        while (magnitude <= required / 10) magnitude *= 10;
+        foreach (long multiplier in new long[] { 1, 2, 5, 10 })
+            if (magnitude * multiplier >= required) return magnitude * multiplier;
+        return required;
     }
     private static long Next(long value, long step) => value > long.MaxValue - step ? long.MaxValue : value + step;
     private static double ToDouble(decimal value) => decimal.ToDouble(value);
