@@ -9,7 +9,7 @@ namespace Kachinco.Infrastructure;
 public static class ProjectJson
 {
     public const string Format = "flamoris-kachinco";
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
     public const int MaxFileBytes = 16 * 1024 * 1024;
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -25,7 +25,7 @@ public static class ProjectJson
     {
         var errors = ProjectValidator.Validate(project);
         if (!errors.IsEmpty) return new(null, errors);
-        var json = JsonSerializer.Serialize(FormatV1.Encode(project), Options);
+        var json = JsonSerializer.Serialize(FormatV2.Encode(project), Options);
         return Encoding.UTF8.GetByteCount(json) <= MaxFileBytes ? Result<string>.Ok(json) :
             Result<string>.Fail(Diagnostic.Error("PROJECT_TOO_LARGE", "Project exceeds the 16 MiB foundation file limit."));
     }
@@ -42,12 +42,21 @@ public static class ProjectJson
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("schemaVersion", out var version) || !version.TryGetInt32(out int schema))
                 return Result<Project>.Fail(Diagnostic.Error("INVALID_ENVELOPE", "An integer schemaVersion is required."));
             // Never attempt to decode a future payload as v1.
-            if (schema != SchemaVersion) return Result<Project>.Fail(Diagnostic.Error("SCHEMA_UNSUPPORTED", $"Schema {schema} is not supported."));
+            if (schema != 1 && schema != SchemaVersion) return Result<Project>.Fail(Diagnostic.Error("SCHEMA_UNSUPPORTED", $"Schema {schema} is not supported."));
             RejectDuplicateProperties(root);
-            var envelope = root.Deserialize<EnvelopeV1>(Options) ?? throw new FormatException("Envelope is null.");
-            if (envelope.Format != Format || envelope.Timebase != TimelineTime.TicksPerSecond)
-                return Result<Project>.Fail(Diagnostic.Error("INVALID_ENVELOPE", "Format/timebase does not match Kachinco v1."));
-            var project = FormatV1.Decode(envelope);
+            Project project;
+            if (schema == 1)
+            {
+                var envelope = root.Deserialize<EnvelopeV1>(Options) ?? throw new FormatException("Envelope is null.");
+                if (envelope.Format != Format || envelope.Timebase != TimelineTime.TicksPerSecond) throw new FormatException("Invalid format/timebase.");
+                project = FormatV1.Decode(envelope);
+            }
+            else
+            {
+                var envelope = root.Deserialize<EnvelopeV2>(Options) ?? throw new FormatException("Envelope is null.");
+                if (envelope.Format != Format || envelope.Timebase != TimelineTime.TicksPerSecond) throw new FormatException("Invalid format/timebase.");
+                project = FormatV2.Decode(envelope);
+            }
             var errors = ProjectValidator.Validate(project);
             return errors.IsEmpty ? Result<Project>.Ok(project) : new(null, errors);
         }

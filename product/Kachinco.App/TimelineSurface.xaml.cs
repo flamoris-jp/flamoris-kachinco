@@ -200,6 +200,11 @@ public partial class TimelineSurface : UserControl
                 TimelineCanvas.Children.Add(block);
             }
         }
+        foreach (var clapper in sequence.Clappers)
+        {
+            var marker = new TextBlock { Text = "◆ " + clapper.Name, Foreground = Brushes.Gold, FontSize = 10, IsHitTestVisible = false };
+            Canvas.SetLeft(marker, ToDouble(viewport.TicksToPixels(clapper.StartTicks))); Canvas.SetTop(marker, 15); RulerCanvas.Children.Add(marker);
+        }
         DrawPlayhead(height);
     }
 

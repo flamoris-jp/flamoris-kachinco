@@ -4,9 +4,11 @@ namespace Kachinco.Core;
 
 public static class ProjectValidator
 {
+    private static bool Hash(string? value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);
     public static bool ContainsId(Project project, Guid id)
     {
         if (project.Id == id || project.Assets.Any(x => x.Id == id) || project.Sequences.Any(x => x.Id == id)) return true;
+        if (project.Sequences.Any(s => s.Clappers.Any(c => c.Id == id) || s.Recipes.Any(r => r.Id == id))) return true;
         return project.Sequences.SelectMany(x => x.Tracks).Any(track => track.Id == id ||
             track.Clips.Any(clip => clip.Id == id) || track.Captions.Any(caption => caption.Id == id));
     }
@@ -52,6 +54,30 @@ public static class ProjectValidator
                 Error("INVALID_SEQUENCE_SETTINGS", "Use a landscape/portrait preset and reduced rational FPS between 1 and 240.", sequence.Id);
             if (!TimelineTime.ValidRange(0, sequence.DurationTicks)) Error("INVALID_SEQUENCE_DURATION", "Sequence duration must be positive.", sequence.Id);
             if (sequence.Tracks.IsDefault) { Error("INVALID_COLLECTION", "Tracks must be initialized.", sequence.Id); continue; }
+            if (sequence.Clappers.IsDefault || sequence.Recipes.IsDefault) { Error("INVALID_AUTHORING", "Authoring arrays must be initialized."); continue; }
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var clapper in sequence.Clappers)
+            {
+                if (clapper is null) { Error("INVALID_CLAPPER", "Clapper is null."); continue; }
+                Identity(clapper.Id, clapper.Name, "clappers");
+                if (!names.Add(clapper.Name)) Error("CLAPPER_NAME_CONFLICT", "Clapper names must be unique within the sequence.", clapper.Id);
+                if (!TimelineTime.ValidRange(clapper.StartTicks, clapper.DurationTicks, sequence.DurationTicks)) Error("INVALID_CLAPPER_RANGE", "Clapper must fit the sequence.", clapper.Id);
+                if (clapper.Notes is null || clapper.Notes.Length > 65536) Error("INVALID_CLAPPER_NOTES", "Invalid Clapper notes.", clapper.Id);
+                if (clapper.TargetTrackId is { } target && !sequence.Tracks.Any(t => t.Id == target)) Error("CLAPPER_TRACK_MISSING", "Target track not found.", clapper.Id);
+                if (clapper.SourceClipId is { } clip && !sequence.Tracks.Any(t => t.Clips.Any(c => c.Id == clip))) Error("CLAPPER_CLIP_MISSING", "Source clip not found.", clapper.Id);
+                if (clapper.Geometry is { } g && (settings is null || !Enum.IsDefined(g.Kind) || !double.IsFinite(g.X) || !double.IsFinite(g.Y) ||
+                    !double.IsFinite(g.Width) || !double.IsFinite(g.Height) || g.X < 0 || g.Y < 0 || g.X > settings.Width || g.Y > settings.Height ||
+                    (g.Kind == ClapperGeometryKind.Point ? g.Width != 0 || g.Height != 0 : g.Width <= 0 || g.Height <= 0 || g.Width > settings.Width - g.X || g.Height > settings.Height - g.Y)))
+                    Error("INVALID_CLAPPER_GEOMETRY", "Use point/rectangle in project pixels.", clapper.Id);
+            }
+            foreach (var recipe in sequence.Recipes)
+            {
+                if (recipe is null) { Error("INVALID_RECIPE", "Recipe is null."); continue; }
+                Identity(recipe.Id, "recipe", "recipes");
+                if (!sequence.Clappers.Any(c => c.Id == recipe.ClapperId)) Error("RECIPE_CLAPPER_MISSING", "Recipe Clapper not found.", recipe.Id);
+                if (string.IsNullOrWhiteSpace(recipe.Source) || recipe.Source.Length > 65536 || recipe.Revision < 1 || recipe.ApiVersion != "1" || recipe.RendererVersion != "1")
+                    Error("INVALID_RECIPE", "Recipe source/version is unsupported.", recipe.Id);
+            }
             foreach (var track in sequence.Tracks)
             {
                 if (track is null) { Error("INVALID_TRACK", "Null track."); continue; }
@@ -98,6 +124,13 @@ public static class ProjectValidator
                         Error("INVALID_CAPTION_TEXT", "Caption text must contain 1–65536 characters.", caption.Id);
                 }
             }
+        }
+        foreach (var asset in project.Assets.Where(a => a?.Provenance is not null))
+        {
+            var provenance = asset.Provenance!;
+            var recipe = project.Sequences.Where(s => s is not null && !s.Recipes.IsDefault).SelectMany(s => s.Recipes).FirstOrDefault(r => r is not null && r.Id == provenance.RecipeId);
+            if (recipe is null || provenance.RecipeRevision < 1 || provenance.RecipeRevision > recipe.Revision ||
+                !Hash(provenance.SourceSha256) || !Hash(provenance.OutputSha256)) Error("INVALID_PROVENANCE", "Generated provenance is invalid.", asset.Id);
         }
         return errors.ToImmutable();
     }

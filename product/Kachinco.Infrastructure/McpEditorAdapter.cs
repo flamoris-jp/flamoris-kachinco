@@ -12,6 +12,8 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
     private bool initialized;
     private static readonly Dictionary<string, Type> Commands = new(StringComparer.Ordinal)
     {
+        [nameof(AddClapper)] = typeof(AddClapper), [nameof(UpdateClapper)] = typeof(UpdateClapper), [nameof(DeleteClapper)] = typeof(DeleteClapper),
+        [nameof(AddRecipe)] = typeof(AddRecipe), [nameof(UpdateRecipe)] = typeof(UpdateRecipe), [nameof(SetGeneratedProvenance)] = typeof(SetGeneratedProvenance),
         [nameof(CreateProject)] = typeof(CreateProject), [nameof(CreateSequence)] = typeof(CreateSequence),
         [nameof(RegisterMedia)] = typeof(RegisterMedia), [nameof(RelinkMedia)] = typeof(RelinkMedia),
         [nameof(SetSequenceDuration)] = typeof(SetSequenceDuration), [nameof(AddTrack)] = typeof(AddTrack),

@@ -126,6 +126,13 @@ public partial class MainWindow
         finally { done = true; progressWindow.Close(); busy = false; IsEnabled = true; }
     }
 
+    private void Authoring_Click(object sender, RoutedEventArgs e)
+    {
+        if (selectedSequenceId is not { } id) return;
+        new AuthoringWindow(session, id, Timeline.PlayheadTicks) { Owner = this }.ShowDialog();
+        Refresh("Clapper / Recipe 編集を終了しました。");
+    }
+
     private async void ImportSrt_Click(object sender, RoutedEventArgs e)
     {
         var snapshot = session.GetProject();

@@ -58,11 +58,31 @@ internal static class CommandApplier
             };
             return project with { Assets = project.Assets.Replace(asset, replacement) };
         }
+        if (command is SetGeneratedProvenance provenance)
+        {
+            var asset = project.Assets.FirstOrDefault(a => a.Id == provenance.MediaAssetId) ?? throw Reject("MEDIA_NOT_FOUND", "Media not found.");
+            return project with { Assets = project.Assets.Replace(asset, asset with { Provenance = provenance.Provenance ?? throw Reject("INVALID_PROVENANCE", "Provenance required.") }) };
+        }
         if (command is CreateSequence sequence)
             return project with { Sequences = project.Sequences.Add(new(sequence.SequenceId, sequence.Name, sequence.Settings, sequence.DurationTicks, [])) };
 
         return command switch
         {
+            AddClapper c => ChangeSequence(project, c.SequenceId, s => s with { Clappers = s.Clappers.Add(c.Clapper) }),
+            UpdateClapper c => ChangeSequence(project, c.SequenceId, s => s with { Clappers = s.Clappers.Replace(
+                s.Clappers.FirstOrDefault(x => x.Id == (c.Clapper ?? throw Reject("INVALID_CLAPPER", "Clapper required.")).Id) ?? throw Reject("CLAPPER_NOT_FOUND", "Clapper not found."), c.Clapper) }),
+            DeleteClapper c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var clapper = s.Clappers.FirstOrDefault(x => x.Id == c.ClapperId) ?? throw Reject("CLAPPER_NOT_FOUND", "Clapper not found.");
+                return s with { Clappers = s.Clappers.Remove(clapper) };
+            }),
+            AddRecipe c => ChangeSequence(project, c.SequenceId, s => s with { Recipes = s.Recipes.Add(c.Recipe) }),
+            UpdateRecipe c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var previous = s.Recipes.FirstOrDefault(x => x.Id == (c.Recipe ?? throw Reject("INVALID_RECIPE", "Recipe required.")).Id) ?? throw Reject("RECIPE_NOT_FOUND", "Recipe not found.");
+                if (c.Recipe.Revision != previous.Revision + 1) throw Reject("RECIPE_REVISION_CONFLICT", "Recipe revision must advance once.");
+                return s with { Recipes = s.Recipes.Replace(previous, c.Recipe) };
+            }),
             SetSequenceDuration c => ChangeSequence(project, c.SequenceId, s => s with { DurationTicks = c.DurationTicks }),
             AddTrack c => ChangeSequence(project, c.SequenceId, s => s with { Tracks = s.Tracks.Add(new(c.TrackId, c.Name, c.Kind, true, [], [])) }),
             InsertClip c => ChangeSequence(project, c.SequenceId, s => ChangeTrack(s, c.TrackId, t => t with { Clips = t.Clips.Add(c.Clip) })),

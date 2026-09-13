@@ -35,6 +35,7 @@
         <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
         <MenuItem Header="縮小(_O)" Click="ZoomOut_Click" />
       </MenuItem>
+      <MenuItem Header="Clapper / Recipe"><MenuItem Header="名前付き範囲とRecipeを編集…" Click="Authoring_Click" /></MenuItem>
       <MenuItem Header="AI接続"><MenuItem Header="MCPを開始 / 停止" Click="Mcp_Click" /></MenuItem>
       <MenuItem Header="ヘルプ(_H)" />
     </Menu>
