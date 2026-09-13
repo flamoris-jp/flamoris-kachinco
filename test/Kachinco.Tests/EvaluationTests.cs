@@ -99,14 +99,14 @@ public sealed class EvaluationTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => BlendReference.Composite(new(0, 0, 0, 1), new(double.NaN, 0, 0, 1), BlendMode.Normal));
     }
     [TestMethod]
-    public async Task FfmpegBoundaryDoesNotPretendToExportOrConsumeMedia()
+    public async Task InvalidFfmpegRequestDoesNotConsumeMedia()
     {
         var request = new EncodingRequest(Guid.NewGuid(), "must-not-exist.mp4", ExportPreset.YoutubeH264AacMp4,
-            SequenceSettings.Landscape, 240, 48000, 2, 384000);
+            SequenceSettings.Landscape, 0, 48000, 2, 384000);
         var backend = new FfmpegEncodingBackend();
         var result = await backend.EncodeAsync(request, new NeverReadMedia(), new(null), null, default);
         Assert.AreEqual(ExportStage.Failed, result.Stage); Assert.IsNull(result.OutputPath);
-        Assert.AreEqual("EXPORT_NOT_IMPLEMENTED", result.Diagnostics[0].Code);
+        Assert.AreEqual("INVALID_ENCODING_REQUEST", result.Diagnostics[0].Code);
         using var token = new CancellationTokenSource(); token.Cancel();
         Assert.AreEqual(ExportStage.Cancelled, (await backend.EncodeAsync(request, new NeverReadMedia(), new(null), null, token.Token)).Stage);
     }
