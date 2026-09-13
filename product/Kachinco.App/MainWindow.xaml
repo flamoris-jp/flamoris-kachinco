@@ -14,6 +14,12 @@
         <MenuItem Header="名前を付けて保存(_A)…" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
         <Separator />
         <MenuItem Header="素材を読み込む(_I)…" Click="Register_Click" />
+        <MenuItem Header="動画を書き出す…" Click="Export_Click" />
+      </MenuItem>
+      <MenuItem Header="字幕(_T)">
+        <MenuItem Header="字幕を編集…" Click="EditCaptions_Click" />
+        <MenuItem Header="SRTを読み込む…" Click="ImportSrt_Click" />
+        <MenuItem Header="SRTを書き出す…" Click="ExportSrt_Click" />
       </MenuItem>
       <MenuItem Header="編集(_E)">
         <MenuItem x:Name="UndoMenuItem" Header="元に戻す(_U)" Click="Undo_Click" InputGestureText="Ctrl+Z" />
@@ -38,11 +44,11 @@
         <Separator />
         <Button x:Name="SplitButton" Content="✂ 分割" Click="Split_Click" />
         <Separator />
-        <Button Content="|◀" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
-        <Button Content="▶" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
-        <Button Content="■" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
-        <Button Content="▶|" IsEnabled="False" ToolTip="再生はPhase 2で実装します" />
-        <TextBlock Text="再生は Phase 2" Foreground="#737983" VerticalAlignment="Center" Margin="8,0" />
+        <Button Content="プレビュー準備" Click="PreparePreview_Click" />
+        <Button Content="|◀" Click="PreviousFrame_Click" ToolTip="前のフレーム" />
+        <Button Content="▶ / Ⅱ" Click="Play_Click" ToolTip="再生 / 一時停止" />
+        <Button Content="■" Click="Stop_Click" ToolTip="停止" />
+        <Button Content="▶|" Click="NextFrame_Click" ToolTip="次のフレーム" />
       </ToolBar>
     </ToolBarTray>
     <Border DockPanel.Dock="Bottom" Background="#E4E6EA" Padding="8,5">
@@ -85,12 +91,10 @@
       <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" />
 
       <Border Grid.Column="2" Background="#171B23" Padding="24">
-        <StackPanel VerticalAlignment="Center">
-          <TextBlock Text="プレビュー" Foreground="White" FontSize="22" HorizontalAlignment="Center" />
-          <TextBlock x:Name="PreviewInfo" Foreground="#B7C4D8" TextAlignment="Center" TextWrapping="Wrap" Margin="0,20" />
-          <TextBlock Text="Phase 1 は編集のみ。映像・音声の再生は Phase 2 で同じ evaluator に接続します。"
-                     Foreground="#9CA8BC" TextAlignment="Center" TextWrapping="Wrap" />
-        </StackPanel>
+        <Grid>
+          <Image x:Name="PreviewImage" Stretch="Uniform" />
+          <TextBlock x:Name="PreviewInfo" Foreground="#B7C4D8" TextAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" />
+        </Grid>
       </Border>
       <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" />
 

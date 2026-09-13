@@ -51,6 +51,8 @@ public partial class TimelineSurface : UserControl
     private Guid? selectedClipId;
     private long playheadTicks;
     private DragState? drag;
+    private Line? rulerPlayhead;
+    private Line? canvasPlayhead;
 
     public TimelineSurface()
     {
@@ -189,6 +191,14 @@ public partial class TimelineSurface : UserControl
             var track = visibleTracks[row];
             DrawTrack(track, labels[track.Id], row, width);
             foreach (var clip in TimelineQueries.ListClips(track)) DrawClip(track, clip, row);
+            foreach (var caption in TimelineQueries.ListCaptions(track))
+            {
+                var block = new Border { Width = Math.Max(8, ToDouble(viewport.TicksToPixels(caption.DurationTicks))), Height = TrackHeight - 8,
+                    Background = Brushes.DarkMagenta, IsHitTestVisible = false,
+                    Child = new TextBlock { Text = caption.Text, Foreground = Brushes.White, Margin = new(5), TextTrimming = TextTrimming.CharacterEllipsis } };
+                Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, row * TrackHeight + 4);
+                TimelineCanvas.Children.Add(block);
+            }
         }
         DrawPlayhead(height);
     }
@@ -289,9 +299,9 @@ public partial class TimelineSurface : UserControl
     {
         double x = ToDouble(viewport.TicksToPixels(playheadTicks));
         var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = Brushes.OrangeRed, StrokeThickness = 2, IsHitTestVisible = false };
-        RulerCanvas.Children.Add(rulerLine);
+        rulerPlayhead = rulerLine; RulerCanvas.Children.Add(rulerLine);
         var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = Brushes.OrangeRed, StrokeThickness = 1.5, IsHitTestVisible = false };
-        TimelineCanvas.Children.Add(line);
+        canvasPlayhead = line; TimelineCanvas.Children.Add(line);
     }
 
     private void Body_DragStarted(object sender, DragStartedEventArgs e)
@@ -398,6 +408,18 @@ public partial class TimelineSurface : UserControl
     private void Timeline_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource == TimelineCanvas) { Select(null); SetPlayhead(e.GetPosition(TimelineCanvas).X); }
+    }
+
+    public void SetCursorTicks(long ticks)
+    {
+        if (sequence is null) return;
+        long next = Math.Clamp(ticks, 0, sequence.DurationTicks);
+        if (next == playheadTicks) return;
+        playheadTicks = next;
+        double pixel = ToDouble(viewport.TicksToPixels(next));
+        if (rulerPlayhead is not null) rulerPlayhead.X1 = rulerPlayhead.X2 = pixel;
+        if (canvasPlayhead is not null) canvasPlayhead.X1 = canvasPlayhead.X2 = pixel;
+        PlayheadChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void SetPlayhead(double pixel)

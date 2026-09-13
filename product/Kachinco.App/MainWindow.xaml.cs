@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeProduction();
         Refresh("新規プロジェクトを作成するか、保存済みのプロジェクトを開いてください。");
     }
 
@@ -149,7 +150,7 @@ public partial class MainWindow : Window
         DragDrop.DoDragDrop(MediaList, new DataObject(TimelineSurface.MediaDragFormat, id), DragDropEffects.Copy);
     }
     private void Timeline_MediaPlacementRequested(object sender, MediaPlacementEventArgs e) => PlaceMedia(e.MediaId, e.TrackId, e.StartTicks);
-    private void Timeline_PlayheadChanged(object? sender, EventArgs e) => RefreshTimelineStatus();
+    private void Timeline_PlayheadChanged(object? sender, EventArgs e) { RefreshTimelineStatus(); SeekPreview(); }
     private void FitTimeline_Click(object sender, RoutedEventArgs e) { Timeline.FitSequence(); RefreshTimelineStatus(); }
     private void SequenceDuration_Click(object sender, RoutedEventArgs e)
     {
@@ -280,6 +281,7 @@ public partial class MainWindow : Window
     {
         refreshing = true;
         var snapshot = session.GetProject();
+        InvalidateChangedPreview();
         var project = snapshot.Project;
         var availability = project is null ? new Dictionary<Guid, MediaAvailability>() :
             MediaReferenceResolver.Inspect(project, filename).ToDictionary(x => x.MediaAssetId);

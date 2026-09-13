@@ -20,6 +20,7 @@ public sealed record SetClipProperties(Guid SequenceId, Guid ClipId, bool Enable
 public sealed record SetTrackEnabled(Guid SequenceId, Guid TrackId, bool Enabled) : EditCommand;
 public sealed record ReorderTrack(Guid SequenceId, Guid TrackId, int NewIndex) : EditCommand;
 public sealed record AddCaption(Guid SequenceId, Guid TrackId, Caption Caption) : EditCommand;
+public sealed record UpdateCaption(Guid SequenceId, Guid CaptionId, long StartTicks, long DurationTicks, string Text, bool Enabled) : EditCommand;
 public sealed record DeleteCaption(Guid SequenceId, Guid CaptionId) : EditCommand;
 
 public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? ExpectedRevision = null, bool DryRun = false);
@@ -99,6 +100,13 @@ internal static class CommandApplier
                 return s with { Tracks = s.Tracks.Remove(track).Insert(c.NewIndex, track) };
             }),
             AddCaption c => ChangeSequence(project, c.SequenceId, s => ChangeTrack(s, c.TrackId, t => t with { Captions = t.Captions.Add(c.Caption) })),
+            UpdateCaption c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var track = s.Tracks.FirstOrDefault(t => t.Captions.Any(x => x.Id == c.CaptionId)) ?? throw Reject("CAPTION_NOT_FOUND", "Caption not found.", c.CaptionId);
+                var caption = track.Captions.First(x => x.Id == c.CaptionId);
+                return ChangeTrack(s, track.Id, t => t with { Captions = t.Captions.Replace(caption,
+                    caption with { StartTicks = c.StartTicks, DurationTicks = c.DurationTicks, Text = c.Text, Enabled = c.Enabled }) });
+            }),
             DeleteCaption c => ChangeSequence(project, c.SequenceId, s =>
             {
                 var track = s.Tracks.FirstOrDefault(t => t.Captions.Any(x => x.Id == c.CaptionId)) ?? throw Reject("CAPTION_NOT_FOUND", "Caption not found.", c.CaptionId);
