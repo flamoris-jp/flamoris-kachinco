@@ -7,6 +7,8 @@ public abstract record EditCommand;
 public sealed record CreateProject(Guid ProjectId, string Name) : EditCommand;
 public sealed record CreateSequence(Guid SequenceId, string Name, SequenceSettings Settings, long DurationTicks) : EditCommand;
 public sealed record RegisterMedia(MediaAsset Asset) : EditCommand;
+public sealed record RelinkMedia(Guid MediaAssetId, string SourcePath, long DurationTicks,
+    int? SampleRate = null, int? Channels = null) : EditCommand;
 public sealed record AddTrack(Guid SequenceId, Guid TrackId, string Name, TrackKind Kind) : EditCommand;
 public sealed record InsertClip(Guid SequenceId, Guid TrackId, Clip Clip) : EditCommand;
 public sealed record MoveClip(Guid SequenceId, Guid ClipId, Guid TargetTrackId, long StartTicks) : EditCommand;
@@ -41,6 +43,19 @@ internal static class CommandApplier
         }
         if (project is null) throw Reject("PROJECT_REQUIRED", "Create or open a project first.");
         if (command is RegisterMedia register) return project with { Assets = project.Assets.Add(register.Asset) };
+        if (command is RelinkMedia relink)
+        {
+            var asset = project.Assets.FirstOrDefault(x => x.Id == relink.MediaAssetId) ??
+                throw Reject("MEDIA_NOT_FOUND", "Media asset not found.", relink.MediaAssetId);
+            var replacement = asset with
+            {
+                SourcePath = relink.SourcePath,
+                DurationTicks = relink.DurationTicks,
+                SampleRate = relink.SampleRate,
+                Channels = relink.Channels
+            };
+            return project with { Assets = project.Assets.Replace(asset, replacement) };
+        }
         if (command is CreateSequence sequence)
             return project with { Sequences = project.Sequences.Add(new(sequence.SequenceId, sequence.Name, sequence.Settings, sequence.DurationTicks, [])) };
 

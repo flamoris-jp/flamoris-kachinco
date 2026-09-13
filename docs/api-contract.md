@@ -29,7 +29,11 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 
 - `CreateProject(projectId, name)` — only on an empty session.
 - `CreateSequence(sequenceId, name, settings, durationTicks)`.
-- `RegisterMedia(asset)` — explicit MOV/WAV metadata, no decoding/probing.
+- `RegisterMedia(asset)` — explicit validated MOV/WAV metadata. Human import first
+  obtains it through `IMediaProbe`; Core still has no file/process dependency.
+- `RelinkMedia(mediaAssetId, sourcePath, durationTicks, sampleRate, channels)` —
+  replaces source metadata for the same logical asset after probe/compatibility
+  validation; referenced clip IDs and placements do not change.
 - `AddTrack(sequenceId, trackId, name, kind)` — appends above existing tracks.
 - `InsertClip(sequenceId, trackId, clip)` — explicit asset ID and source/timeline range.
 - `MoveClip(sequenceId, clipId, targetTrackId, startTicks)`.
@@ -40,6 +44,12 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 - `SetTrackEnabled(sequenceId, trackId, enabled)`.
 - `ReorderTrack(sequenceId, trackId, newIndex)` — zero-based bottom-to-top index.
 - `AddCaption(sequenceId, trackId, caption)` / `DeleteCaption(sequenceId, captionId)`.
+
+`TimelineEditPlanner` is the shared Phase 1 gesture/adapter planner for move, trim
+and split. `TimelineViewport` converts pixels to canonical ticks with explicit
+decimal round-half-away-from-zero behavior. `TimelineSnapping` compares integer
+tick distances and resolves equal distances to the lower tick. None is persistent
+state, and all resulting edits still execute through `EditorSession.Execute`.
 
 Each command must leave a valid candidate before the next executes. Add referenced
 assets/tracks before clips. A failure rolls the whole batch back. An unknown command
