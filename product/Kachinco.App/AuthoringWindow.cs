@@ -13,6 +13,7 @@ public sealed class AuthoringWindow : Window
     private readonly EditorSession session;
     private readonly Guid sequenceId;
     private readonly ListBox clappers = new() { DisplayMemberPath = "Name", Height = 110 };
+    private readonly ComboBox targetTrack = new() { DisplayMemberPath = "Name" };
     private readonly ComboBox recipes = new() { DisplayMemberPath = "Id" };
     private readonly ComboBox geometry = new() { ItemsSource = new[] { "なし", "点", "四角" }, SelectedIndex = 0 };
     private readonly TextBox name = new(), start = new(), duration = new(), x = new(), y = new(), width = new(), height = new(), seed = new() { Text = "1" };
@@ -28,7 +29,7 @@ public sealed class AuthoringWindow : Window
         panel.Children.Add(new TextBlock { Text = "Clapper — 名前付きの時間と場所", FontSize = 18 }); panel.Children.Add(clappers);
         var fields = new Grid(); fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new()); panel.Children.Add(fields);
         int row = 0;
-        foreach (var (label, control) in new (string, Control)[] { ("名前", name), ("開始（秒）", start), ("長さ（秒）", duration), ("場所", geometry), ("X（px）", x), ("Y（px）", y), ("幅（px）", width), ("高さ（px）", height) })
+        foreach (var (label, control) in new (string, Control)[] { ("名前", name), ("開始（秒）", start), ("長さ（秒）", duration), ("場所", geometry), ("配置先トラック", targetTrack), ("X（px）", x), ("Y（px）", y), ("幅（px）", width), ("高さ（px）", height) })
         {
             fields.RowDefinitions.Add(new() { Height = GridLength.Auto });
             var text = new TextBlock { Text = label, Margin = new Thickness(3) }; Grid.SetRow(text,row); fields.Children.Add(text);
@@ -49,17 +50,18 @@ public sealed class AuthoringWindow : Window
         Refresh(); New(cursor);
     }
     private Sequence Sequence => session.GetProject().Project!.Sequences.First(s => s.Id == sequenceId);
-    private void Refresh() { clappers.ItemsSource = Sequence.Clappers; recipes.ItemsSource = Sequence.Recipes; }
+    private void Refresh() { clappers.ItemsSource = Sequence.Clappers; recipes.ItemsSource = Sequence.Recipes; targetTrack.ItemsSource = Sequence.Tracks.Where(t=>t.Kind==TrackKind.Video).ToArray(); }
     private void New(long cursor)
     {
         clappers.SelectedItem = null; name.Text = "A-" + (Sequence.Clappers.Length + 1);
         long from = Math.Min(cursor, Math.Max(0, Sequence.DurationTicks - TimelineTime.TicksPerSecond));
         start.Text = Seconds(from); duration.Text = Seconds(Math.Min(3 * TimelineTime.TicksPerSecond, Sequence.DurationTicks - from));
-        x.Text = y.Text = "0"; width.Text = Sequence.Settings.Width.ToString(); height.Text = Sequence.Settings.Height.ToString(); geometry.SelectedIndex = 0;
+        x.Text = y.Text = "0"; width.Text = Sequence.Settings.Width.ToString(); height.Text = Sequence.Settings.Height.ToString(); geometry.SelectedIndex = 0; targetTrack.SelectedIndex = 0;
     }
     private void LoadClapper()
     {
         if (clappers.SelectedItem is not Clapper c) return;
+        targetTrack.SelectedItem = Sequence.Tracks.FirstOrDefault(t=>t.Id==c.TargetTrackId);
         name.Text = c.Name; start.Text = Seconds(c.StartTicks); duration.Text = Seconds(c.DurationTicks);
         geometry.SelectedIndex = c.Geometry is null ? 0 : c.Geometry.Kind == ClapperGeometryKind.Point ? 1 : 2;
         x.Text = (c.Geometry?.X ?? 0).ToString(); y.Text = (c.Geometry?.Y ?? 0).ToString();
@@ -75,7 +77,7 @@ public sealed class AuthoringWindow : Window
             ClapperGeometry? area = geometry.SelectedIndex == 0 ? null : new(geometry.SelectedIndex == 1 ? ClapperGeometryKind.Point : ClapperGeometryKind.Rectangle,
                 double.Parse(x.Text), double.Parse(y.Text), geometry.SelectedIndex == 1 ? 0 : double.Parse(width.Text), geometry.SelectedIndex == 1 ? 0 : double.Parse(height.Text));
             var c = new Clapper(previous?.Id ?? Guid.NewGuid(), name.Text, from, count, area,
-                previous?.TargetTrackId ?? Sequence.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video)?.Id, previous?.SourceClipId, previous?.Notes ?? "");
+                (targetTrack.SelectedItem as Kachinco.Core.Track)?.Id, previous?.SourceClipId, previous?.Notes ?? "");
             var result = session.Execute(new([previous is null ? new AddClapper(sequenceId,c) : new UpdateClapper(sequenceId,c)],session.GetProject().Revision));
             status.Text = result.Success ? "Clapperを保存しました。" : string.Join(" / ",result.Diagnostics.Select(d=>d.Message));
             if (result.Success) { Refresh(); clappers.SelectedItem = Sequence.Clappers.First(v => v.Id == c.Id); }
@@ -119,6 +121,8 @@ public sealed class AuthoringWindow : Window
             status.Text = "通常のクリップとして配置しました。Undo一回で戻せます。"; Refresh();
             recipes.SelectedItem = Sequence.Recipes.First(r => r.Id == recipe.Id);
         }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        { status.Text="生成を完了できませんでした: "+ex.Message; }
         finally { rendering.Dispose(); rendering = null; }
     }
     private static void AddButton(Panel panel,string title,RoutedEventHandler handler) { var button=new Button{Content=title};button.Click+=handler;panel.Children.Add(button); }

@@ -18,7 +18,7 @@ public partial class MainWindow
         if (mcpLifetime is not null) { mcpLifetime.Cancel(); mcpLifetime = null; Status.Text = "MCP接続を停止しました。"; return; }
         var lifetime = new CancellationTokenSource(); mcpLifetime = lifetime;
         string pipeName = "kachinco-" + Guid.NewGuid().ToString("N");
-        var information = new System.Windows.Controls.TextBox { Text = "Kachinco.Mcp.exe --pipe " + pipeName, IsReadOnly = true, Margin = new Thickness(16) };
+        var information = new System.Windows.Controls.TextBox { Text = "\"" + Path.Combine(AppContext.BaseDirectory,"mcp","Kachinco.Mcp.exe") + "\" --pipe " + pipeName, IsReadOnly = true, Margin = new Thickness(16) };
         new Window { Owner = this, Title = "MCPクライアントの起動コマンド", Width = 700, SizeToContent = SizeToContent.Height,
             Content = information, WindowStartupLocation = WindowStartupLocation.CenterOwner }.Show();
         Status.Text = "MCP接続を待っています。";
