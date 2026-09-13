@@ -34,7 +34,7 @@ public partial class MainWindow
             });
             PreviewInfo.Visibility = Visibility.Collapsed;
         };
-        Closed += (_, _) => { CompositionTarget.Rendering -= PlaybackRendering; InvalidatePreview(); };
+        Closed += (_, _) => { mcpLifetime?.Cancel(); foreach (var job in exportJobs.Values) job.Cancellation.Cancel(); CompositionTarget.Rendering -= PlaybackRendering; InvalidatePreview(); };
     }
     private void InvalidatePreview()
     {

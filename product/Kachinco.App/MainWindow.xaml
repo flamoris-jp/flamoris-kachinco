@@ -35,6 +35,7 @@
         <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
         <MenuItem Header="縮小(_O)" Click="ZoomOut_Click" />
       </MenuItem>
+      <MenuItem Header="AI接続"><MenuItem Header="MCPを開始 / 停止" Click="Mcp_Click" /></MenuItem>
       <MenuItem Header="ヘルプ(_H)" />
     </Menu>
     <ToolBarTray DockPanel.Dock="Top" Background="#E8E9EC">
