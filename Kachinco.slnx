@@ -6,6 +6,7 @@
     <Project Path="product/Kachinco.App/Kachinco.App.csproj" />
   </Folder>
   <Folder Name="/test/">
+    <Project Path="test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj" />
     <Project Path="test/Kachinco.Tests/Kachinco.Tests.csproj" />
   </Folder>
 </Solution>

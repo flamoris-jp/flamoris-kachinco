@@ -27,9 +27,10 @@
       </MenuItem>
       <MenuItem Header="クリップ(_C)">
         <MenuItem Header="再生ヘッド位置で分割(_S)" Click="Split_Click" />
+        <MenuItem Header="選択クリップを複製" Click="Duplicate_Click" />
         <MenuItem Header="選択クリップを削除(_D)" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
-      <MenuItem Header="シーケンス(_S)"><MenuItem Header="長さを変更…" Click="SequenceDuration_Click" /></MenuItem>
+      <MenuItem Header="シーケンス(_S)"><MenuItem Header="映像トラックを追加" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="音声トラックを追加" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="長さを変更…" Click="SequenceDuration_Click" /></MenuItem>
       <MenuItem Header="表示(_V)">
         <MenuItem x:Name="SnappingMenuItem" Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
         <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
@@ -120,6 +121,13 @@
               <TextBlock Text="開始（秒）" /><TextBox x:Name="ClipStartBox" />
               <TextBlock Text="ソースイン（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipSourceInBox" />
               <TextBlock Text="長さ（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipDurationBox" />
+              <TextBlock Text="合成" Margin="0,6,0,0" /><ComboBox x:Name="BlendBox" />
+              <TextBlock Text="不透明度（0〜1）" /><TextBox x:Name="OpacityBox" />
+              <TextBlock Text="位置 X / Y（px）" /><TextBox x:Name="TransformXBox" /><TextBox x:Name="TransformYBox" />
+              <TextBlock Text="拡大率 X / Y" /><TextBox x:Name="ScaleXBox" /><TextBox x:Name="ScaleYBox" />
+              <TextBlock Text="回転（度）" /><TextBox x:Name="RotationBox" />
+              <TextBlock Text="音量（0〜16）" /><TextBox x:Name="GainBox" />
+              <CheckBox x:Name="MutedBox" Content="音声をミュート" />
               <CheckBox x:Name="ClipEnabledBox" Content="有効" Margin="0,8,0,0" />
               <Button Content="変更を適用" Click="ApplyInspector_Click" Margin="0,8,0,0" />
             </StackPanel>

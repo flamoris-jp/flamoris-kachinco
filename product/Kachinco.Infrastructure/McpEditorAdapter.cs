@@ -36,6 +36,7 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
             if (System.Text.Encoding.UTF8.GetByteCount(line) > 4 * 1024 * 1024) return Error(null, -32600, "Message too large.");
             using var document = JsonDocument.Parse(line, new() { MaxDepth = 64 });
             var root = document.RootElement;
+            RejectDuplicates(root);
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("jsonrpc", out var version) || version.GetString() != "2.0") return Error(null, -32600, "Invalid JSON-RPC request.");
             if (root.TryGetProperty("id", out var requestId)) id = requestId.Clone();
             string? method = root.GetProperty("method").GetString();
@@ -54,6 +55,7 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                 var parameters = root.GetProperty("params");
                 var name = parameters.GetProperty("name").GetString();
                 var args = parameters.TryGetProperty("arguments", out var arguments) ? arguments : JsonSerializer.SerializeToElement(new { });
+                ValidateArguments(name,args);
                 object value;
                 switch (name)
                 {
@@ -77,12 +79,19 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                     case "undo": case "redo":
                         var history = name == "undo" ? session.Undo(Revision(args)) : session.Redo(Revision(args));
                         if (history.Success) changed(); value = history; break;
-                    case "export_start": case "job_status": case "job_cancel":
+                    case "clapper_resolve":
+                        var project = session.GetProject().Project ?? throw new JsonException("Project required.");
+                        value = ClapperQueries.Resolve(project,args.GetProperty("sequenceId").GetGuid(),args.GetProperty("name").GetString()!); break;
+                    case "recipe_validate":
+                        value = await new RecipeCompiler().CompileAsync(args.GetProperty("source").GetString()!); break;
+                    case "recipe_generate": case "export_start": case "job_status": case "job_cancel":
                         if (jobs is null) throw new JsonException("Jobs are not available on this host.");
                         value = await jobs(name, args); break;
                     default: return Error(id, -32602, "Unknown tool.");
                 }
-                bool failed = value is EditResult { Success: false };
+                var payloadResult = JsonSerializer.SerializeToElement(value,Wire);
+                bool failed = payloadResult.TryGetProperty("error",out _) ||
+                    payloadResult.TryGetProperty("success",out var success) && success.ValueKind == JsonValueKind.False;
                 result = new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, Wire) } }, isError = failed };
             }
             else return Error(id, -32601, "Method not found.");
@@ -92,6 +101,30 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         catch (Exception e) when (e is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
         { return Error(id, -32602, "Invalid tool arguments."); }
     }
+    private static void RejectDuplicates(JsonElement value)
+    {
+        if(value.ValueKind == JsonValueKind.Object)
+        {
+            var names=new HashSet<string>(StringComparer.Ordinal);
+            foreach(var p in value.EnumerateObject()) { if(!names.Add(p.Name)) throw new JsonException("Duplicate JSON property."); RejectDuplicates(p.Value); }
+        }
+        else if(value.ValueKind == JsonValueKind.Array) foreach(var item in value.EnumerateArray()) RejectDuplicates(item);
+    }
+    private static void ValidateArguments(string? name,JsonElement args)
+    {
+        string[] allowed = name switch
+        {
+            "get_project" => [], "edit_batch" => ["expectedRevision","commands","dryRun"], "undo" or "redo" => ["expectedRevision"],
+            "clapper_resolve" => ["sequenceId","name"], "recipe_validate" => ["source"],
+            "export_start" => ["expectedRevision","sequenceId","outputPath"], "job_status" or "job_cancel" => ["jobId"],
+            "recipe_generate" => ["expectedRevision","sequenceId","recipe","outputPath","replaceMediaId"],
+            _ => throw new JsonException("Unknown tool.")
+        };
+        if(args.ValueKind != JsonValueKind.Object) throw new JsonException("Arguments must be an object.");
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var property in args.EnumerateObject()) if(!allowed.Contains(property.Name) || !seen.Add(property.Name)) throw new JsonException("Unknown or duplicate tool argument.");
+    }
+
     private static long Revision(JsonElement args) => long.Parse(args.GetProperty("expectedRevision").GetString()!, NumberStyles.None, CultureInfo.InvariantCulture);
     private static string Error(JsonElement? id, int code, string message) => JsonSerializer.Serialize(new { jsonrpc = "2.0", id, error = new { code, message } });
     private IEnumerable<object> ToolDefinitions()
@@ -100,7 +133,10 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         yield return new { name = "get_project", description = "Read the same visible Project, revision and transient editor context.", inputSchema = schema("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}") };
         yield return new { name = "edit_batch", description = "Atomic typed commands. Each command has a type discriminator and camelCase constructor fields. All Int64 values, including ticks, are decimal strings. Allowed types: " + string.Join(", ", Commands.Keys), inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"dryRun\":{\"type\":\"boolean\"},\"commands\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10000,\"items\":{\"type\":\"object\",\"required\":[\"type\"],\"properties\":{\"type\":{\"type\":\"string\"}}}}},\"required\":[\"expectedRevision\",\"commands\"],\"additionalProperties\":false}") };
         foreach (var name in new[] { "undo", "redo" }) yield return new { name, description = "Travel the shared editor history.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\"],\"additionalProperties\":false}") };
+        yield return new { name = "clapper_resolve", description = "Resolve a sequence-local Clapper name to stable identity and coordinates.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"sequenceId\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}},\"required\":[\"sequenceId\",\"name\"]}") };
+        yield return new { name = "recipe_validate", description = "Compile bounded literal-only Python text/particles calls without executing user code.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"maxLength\":65536}},\"required\":[\"source\"]}") };
         if (jobs is null) yield break;
+        yield return new { name = "recipe_generate", description = "Render and commit a normal MOV clip. Recipe fields: id, clapperId, source, revision (int), seed (int), apiVersion='1', rendererVersion='1'. Optional replaceMediaId regenerates the same asset lineage and preserves clip edits.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"sequenceId\":{\"type\":\"string\"},\"recipe\":{\"type\":\"object\"},\"outputPath\":{\"type\":\"string\"},\"replaceMediaId\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\",\"sequenceId\",\"recipe\",\"outputPath\"]}") };
         yield return new { name = "export_start", description = "Export the visible snapshot to MP4; return a job ID.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"sequenceId\":{\"type\":\"string\"},\"outputPath\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\",\"sequenceId\",\"outputPath\"],\"additionalProperties\":false}") };
         foreach (var name in new[] { "job_status", "job_cancel" }) yield return new { name, description = "Inspect or cancel an editor export job.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"jobId\":{\"type\":\"string\"}},\"required\":[\"jobId\"],\"additionalProperties\":false}") };
     }

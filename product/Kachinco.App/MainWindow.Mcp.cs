@@ -62,6 +62,20 @@ public partial class MainWindow
     }
     private Task<object> McpJobAsync(string method, JsonElement args)
     {
+        if (method == "recipe_generate")
+        {
+            var snapshot = session.GetProject();
+            if (long.Parse(args.GetProperty("expectedRevision").GetString()!,CultureInfo.InvariantCulture) != snapshot.Revision || snapshot.Project is null)
+                return Task.FromResult<object>(new { error = "REVISION_CONFLICT" });
+            if (exportJobs.Values.Any(x => x.Result is null)) return Task.FromResult<object>(new { error = "EXPORT_BUSY" });
+            var recipe = args.GetProperty("recipe").Deserialize<Recipe>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true }) ?? throw new JsonException("Recipe required.");
+            var id = Guid.NewGuid(); var job = new EditorExportJob(); exportJobs.Add(id,job);
+            var service = new RecipeGenerationService(new RecipeCompiler(),new WindowsRecipeRasterizer(Dispatcher));
+            _ = RunRecipeJob(id,job,service,snapshot,args.GetProperty("sequenceId").GetGuid(),recipe,args.GetProperty("outputPath").GetString()!,
+                args.TryGetProperty("replaceMediaId",out var replace) ? replace.GetGuid() : null);
+            return Task.FromResult<object>(new { jobId = id });
+        }
         if (method == "export_start")
         {
             var snapshot = session.GetProject();
@@ -81,6 +95,19 @@ public partial class MainWindow
         if (!exportJobs.TryGetValue(jobId, out var found)) return Task.FromResult<object>(new { error = "JOB_NOT_FOUND" });
         if (method == "job_cancel") found.Cancellation.Cancel();
         return Task.FromResult<object>(new { jobId, progress = found.Progress, result = found.Result });
+    }
+    private async Task RunRecipeJob(Guid id,EditorExportJob job,RecipeGenerationService service,ProjectSnapshot snapshot,Guid sequenceId,Recipe recipe,string path,Guid? replace)
+    {
+        try
+        {
+            var result = await Task.Run(() => service.PrepareAsync(snapshot,sequenceId,recipe,path,replace,job.Cancellation.Token));
+            if (!result.Success) { job.Result = new(id,ExportStage.Failed,null,result.Diagnostics); return; }
+            var prepared = result.Value!;
+            var committed = session.Execute(prepared.Batch);
+            if (!committed.Success) { File.Delete(prepared.OutputPath); job.Result = new(id,ExportStage.Failed,null,committed.Diagnostics); return; }
+            job.Result = new(id,ExportStage.Completed,prepared.OutputPath,[]); Refresh("Recipeクリップを生成しました。");
+        }
+        catch(Exception ex) { job.Result = new(id,ExportStage.Failed,null,[Diagnostic.Error("RECIPE_GENERATION_FAILED",ex.Message)]); }
     }
     private async Task RunEditorJob(EditorExportJob job, IExportService service, ProjectSnapshot snapshot, ExportRequest request)
     {

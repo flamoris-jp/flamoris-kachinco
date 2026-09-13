@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         relink = new(mediaProbe);
         InitializeProduction();
+        BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
         Refresh("新規プロジェクトを作成するか、保存済みのプロジェクトを開いてください。");
     }
 
@@ -184,6 +185,25 @@ public partial class MainWindow : Window
         finally { SetBusy(false); }
     }
 
+    private void AddTrack_Click(object sender,RoutedEventArgs e)
+    {
+        if(selectedSequenceId is not { } id || sender is not MenuItem menu || !Enum.TryParse<TrackKind>(menu.Tag?.ToString(),out var kind)) return;
+        Apply("トラックを追加しました。",new AddTrack(id,Guid.NewGuid(),kind == TrackKind.Video ? "映像" : "音声",kind));
+    }
+    private void Duplicate_Click(object sender,RoutedEventArgs e)
+    {
+        var found=FindSelectedClip(session.GetProject().Project); if(found is null || selectedSequenceId is not { } id) return;
+        try
+        {
+            var clip=found.Value.Clip with { Id=Guid.NewGuid(), StartTicks=found.Value.Clip.EndTicks };
+            var sequence=session.GetProject().Project!.Sequences.First(s=>s.Id==id);
+            var commands=new List<EditCommand>(); if(clip.EndTicks>sequence.DurationTicks) commands.Add(new SetSequenceDuration(id,clip.EndTicks));
+            commands.Add(new InsertClip(id,found.Value.Track.Id,clip));
+            if(Apply("クリップを複製しました。",commands.ToArray())) { selectedClipId=clip.Id; Refresh(); }
+        }
+        catch(OverflowException) { Status.Text="時間が大きすぎます。"; }
+    }
+
     private void Delete_Click(object sender, RoutedEventArgs e) => Timeline.DeleteSelected();
     private void Split_Click(object sender, RoutedEventArgs e) => Timeline.SplitSelected();
     private void Undo_Click(object sender, RoutedEventArgs e) => Show(session.Undo(session.GetProject().Revision), "元に戻しました。");
@@ -247,9 +267,12 @@ public partial class MainWindow : Window
             !TrySeconds(ClipDurationBox.Text, out var duration) || duration <= 0)
         { Refresh("秒数を0以上の数値で入力してください。"); return; }
         var clip = found.Value.Clip;
+        if (!double.TryParse(OpacityBox.Text, out var opacity) || !double.TryParse(TransformXBox.Text,out var x) || !double.TryParse(TransformYBox.Text,out var y) ||
+            !double.TryParse(ScaleXBox.Text,out var sx) || !double.TryParse(ScaleYBox.Text,out var sy) || !double.TryParse(RotationBox.Text,out var rotation) || !double.TryParse(GainBox.Text,out var gain) || BlendBox.SelectedItem is not BlendMode blend)
+        { Status.Text = "合成・変形・音量の数値を確認してください。"; return; }
         Apply("クリップの設定を変更しました。",
             new TrimClip(sequenceId, clip.Id, start, sourceIn, duration),
-            new SetClipProperties(sequenceId, clip.Id, ClipEnabledBox.IsChecked == true, clip.Appearance, clip.Audio));
+            new SetClipProperties(sequenceId, clip.Id, ClipEnabledBox.IsChecked == true, new(new(x,y,sx,sy,rotation),opacity,blend),new(gain,MutedBox.IsChecked == true)));
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -330,6 +353,11 @@ public partial class MainWindow : Window
             ClipSourceInBox.Text = Seconds(value.Clip.SourceInTicks);
             ClipDurationBox.Text = Seconds(value.Clip.DurationTicks);
             ClipEnabledBox.IsChecked = value.Clip.Enabled;
+            BlendBox.SelectedItem = value.Clip.Appearance.Blend; OpacityBox.Text = value.Clip.Appearance.Opacity.ToString();
+            var transform = value.Clip.Appearance.Transform;
+            TransformXBox.Text = transform.X.ToString(); TransformYBox.Text = transform.Y.ToString();
+            ScaleXBox.Text = transform.ScaleX.ToString(); ScaleYBox.Text = transform.ScaleY.ToString(); RotationBox.Text = transform.RotationDegrees.ToString();
+            GainBox.Text = value.Clip.Audio.Gain.ToString(); MutedBox.IsChecked = value.Clip.Audio.Muted;
         }
         else if (SelectedAsset(project) is { } asset)
         {
