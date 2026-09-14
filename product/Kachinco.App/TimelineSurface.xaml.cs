@@ -79,6 +79,7 @@ public partial class TimelineSurface : UserControl
 
     public void LoadProject(Project? value, Guid? sequenceId, Guid? selectedId = null)
     {
+        CancelGesture();
         if (sequence?.Id != sequenceId || project?.Id != value?.Id)
         {
             playheadTicks = 0;
@@ -93,14 +94,18 @@ public partial class TimelineSurface : UserControl
         Rebuild();
     }
 
+    private void CancelGesture() { if (drag is { } active) active.Thumb.CancelDrag(); }
+
     public void ToggleSnapping()
     {
+        CancelGesture();
         SnappingEnabled = !SnappingEnabled;
         Rebuild();
     }
 
     public void ZoomBy(decimal factor)
     {
+        CancelGesture();
         var next = viewport.ZoomBy(factor);
         if (next == viewport) return;
         viewport = next;
@@ -114,6 +119,7 @@ public partial class TimelineSurface : UserControl
 
     public void FitSequence()
     {
+        CancelGesture();
         if (sequence is null) return;
         var available = Math.Max(1, TimelineViewportHost.ActualWidth);
         viewport = TimelineViewport.Fit(sequence.DurationTicks, (decimal)available);
@@ -190,6 +196,7 @@ public partial class TimelineSurface : UserControl
 
     private void Rebuild()
     {
+        if (drag is not null) return;
         RulerCanvas.Children.Clear();
         TimelineCanvas.Children.Clear();
         TrackHeaders.Children.Clear();
@@ -219,7 +226,7 @@ public partial class TimelineSurface : UserControl
             foreach (var clip in TimelineQueries.ListClips(track)) DrawClip(track, clip, row);
             foreach (var caption in TimelineQueries.ListCaptions(track))
             {
-                var block = new Border { Width = Math.Max(8, ToDouble(viewport.TicksToPixels(caption.DurationTicks))), Height = geometry.Row(row).ClipHeight,
+                var block = new Border { Width = ToDouble(viewport.TicksToPixels(caption.DurationTicks)), Height = geometry.Row(row).ClipHeight,
                     Background = Brushes.DarkMagenta, IsHitTestVisible = false,
                     Child = new TextBlock { Text = caption.Text, Foreground = Brushes.White, Margin = new(5), TextTrimming = TextTrimming.CharacterEllipsis } };
                 Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, geometry.Row(row).ClipTop);
@@ -277,12 +284,15 @@ public partial class TimelineSurface : UserControl
         {
             Width = width, Height = geometry.Row(row).Height,
             Fill = row % 2 == 0 ? new SolidColorBrush(Color.FromRgb(34, 39, 47)) : new SolidColorBrush(Color.FromRgb(31, 35, 42)),
-            Stroke = new SolidColorBrush(Color.FromRgb(57, 63, 73)), StrokeThickness = 0.5,
+            StrokeThickness = 0,
             IsHitTestVisible = false
         };
         background.Tag = track.Id;
         Canvas.SetTop(background, geometry.Row(row).Top);
         TimelineCanvas.Children.Add(background);
+        var separator = new Rectangle { Width = width, Height = 1, Fill = header.BorderBrush, IsHitTestVisible = false };
+        Canvas.SetTop(separator, geometry.Row(row).Bottom - 1);
+        TimelineCanvas.Children.Add(separator);
     }
 
     private void DrawClip(Track track, Clip clip, int row)
@@ -340,9 +350,9 @@ public partial class TimelineSurface : UserControl
     private void DrawPlayhead(double height)
     {
         double x = ToDouble(viewport.TicksToPixels(playheadTicks));
-        var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = Brushes.OrangeRed, StrokeThickness = 2, IsHitTestVisible = false };
+        var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 2, IsHitTestVisible = false };
         rulerPlayhead = rulerLine; RulerCanvas.Children.Add(rulerLine);
-        var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = Brushes.OrangeRed, StrokeThickness = 1.5, IsHitTestVisible = false };
+        var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 1.5, IsHitTestVisible = false };
         canvasPlayhead = line; TimelineCanvas.Children.Add(line);
     }
 
@@ -361,8 +371,8 @@ public partial class TimelineSurface : UserControl
         var pointer = Mouse.GetPosition(TimelineViewportHost);
         drag.DeltaX = pointer.X - drag.PointerStart.X; drag.DeltaY = pointer.Y - drag.PointerStart.Y;
         Canvas.SetLeft(drag.Element, Math.Max(0, drag.Visual.Left + drag.DeltaX));
-        Canvas.SetTop(drag.Element, Math.Clamp(drag.Visual.Row * TrackHeight + 4 + drag.DeltaY, 4,
-            Math.Max(4, TimelineCanvas.Height - TrackHeight + 4)));
+        Canvas.SetTop(drag.Element, Math.Clamp(geometry.Row(drag.Visual.Row).ClipTop + drag.DeltaY, geometry.Row(0).ClipTop,
+            geometry.Row(geometry.Count - 1).ClipTop));
     }
 
     private void Body_DragCompleted(object sender, DragCompletedEventArgs e)
