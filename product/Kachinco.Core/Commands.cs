@@ -6,6 +6,7 @@ namespace Kachinco.Core;
 public abstract record EditCommand;
 public sealed record CreateProject(Guid ProjectId, string Name) : EditCommand;
 public sealed record CreateSequence(Guid SequenceId, string Name, SequenceSettings Settings, long DurationTicks) : EditCommand;
+public sealed record SetSequenceDuration(Guid SequenceId, long DurationTicks) : EditCommand;
 public sealed record RegisterMedia(MediaAsset Asset) : EditCommand;
 public sealed record RelinkMedia(Guid MediaAssetId, string SourcePath, long DurationTicks,
     int? SampleRate = null, int? Channels = null) : EditCommand;
@@ -19,6 +20,7 @@ public sealed record SetClipProperties(Guid SequenceId, Guid ClipId, bool Enable
 public sealed record SetTrackEnabled(Guid SequenceId, Guid TrackId, bool Enabled) : EditCommand;
 public sealed record ReorderTrack(Guid SequenceId, Guid TrackId, int NewIndex) : EditCommand;
 public sealed record AddCaption(Guid SequenceId, Guid TrackId, Caption Caption) : EditCommand;
+public sealed record UpdateCaption(Guid SequenceId, Guid CaptionId, long StartTicks, long DurationTicks, string Text, bool Enabled) : EditCommand;
 public sealed record DeleteCaption(Guid SequenceId, Guid CaptionId) : EditCommand;
 
 public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? ExpectedRevision = null, bool DryRun = false);
@@ -56,11 +58,32 @@ internal static class CommandApplier
             };
             return project with { Assets = project.Assets.Replace(asset, replacement) };
         }
+        if (command is SetGeneratedProvenance provenance)
+        {
+            var asset = project.Assets.FirstOrDefault(a => a.Id == provenance.MediaAssetId) ?? throw Reject("MEDIA_NOT_FOUND", "Media not found.");
+            return project with { Assets = project.Assets.Replace(asset, asset with { Provenance = provenance.Provenance ?? throw Reject("INVALID_PROVENANCE", "Provenance required.") }) };
+        }
         if (command is CreateSequence sequence)
             return project with { Sequences = project.Sequences.Add(new(sequence.SequenceId, sequence.Name, sequence.Settings, sequence.DurationTicks, [])) };
 
         return command switch
         {
+            AddClapper c => ChangeSequence(project, c.SequenceId, s => s with { Clappers = s.Clappers.Add(c.Clapper) }),
+            UpdateClapper c => ChangeSequence(project, c.SequenceId, s => s with { Clappers = s.Clappers.Replace(
+                s.Clappers.FirstOrDefault(x => x.Id == (c.Clapper ?? throw Reject("INVALID_CLAPPER", "Clapper required.")).Id) ?? throw Reject("CLAPPER_NOT_FOUND", "Clapper not found."), c.Clapper) }),
+            DeleteClapper c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var clapper = s.Clappers.FirstOrDefault(x => x.Id == c.ClapperId) ?? throw Reject("CLAPPER_NOT_FOUND", "Clapper not found.");
+                return s with { Clappers = s.Clappers.Remove(clapper) };
+            }),
+            AddRecipe c => ChangeSequence(project, c.SequenceId, s => s with { Recipes = s.Recipes.Add(c.Recipe) }),
+            UpdateRecipe c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var previous = s.Recipes.FirstOrDefault(x => x.Id == (c.Recipe ?? throw Reject("INVALID_RECIPE", "Recipe required.")).Id) ?? throw Reject("RECIPE_NOT_FOUND", "Recipe not found.");
+                if (c.Recipe.Revision != previous.Revision + 1) throw Reject("RECIPE_REVISION_CONFLICT", "Recipe revision must advance once.");
+                return s with { Recipes = s.Recipes.Replace(previous, c.Recipe) };
+            }),
+            SetSequenceDuration c => ChangeSequence(project, c.SequenceId, s => s with { DurationTicks = c.DurationTicks }),
             AddTrack c => ChangeSequence(project, c.SequenceId, s => s with { Tracks = s.Tracks.Add(new(c.TrackId, c.Name, c.Kind, true, [], [])) }),
             InsertClip c => ChangeSequence(project, c.SequenceId, s => ChangeTrack(s, c.TrackId, t => t with { Clips = t.Clips.Add(c.Clip) })),
             MoveClip c => ChangeSequence(project, c.SequenceId, s =>
@@ -97,6 +120,13 @@ internal static class CommandApplier
                 return s with { Tracks = s.Tracks.Remove(track).Insert(c.NewIndex, track) };
             }),
             AddCaption c => ChangeSequence(project, c.SequenceId, s => ChangeTrack(s, c.TrackId, t => t with { Captions = t.Captions.Add(c.Caption) })),
+            UpdateCaption c => ChangeSequence(project, c.SequenceId, s =>
+            {
+                var track = s.Tracks.FirstOrDefault(t => t.Captions.Any(x => x.Id == c.CaptionId)) ?? throw Reject("CAPTION_NOT_FOUND", "Caption not found.", c.CaptionId);
+                var caption = track.Captions.First(x => x.Id == c.CaptionId);
+                return ChangeTrack(s, track.Id, t => t with { Captions = t.Captions.Replace(caption,
+                    caption with { StartTicks = c.StartTicks, DurationTicks = c.DurationTicks, Text = c.Text, Enabled = c.Enabled }) });
+            }),
             DeleteCaption c => ChangeSequence(project, c.SequenceId, s =>
             {
                 var track = s.Tracks.FirstOrDefault(t => t.Captions.Any(x => x.Id == c.CaptionId)) ?? throw Reject("CAPTION_NOT_FOUND", "Caption not found.", c.CaptionId);

@@ -9,14 +9,21 @@ public enum BlendMode { Normal, Screen }
 public sealed record Project(Guid Id, string Name, ImmutableArray<MediaAsset> Assets,
     ImmutableArray<Sequence> Sequences);
 public sealed record MediaAsset(Guid Id, string Name, string SourcePath, MediaKind Kind,
-    long DurationTicks, int? SampleRate = null, int? Channels = null);
+    long DurationTicks, int? SampleRate = null, int? Channels = null)
+{
+    public GeneratedProvenance? Provenance { get; init; }
+}
 public sealed record SequenceSettings(int Width, int Height, FrameRate FrameRate)
 {
     public static SequenceSettings Landscape => new(1920, 1080, new(30, 1));
     public static SequenceSettings Portrait => new(1080, 1920, new(30, 1));
 }
 public sealed record Sequence(Guid Id, string Name, SequenceSettings Settings,
-    long DurationTicks, ImmutableArray<Track> Tracks);
+    long DurationTicks, ImmutableArray<Track> Tracks)
+{
+    public ImmutableArray<Clapper> Clappers { get; init; } = [];
+    public ImmutableArray<Recipe> Recipes { get; init; } = [];
+}
 // Array order is bottom-to-top. Items are queried/evaluated by start then UUID.
 public sealed record Track(Guid Id, string Name, TrackKind Kind, bool Enabled,
     ImmutableArray<Clip> Clips, ImmutableArray<Caption> Captions);

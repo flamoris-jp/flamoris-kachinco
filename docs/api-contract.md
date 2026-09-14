@@ -1,8 +1,8 @@
-# Shared editing API and future MCP adapter
+# Shared editing API and live MCP adapter
 
-This milestone exposes a callable C# API, **not a network MCP server or JSON-RPC
-dispatcher**. Future transport schemas must map these commands instead of
-implementing a second editor. Persistent file JSON is a different versioned boundary.
+The C# API remains the sole persistent editing authority. The live named-pipe MCP
+adapter and stdio bridge are described in [ADR 0003](decisions/0003-live-mcp.md).
+Persistent file JSON remains a separate versioned boundary.
 
 ## Lifecycle, queries and mutations
 
@@ -80,13 +80,13 @@ var result = session.Execute(new EditBatch([
 // session.Undo() undoes this entire insertion, including project creation.
 ```
 
-## Future wire adapter requirements
+## Wire adapter requirements
 
 Use nonempty UUID strings for IDs and decimal Int64 strings for ticks/revisions,
 plus explicit rational FPS integers. Reject unknown operations/fields and preserve
 diagnostic code, severity, entityId and path. Do not serialize the abstract command
-hierarchy with unsafe CLR type metadata. Define an explicit versioned operation
-discriminator and schema when adding transport. Reuse Core validation afterwards.
+hierarchy with unsafe CLR type metadata. The live adapter uses an explicit `type` discriminator and a closed C# command
+allowlist with strict constructor-field decoding. Reuse Core validation afterwards.
 
 An expectedRevision mismatch returns REVISION_CONFLICT; re-query and re-plan.
 Dry-run runs the same validators and returns diagnostics without committing or
@@ -97,3 +97,31 @@ the explicit IDs/revision before retrying.
 MCP export operations will use `IExportService` and transient job IDs/status. The
 FFmpeg encoding boundary receives already rendered/mixed media; no effect, clip,
 caption or time semantics may be recreated in an MCP tool or FFmpeg command string.
+
+## Production commands and tools
+
+- `SetSequenceDuration(sequenceId, durationTicks)` rejects shrinking through existing items.
+- `TimelineEditPlanner.Place` produces full-duration insertion plus any necessary
+  explicit duration extension as one revision-checked batch.
+- `UpdateCaption(sequenceId, captionId, startTicks, durationTicks, text, enabled)`.
+- `AddClapper/UpdateClapper(sequenceId, clapper)`; `DeleteClapper(sequenceId, clapperId)`.
+- `AddRecipe/UpdateRecipe(sequenceId, recipe)`; updates advance revision by one.
+- `SetGeneratedProvenance(mediaAssetId, provenance)` is used with generated-media replacement.
+- `ClapperQueries.Resolve(project, sequenceId, name)` uses sequence-local unique ordinal names.
+
+MCP tools: `get_project`, `edit_batch`, `undo`, `redo`, `clapper_resolve`,
+`recipe_validate`, `recipe_generate`, `export_start`, `job_status`, `job_cancel`.
+Tool schemas describe arguments; batch command fields match camelCase C# constructor
+names. Int64 values are decimal strings, IDs are UUIDs, enums are exact names.
+`get_project` includes the v2 envelope and transient visible sequence/clip/playhead.
+
+Example command within `edit_batch.commands`:
+
+```json
+{"type":"SetSequenceDuration","sequenceId":"00000000-0000-0000-0000-000000000002","durationTicks":"352800000"}
+```
+
+A Recipe job first compiles/renders outside the session and commits only if the
+captured revision is still current. `replaceMediaId` explicitly preserves existing
+clip placement; incompatible source ranges fail. Old MOV generations remain on disk
+for Undo. Paths refer to the machine running Kachinco, not the MCP client's host.

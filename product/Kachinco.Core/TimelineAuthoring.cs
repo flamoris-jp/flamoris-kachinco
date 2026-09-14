@@ -5,10 +5,29 @@ namespace Kachinco.Core;
 
 public readonly record struct TimelineViewport(decimal PixelsPerSecond)
 {
-    public const decimal MinimumPixelsPerSecond = 4m;
+    public const decimal MinimumPixelsPerSecond = 0.000000000001m;
+    public const decimal MinimumInteractivePixelsPerSecond = 4m;
     public const decimal MaximumPixelsPerSecond = 1600m;
 
     public bool IsValid => PixelsPerSecond is >= MinimumPixelsPerSecond and <= MaximumPixelsPerSecond;
+
+    public static TimelineViewport Fit(long durationTicks, decimal availablePixels)
+    {
+        if (durationTicks <= 0) throw new ArgumentOutOfRangeException(nameof(durationTicks));
+        if (availablePixels <= 0) throw new ArgumentOutOfRangeException(nameof(availablePixels));
+        decimal value = checked(availablePixels * TimelineTime.TicksPerSecond / durationTicks);
+        return new(Math.Clamp(value, MinimumPixelsPerSecond, MaximumPixelsPerSecond));
+    }
+
+    public TimelineViewport ZoomBy(decimal factor)
+    {
+        if (!IsValid) throw new InvalidOperationException("Timeline viewport is invalid.");
+        if (factor <= 0) throw new ArgumentOutOfRangeException(nameof(factor));
+        decimal lowerBound = PixelsPerSecond < MinimumInteractivePixelsPerSecond
+            ? MinimumPixelsPerSecond
+            : MinimumInteractivePixelsPerSecond;
+        return new(Math.Clamp(checked(PixelsPerSecond * factor), lowerBound, MaximumPixelsPerSecond));
+    }
 
     public decimal TicksToPixels(long ticks)
     {
@@ -71,6 +90,34 @@ public enum TrimEdge { Start, End }
 
 public static class TimelineEditPlanner
 {
+    // Placement extends the sequence before insertion in one undoable transaction.
+    public static Result<EditBatch> Place(Project project, Guid sequenceId, Guid mediaId,
+        Guid trackId, Guid clipId, long startTicks, long? revision = null)
+    {
+        var sequence = project.Sequences.FirstOrDefault(x => x.Id == sequenceId);
+        var asset = project.Assets.FirstOrDefault(x => x.Id == mediaId);
+        var track = sequence?.Tracks.FirstOrDefault(x => x.Id == trackId);
+        if (sequence is null || asset is null || track is null)
+            return Result<EditBatch>.Fail(Diagnostic.Error("PLACEMENT_TARGET_NOT_FOUND", "Choose an existing asset, sequence and track."));
+        if (!Compatible(track.Kind, asset.Kind))
+            return Result<EditBatch>.Fail(Diagnostic.Error("TRACK_MEDIA_MISMATCH", "Choose a compatible video or audio track.", trackId));
+        if (startTicks < 0 || clipId == Guid.Empty || ProjectValidator.ContainsId(project, clipId))
+            return Result<EditBatch>.Fail(Diagnostic.Error("INVALID_PLACEMENT", "Invalid clip identity or start time.", clipId));
+        try
+        {
+            long end = checked(startTicks + asset.DurationTicks);
+            var commands = ImmutableArray.CreateBuilder<EditCommand>();
+            if (end > sequence.DurationTicks) commands.Add(new SetSequenceDuration(sequenceId, end));
+            commands.Add(new InsertClip(sequenceId, trackId,
+                new(clipId, mediaId, startTicks, 0, asset.DurationTicks, true, ClipAppearance.Default, AudioProperties.Default)));
+            return Result<EditBatch>.Ok(new(commands.ToImmutable(), revision));
+        }
+        catch (OverflowException)
+        {
+            return Result<EditBatch>.Fail(Diagnostic.Error("TIME_OVERFLOW", "Placement exceeds supported time."));
+        }
+    }
+
     public static Result<MoveClip> Move(Project project, Guid sequenceId, Guid clipId,
         Guid targetTrackId, long startTicks)
     {

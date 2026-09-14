@@ -37,16 +37,3 @@ public interface IVideoEncodingBackend
     Task<ExportResult> EncodeAsync(EncodingRequest request, IRenderedMediaSource media,
         FfmpegSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancellationToken);
 }
-
-// Honest foundation placeholder. No file/process side effects; do not report encoded output.
-public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
-{
-    public Task<ExportResult> EncodeAsync(EncodingRequest request, IRenderedMediaSource media,
-        FfmpegSettings settings, IProgress<ExportProgress>? progress, CancellationToken cancellationToken)
-    {
-        bool cancelled = cancellationToken.IsCancellationRequested;
-        return Task.FromResult(new ExportResult(request.JobId, cancelled ? ExportStage.Cancelled : ExportStage.Failed, null,
-            [Diagnostic.Error(cancelled ? "CANCELLED" : "EXPORT_NOT_IMPLEMENTED",
-                cancelled ? "Export cancelled." : "FFmpeg production encoding is a later milestone; no output was written.")]));
-    }
-}

@@ -249,8 +249,8 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Canonical time is 35,280,000 ticks/second. Use `TimelineTime` for all conversions, reduced rational FPS, and half-open ranges. Never copy 2D's timebase into this product.
 - All editing goes through `EditorSession.Execute(EditBatch)`; `ReplaceProject` is explicit Open/New lifecycle, not an editing shortcut. Use immutable snapshots and explicit expected revisions for concurrent clients.
 - Keep `ProjectFormatV1` DTOs separate from Core records. Required fields, decimal-string ticks, version dispatch and unknown-field rejection are compatibility contracts. Changes require a schema decision and regression tests.
-- Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` is deliberately not implemented and must not claim successful output.
-- Current scope does not implement Clappers/Recipes/Python, decoding/playback, production image rendering or live MCP. Do not infer those capabilities from the product vision.
+- Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` now encodes rendered RGBA/PCM; it must never evaluate clip placement itself.
+- Issue #5 adds the bounded production slice documented in ADRs 0002–0004 and `staging/windows-production.md`; do not infer unrestricted Python, real-time preview or external integrations.
 - Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
 - Use `staging/windows-foundation.md` for human interaction/layout acceptance; an automated startup smoke is not visual QA.
 
@@ -262,5 +262,21 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Pointer gestures may preview in pixels, but commit exactly one typed move/trim/split command from the original committed range. Never accumulate per-event pixel deltas into Project state.
 - Track labels V1/A1/S1 are presentation only. Address tracks and clips by stable ID.
 - Selection, playhead/edit cursor, scroll, zoom, snap toggle, hover and drag state remain non-persistent.
-- Playback-looking toolbar buttons stay disabled until Phase 2's shared decoder/clock/evaluator architecture exists. Do not add a WPF timer or fake play state.
+- Playback uses a rendered snapshot and the real Windows media position. UI redraw notifications must never advance an independent clock. Editing invalidates prepared preview.
 - Run the Phase 1 headless media/relink/authoring tests, Windows build and startup smoke. Record physical Windows visual acceptance separately in `staging/windows-phase1.md`.
+
+## 17. Production slice authority (Issue #5)
+
+- Follow ADRs 0002–0004. Frozen `ProjectFormatV1` remains the input migration contract;
+  `ProjectFormatV2` is current output. Required authoring/provenance fields must not be dropped.
+- Recipe source is parsed in the bounded worker and never executed with eval/exec.
+  Preserve Windows job limits, POSIX limits, wall timeout and host IR revalidation.
+- Recipe generation prepares ordinary commands against one expected revision.
+  Regeneration preserves asset/clip identities and never silently destroys manual timing.
+- The MCP bridge has no project/session of its own. The same-user named pipe dispatches
+  to the UI's session; mutation tools require expectedRevision and share history.
+- Run headless contracts including generated MOV/MP4 fixtures. Windows CI builds the
+  solution, checks worker enforcement and repeatable raster pixels, and publishes the
+  portable bundle. Physical Windows interaction remains `staging/windows-production.md`.
+- Phase 9 external integrations and performance work remain needs-driven; do not mark
+  them delivered merely because portable packaging exists.

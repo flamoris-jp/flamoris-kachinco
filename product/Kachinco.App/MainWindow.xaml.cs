@@ -25,11 +25,15 @@ public partial class MainWindow : Window
     private Guid? selectedClipId;
     private bool refreshing;
     private bool busy;
+    private Point mediaDragStart;
+    private Guid? draggedMediaId;
 
     public MainWindow()
     {
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeProduction();
+        BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
         Refresh("新規プロジェクトを作成するか、保存済みのプロジェクトを開いてください。");
     }
 
@@ -116,21 +120,51 @@ public partial class MainWindow : Window
         var sequence = project.Sequences.First(s => s.Id == sequenceId);
         var kind = row.Asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
         var track = sequence.Tracks.FirstOrDefault(x => x.Kind == kind);
-        var start = Math.Clamp(Timeline.PlayheadTicks, 0, sequence.DurationTicks);
-        long remaining = sequence.DurationTicks - start;
-        long duration = Math.Min(row.Asset.DurationTicks, remaining);
-        if (duration <= 0) { Refresh("再生ヘッドがシーケンス終端にあります。"); return; }
-        var clip = new Clip(Guid.NewGuid(), row.Asset.Id, start, 0, duration, true,
-            ClipAppearance.Default, AudioProperties.Default);
-        selectedClipId = clip.Id;
-        if (track is null)
-        {
-            var trackId = Guid.NewGuid();
-            Apply("素材をタイムラインへ配置しました。",
-                new AddTrack(sequenceId, trackId, kind == TrackKind.Video ? "映像" : "音声", kind),
-                new InsertClip(sequenceId, trackId, clip));
-        }
-        else Apply("素材をタイムラインへ配置しました。", new InsertClip(sequenceId, track.Id, clip));
+        if (track is null) { Refresh("互換トラックがありません。"); return; }
+        PlaceMedia(row.Asset.Id, track.Id, Timeline.PlayheadTicks);
+    }
+
+    private void PlaceMedia(Guid mediaId, Guid trackId, long startTicks)
+    {
+        var snapshot = session.GetProject();
+        if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return;
+        var clipId = Guid.NewGuid();
+        var planned = TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
+        if (!planned.Success) { ShowErrors(planned.Diagnostics); return; }
+        var result = session.Execute(planned.Value!);
+        if (result.Success) selectedClipId = clipId;
+        Show(result, "素材をタイムラインへ配置しました。");
+    }
+
+    private void Media_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        mediaDragStart = e.GetPosition(MediaList);
+        draggedMediaId = (ItemsControl.ContainerFromElement(MediaList, e.OriginalSource as DependencyObject) as ListBoxItem)?.DataContext is MediaAssetRow row ? row.Asset.Id : null;
+    }
+    private void Media_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || draggedMediaId is not { } id) return;
+        var point = e.GetPosition(MediaList);
+        if (Math.Abs(point.X - mediaDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(point.Y - mediaDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        draggedMediaId = null;
+        DragDrop.DoDragDrop(MediaList, new DataObject(TimelineSurface.MediaDragFormat, id), DragDropEffects.Copy);
+    }
+    private void Timeline_MediaPlacementRequested(object sender, MediaPlacementEventArgs e) => PlaceMedia(e.MediaId, e.TrackId, e.StartTicks);
+    private void Timeline_PlayheadChanged(object? sender, EventArgs e) { RefreshTimelineStatus(); SeekPreview(); }
+    private void FitTimeline_Click(object sender, RoutedEventArgs e) { Timeline.FitSequence(); RefreshTimelineStatus(); }
+    private void SequenceDuration_Click(object sender, RoutedEventArgs e)
+    {
+        var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
+        if (sequence is null) return;
+        var input = new TextBox { Text = Seconds(sequence.DurationTicks), Margin = new Thickness(12) };
+        var ok = new Button { Content = "適用", IsDefault = true, Margin = new Thickness(12) };
+        var panel = new StackPanel(); panel.Children.Add(input); panel.Children.Add(ok);
+        var dialog = new Window { Owner = this, Title = "シーケンスの長さ（秒）", Width = 320, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
+        ok.Click += (_, _) => { if (TrySeconds(input.Text, out var ticks) && ticks > 0) dialog.DialogResult = true; };
+        if (dialog.ShowDialog() == true && TrySeconds(input.Text, out var duration))
+            Apply("シーケンスの長さを変更しました。", new SetSequenceDuration(sequence.Id, duration));
     }
 
     private async void Relink_Click(object sender, RoutedEventArgs e)
@@ -149,6 +183,25 @@ public partial class MainWindow : Window
             Apply("素材を再リンクしました。", prepared.Value!);
         }
         finally { SetBusy(false); }
+    }
+
+    private void AddTrack_Click(object sender,RoutedEventArgs e)
+    {
+        if(selectedSequenceId is not { } id || sender is not MenuItem menu || !Enum.TryParse<TrackKind>(menu.Tag?.ToString(),out var kind)) return;
+        Apply("トラックを追加しました。",new AddTrack(id,Guid.NewGuid(),kind == TrackKind.Video ? "映像" : "音声",kind));
+    }
+    private void Duplicate_Click(object sender,RoutedEventArgs e)
+    {
+        var found=FindSelectedClip(session.GetProject().Project); if(found is null || selectedSequenceId is not { } id) return;
+        try
+        {
+            var clip=found.Value.Clip with { Id=Guid.NewGuid(), StartTicks=found.Value.Clip.EndTicks };
+            var sequence=session.GetProject().Project!.Sequences.First(s=>s.Id==id);
+            var commands=new List<EditCommand>(); if(clip.EndTicks>sequence.DurationTicks) commands.Add(new SetSequenceDuration(id,clip.EndTicks));
+            commands.Add(new InsertClip(id,found.Value.Track.Id,clip));
+            if(Apply("クリップを複製しました。",commands.ToArray())) { selectedClipId=clip.Id; Refresh(); }
+        }
+        catch(OverflowException) { Status.Text="時間が大きすぎます。"; }
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e) => Timeline.DeleteSelected();
@@ -214,9 +267,12 @@ public partial class MainWindow : Window
             !TrySeconds(ClipDurationBox.Text, out var duration) || duration <= 0)
         { Refresh("秒数を0以上の数値で入力してください。"); return; }
         var clip = found.Value.Clip;
+        if (!double.TryParse(OpacityBox.Text, out var opacity) || !double.TryParse(TransformXBox.Text,out var x) || !double.TryParse(TransformYBox.Text,out var y) ||
+            !double.TryParse(ScaleXBox.Text,out var sx) || !double.TryParse(ScaleYBox.Text,out var sy) || !double.TryParse(RotationBox.Text,out var rotation) || !double.TryParse(GainBox.Text,out var gain) || BlendBox.SelectedItem is not BlendMode blend)
+        { Status.Text = "合成・変形・音量の数値を確認してください。"; return; }
         Apply("クリップの設定を変更しました。",
             new TrimClip(sequenceId, clip.Id, start, sourceIn, duration),
-            new SetClipProperties(sequenceId, clip.Id, ClipEnabledBox.IsChecked == true, clip.Appearance, clip.Audio));
+            new SetClipProperties(sequenceId, clip.Id, ClipEnabledBox.IsChecked == true, new(new(x,y,sx,sy,rotation),opacity,blend),new(gain,MutedBox.IsChecked == true)));
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -248,6 +304,7 @@ public partial class MainWindow : Window
     {
         refreshing = true;
         var snapshot = session.GetProject();
+        InvalidateChangedPreview();
         var project = snapshot.Project;
         var availability = project is null ? new Dictionary<Guid, MediaAvailability>() :
             MediaReferenceResolver.Inspect(project, filename).ToDictionary(x => x.MediaAssetId);
@@ -276,6 +333,7 @@ public partial class MainWindow : Window
 
     private void RefreshTimelineStatus()
     {
+        RefreshClapperOverlay();
         PlayheadText.Text = $"再生ヘッド {Seconds(Timeline.PlayheadTicks)} 秒";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         SplitButton.IsEnabled = selectedClipId is not null;
@@ -296,6 +354,11 @@ public partial class MainWindow : Window
             ClipSourceInBox.Text = Seconds(value.Clip.SourceInTicks);
             ClipDurationBox.Text = Seconds(value.Clip.DurationTicks);
             ClipEnabledBox.IsChecked = value.Clip.Enabled;
+            BlendBox.SelectedItem = value.Clip.Appearance.Blend; OpacityBox.Text = value.Clip.Appearance.Opacity.ToString();
+            var transform = value.Clip.Appearance.Transform;
+            TransformXBox.Text = transform.X.ToString(); TransformYBox.Text = transform.Y.ToString();
+            ScaleXBox.Text = transform.ScaleX.ToString(); ScaleYBox.Text = transform.ScaleY.ToString(); RotationBox.Text = transform.RotationDegrees.ToString();
+            GainBox.Text = value.Clip.Audio.Gain.ToString(); MutedBox.IsChecked = value.Clip.Audio.Muted;
         }
         else if (SelectedAsset(project) is { } asset)
         {

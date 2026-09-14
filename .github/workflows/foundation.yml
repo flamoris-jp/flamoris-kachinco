@@ -34,7 +34,19 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet build product/Kachinco.App/Kachinco.App.csproj -c Release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet build Kachinco.slnx -c Release
+      - name: Windows worker and raster acceptance
+        run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
+      - name: Portable publish smoke
+        shell: pwsh
+        run: ./product/packaging/publish-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kachinco-win-x64
+          path: artifacts/windows/Kachinco-win-x64.zip
       - name: Launch shell smoke
         shell: pwsh
         run: |
