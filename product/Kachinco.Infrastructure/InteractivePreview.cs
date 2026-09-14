@@ -204,7 +204,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                     { device.Play(); SetState(InteractivePreviewState.Playing); }
                 }
             }
-            catch (Exception e) { audioReady.TrySetException(e); sessionCancellation.Cancel(); throw; }
+            catch (Exception) { audioReady.TrySetCanceled(); sessionCancellation.Cancel(); throw; }
         }
     }
     public static long FirstSample(long tick) => checked((long)(((System.Numerics.BigInteger)tick * 48000 + TimelineTime.TicksPerSecond - 1) / TimelineTime.TicksPerSecond));

@@ -31,7 +31,7 @@ public sealed class PreviewCache<T>(long byteLimit, int entryLimit = 256)
         {
             if (entries.Remove(key, out var old)) { bytes -= old.Value.Size; lru.Remove(old); }
             if (size > byteLimit || entryLimit <= 0) return;
-            while (entries.Count >= entryLimit || bytes + size > byteLimit)
+            while (entries.Count >= entryLimit || bytes > byteLimit - size)
             {
                 var last = lru.Last!; bytes -= last.Value.Size; entries.Remove(last.Value.Key); lru.RemoveLast(); evictions++;
             }
