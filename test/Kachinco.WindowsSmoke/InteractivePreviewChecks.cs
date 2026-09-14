@@ -54,6 +54,26 @@ internal static class InteractivePreviewChecks
                 {
                     var playbackFixture = Create(mov, wav, duration, 4 * T);
                     var playContext = PreviewContext.Create(playbackFixture.Session.GetProject(), playbackFixture.Sequence).Value!;
+                    source.Frames.Clear(); source.Audio.Clear(); watch.Restart();
+                    // Real codec work can be measured even when this runner has no output device.
+                    // This is preparation latency, explicitly not audible/visible Play acceptance.
+                    var firstDecode = source.FrameAsync(playContext, 4 * T, quality, true, default).AsTask();
+                    var audioPrime = PrimeAudio();
+                    var decoded = await firstDecode; Require(decoded.Success, "Startup evaluated frame.");
+                    double frameReady = watch.Elapsed.TotalMilliseconds; double pcmReady = await audioPrime;
+                    evidence.Add(new { kind = "forward_startup_decode_only", quality = quality.ToString(), duration,
+                        timelineStartSeconds = 4, frameReadyMs = frameReady, pcmReadyMs = pcmReady,
+                        frameEntries = source.Frames.Statistics.Entries, audioEntries = source.Audio.Statistics.Entries });
+                    Require(source.Frames.Statistics.Entries == 1 && source.Audio.Statistics.Entries == 2, "Startup work must be independent of sequence duration.");
+                    async Task<double> PrimeAudio()
+                    {
+                        for (int block = 0; block < 2; block++)
+                        {
+                            var pcm = await source.AudioAsync(playContext, 4 * 48000 + block * 4800, 4800, default);
+                            Require(pcm.Success, "Startup PCM.");
+                        }
+                        return watch.Elapsed.TotalMilliseconds;
+                    }
                     using var controller = new InteractivePreview(source, () => new WindowsPreviewAudioOutput());
                     controller.SetQuality(quality); controller.SetContext(playContext); await controller.Completion;
                     controller.Scrub(4 * T); await controller.Completion; source.Frames.Clear(); source.Audio.Clear();
