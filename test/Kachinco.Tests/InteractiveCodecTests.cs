@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Immutable;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -66,6 +67,51 @@ public sealed class InteractiveCodecTests
             var result = await renderer.RenderPreviewAsync(f.Project, frame, quality, default);
             Assert.AreEqual(frame.Tick, result.Value!.Tick); Assert.AreEqual(1920 / (int)quality, result.Value.Width); Assert.AreEqual(1080 / (int)quality, result.Value.Height);
         }
+    }
+    [TestMethod]
+    public async Task ScaledPreviewPreservesTransformsBlendOpacitySourceTimeAndCaptionInputs()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mov"); File.WriteAllText(path, "decoder fixture");
+        try
+        {
+            var f = new Fixture();
+            Assert.IsTrue(f.Edit(new RelinkMedia(f.MovId, path, 10 * Fixture.T),
+                new SetClipProperties(f.SequenceId, f.ClipId, true, new(new(64, 32, .5, .5, 0), .75, BlendMode.Screen), AudioProperties.Default)).Success);
+            var decoder = new SolidDecoder(); var captions = new CaptionInputs(); var renderer = new SharedFrameRenderer(decoder, captions: captions);
+            var frame = TimelineEvaluator.Create(f.Project, f.SequenceId).Value!.Evaluate(2 * Fixture.T).Value!;
+            var full = await renderer.RenderPreviewAsync(f.Project, frame, PreviewQuality.Full, default);
+            var export = await renderer.RenderAsync(f.Project, frame, 60, default);
+            CollectionAssert.AreEqual(full.Value!.Rgba8.ToArray(), export.Value!.Rgba8.ToArray());
+            foreach (var quality in new[] { PreviewQuality.Full, PreviewQuality.Half, PreviewQuality.Quarter })
+            {
+                var result = await renderer.RenderPreviewAsync(f.Project, frame, quality, default); Assert.IsTrue(result.Success);
+                var actual = result.Value!; int divisor = (int)quality;
+                Assert.AreEqual(3 * Fixture.T, decoder.SourceTick); Assert.AreEqual(frame.Captions, captions.Input);
+                Assert.AreEqual((actual.Width, actual.Height), captions.Size);
+                int inside = ((200 / divisor) * actual.Width + 200 / divisor) * 4;
+                Assert.AreEqual(full.Value.Rgba8[(200 * 1920 + 200) * 4], actual.Rgba8[inside]);
+                Assert.IsTrue(actual.Rgba8[inside] > 0); Assert.AreEqual((byte)0, actual.Rgba8[0], "Translated source leaves the origin black.");
+                Assert.AreEqual(frame.Tick, actual.Tick);
+            }
+        }
+        finally { File.Delete(path); }
+    }
+    private sealed class SolidDecoder : IMediaDecoder
+    {
+        public long SourceTick;
+        public Task<ImmutableArray<byte>> VideoAsync(string path, long tick, int w, int h, CancellationToken ct)
+        {
+            SourceTick = tick; byte[] pixels = new byte[w * h * 4];
+            for (int i = 0; i < pixels.Length; i += 4) { pixels[i] = 200; pixels[i + 1] = 50; pixels[i + 3] = 128; }
+            return Task.FromResult(pixels.ToImmutableArray());
+        }
+        public Task<ImmutableArray<float>> AudioAsync(string p, long t, int c, int r, int ch, CancellationToken ct) => throw new AssertFailedException("Unexpected audio decode.");
+    }
+    private sealed class CaptionInputs : ICaptionRasterizer
+    {
+        public ImmutableArray<EvaluatedCaption> Input; public (int, int) Size;
+        public ValueTask<ImmutableArray<byte>> RasterizeAsync(ImmutableArray<EvaluatedCaption> input, int w, int h, CancellationToken ct)
+        { Input = input; Size = (w, h); return ValueTask.FromResult(new byte[w * h * 4].ToImmutableArray()); }
     }
     private static async Task Run(string[] args)
     {

@@ -55,6 +55,13 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
         var t = appearance.Transform;
         if (t == Transform2D.Identity && appearance.Opacity == 1 && appearance.Blend == BlendMode.Normal)
         {
+            bool opaque = true;
+            for (int i = 3; i < source.Length; i += 4)
+            {
+                if ((i & 65535) == 3) token.ThrowIfCancellationRequested();
+                if (source[i] != 255) { opaque = false; break; }
+            }
+            if (opaque) { source.AsSpan().CopyTo(output); return; }
             for (int i = 0; i < source.Length; i += 4)
             {
                 if (i % (width * 4) == 0) token.ThrowIfCancellationRequested();
