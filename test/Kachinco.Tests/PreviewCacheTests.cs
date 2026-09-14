@@ -31,6 +31,20 @@ public sealed class PreviewCacheTests
         Assert.AreEqual(a.VideoKey(0, PreviewQuality.Half), InteractivePreviewTests.Context(f).VideoKey(0, PreviewQuality.Half));
     }
     [TestMethod]
+    public void RegenerationProvenanceInvalidatesVideoWithoutDiscardingAudio()
+    {
+        var f = new Fixture(); var clapper = new Clapper(Fixture.Id(20), "A-1", 0, Fixture.T, null, f.VideoTrackId, null, "");
+        var recipe = new Recipe(Fixture.Id(21), clapper.Id, "text(text='test')", 1, 42, "1", "1");
+        Assert.IsTrue(f.Edit(new AddClapper(f.SequenceId, clapper), new AddRecipe(f.SequenceId, recipe),
+            new SetGeneratedProvenance(f.MovId, new(recipe.Id, 1, new string('a', 64), new string('b', 64)))).Success);
+        var a = InteractivePreviewTests.Context(f);
+        Assert.IsTrue(f.Edit(new UpdateRecipe(f.SequenceId, recipe with { Revision = 2 }),
+            new SetGeneratedProvenance(f.MovId, new(recipe.Id, 2, new string('c', 64), new string('d', 64)))).Success);
+        var b = InteractivePreviewTests.Context(f);
+        Assert.AreNotEqual(a.VideoKey(0, PreviewQuality.Half), b.VideoKey(0, PreviewQuality.Half));
+        Assert.AreEqual(a.AudioKey(48000, 4800), b.AudioKey(48000, 4800));
+    }
+    [TestMethod]
     public void LocalVideoEditRelinkAndSourceReplacementInvalidateDependencies()
     {
         var f = new Fixture(); var a = InteractivePreviewTests.Context(f);

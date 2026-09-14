@@ -73,6 +73,21 @@ public sealed class InteractivePreviewTests
         Assert.AreEqual(InteractivePreviewState.Failed, a.State); Assert.IsNull(a.Frame); Assert.IsTrue(device.Disposed); StringAssert.Contains(a.Error!, "PCM failed");
     }
     [TestMethod]
+    public void UnderrunFreezesSampleClockAndRefillsWithoutUnboundedVideoWork()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source(); var device = new Device();
+        using var p = new InteractivePreview(source, () => device); p.SetContext(Context(f)); p.Play();
+        pump.Until(() => p.State == InteractivePreviewState.Playing); source.AudioHold = true;
+        device.Advance(24000); pump.Until(() => source.PendingAudio is not null);
+        Assert.AreEqual(InteractivePreviewState.Buffering, p.State); Assert.IsFalse(device.Running);
+        long tick = p.ReadPositionTicks(); device.Advance(48000); Assert.AreEqual(tick, p.ReadPositionTicks());
+        Assert.AreEqual(1L, p.Underruns);
+        source.AudioHold = false; source.PendingAudio!.SetResult(source.HeldAudio!);
+        pump.Until(() => p.State == InteractivePreviewState.Playing);
+        Assert.IsTrue(device.QueuedFrames <= 24000); Assert.IsTrue(p.DroppedVideoFrames > 0);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+    [TestMethod]
     public void SampleMappingRoundsForwardWithoutInventingASecondTimebase()
     {
         foreach (long tick in new[] { 0L, 1L, Fixture.T, Fixture.T + 1, 219 * Fixture.T })
@@ -86,7 +101,8 @@ public sealed class InteractivePreviewTests
     private sealed class Source : IInteractivePreviewSource
     {
         public readonly List<long> Video = [], Audio = [];
-        public bool Hold, Fail, AudioFail; public CancellationToken Token; public TaskCompletionSource<Result<RenderedVideoFrame>>? Pending;
+        public bool Hold, Fail, AudioFail, AudioHold;
+        public TaskCompletionSource<Result<RenderedAudioBlock>>? PendingAudio; public Result<RenderedAudioBlock>? HeldAudio; public CancellationToken Token; public TaskCompletionSource<Result<RenderedVideoFrame>>? Pending;
         public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext c, long tick, PreviewQuality q, bool forward, CancellationToken token)
         {
             Video.Add(tick); Token = token;
@@ -96,6 +112,7 @@ public sealed class InteractivePreviewTests
         public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext c, long first, int count, CancellationToken token)
         {
             Audio.Add(first);
+            if (AudioHold) { PendingAudio = new(); HeldAudio = Result<RenderedAudioBlock>.Ok(new(first, 48000, 2, new float[count * 2].ToImmutableArray())); return new(PendingAudio.Task); }
             return ValueTask.FromResult(AudioFail ? Result<RenderedAudioBlock>.Fail(Diagnostic.Error("AUDIO", "PCM failed")) :
                 Result<RenderedAudioBlock>.Ok(new(first, 48000, 2, new float[count * 2].ToImmutableArray())));
         }
