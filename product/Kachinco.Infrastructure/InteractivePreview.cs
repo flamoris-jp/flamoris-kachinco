@@ -70,7 +70,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             catch (Exception e) { Fail(e); }
             return;
         }
-        RequestFrame(PositionTicks >= context.Sequence.DurationTicks ? 0 : PositionTicks, true, InteractivePreviewState.Playing);
+        RequestFrame(FirstSample(PositionTicks) >= TimelineTime.SampleCount(context.Sequence.DurationTicks, 48000) ? 0 : PositionTicks, true, InteractivePreviewState.Playing);
     }
     public void Pause()
     {
@@ -90,7 +90,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     {
         try
         {
-            if (output is not null && context is not null)
+            if (playSession && output is not null && context is not null)
                 PositionTicks = Math.Min(context.Sequence.DurationTicks, TimelineTime.SampleToTicks(checked(startSample + output.PlayedFrames), 48000));
         }
         catch (Exception e) { Fail(e); }
@@ -180,8 +180,8 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         finally
         {
             sessionCancellation.Cancel();
-            if (audioTask is not null) try { await audioTask; } catch (OperationCanceledException) { }
-            if (ReferenceEquals(output, device)) { output = null; playSession = false; }
+            try { if (audioTask is not null) try { await audioTask; } catch (OperationCanceledException) { } }
+            finally { if (ReferenceEquals(output, device)) { output = null; playSession = false; } }
         }
 
         async Task ProduceAudio()

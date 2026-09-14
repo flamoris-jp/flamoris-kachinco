@@ -11,7 +11,7 @@ public sealed record CacheStatistics(long Bytes, int Entries, long Hits, long Mi
 // Owned immutable values only. Entry and byte bounds both apply, including zero-size values.
 public sealed class PreviewCache<T>(long byteLimit, int entryLimit = 256)
 {
-    private readonly object gate = new();
+    private readonly object gate = byteLimit >= 0 && entryLimit >= 0 ? new() : throw new ArgumentOutOfRangeException(nameof(byteLimit));
     private readonly Dictionary<string, LinkedListNode<(string Key, T Value, long Size)>> entries = [];
     private readonly LinkedList<(string Key, T Value, long Size)> lru = new();
     private long bytes, hits, misses, evictions;
@@ -50,11 +50,13 @@ public sealed class PreviewContext
     public string? ProjectPath { get; }
     private readonly Dictionary<Guid, MediaAsset> assets;
     private readonly Dictionary<Guid, string?> paths;
+    private readonly Dictionary<Guid, string> initialMediaKeys;
     private PreviewContext(ProjectSnapshot snapshot, TimelineEvaluator evaluator, string? path)
     {
         Snapshot = snapshot; Evaluator = evaluator; ProjectPath = path;
         assets = Project.Assets.ToDictionary(a => a.Id);
         paths = MediaReferenceResolver.Inspect(Project, path).ToDictionary(p => p.MediaAssetId, p => p.ResolvedPath);
+        initialMediaKeys = assets.Keys.ToDictionary(id => id, MediaKey);
     }
     public static Result<PreviewContext> Create(ProjectSnapshot snapshot, Guid sequenceId, string? projectPath = null)
     {
@@ -87,11 +89,11 @@ public sealed class PreviewContext
     // Conservative intersection signature for the device queue plus in-flight forward work.
     public string WindowKey(long start, long end)
     {
-        return Hash(new { ProjectId = Project.Id, SequenceId = Sequence.Id, Sequence.Settings,
+        return Hash(new { ProjectId = Project.Id, SequenceId = Sequence.Id, Sequence.Settings, Sequence.DurationTicks,
             Tracks = Sequence.Tracks.Where(t => t.Enabled && (t.Clips.Any(c => c.Enabled && c.StartTicks < end && c.EndTicks > start) ||
                 t.Captions.Any(c => c.Enabled && c.StartTicks < end && c.StartTicks + c.DurationTicks > start))).Select(t => new { t.Id, t.Kind,
                 Clips = t.Clips.Where(c => c.Enabled && c.StartTicks < end && c.EndTicks > start)
-                    .Select(c => new { Clip = c, Media = MediaKey(c.MediaAssetId) }).ToArray(),
+                    .Select(c => new { Clip = c, Media = initialMediaKeys[c.MediaAssetId] }).ToArray(),
                 Captions = t.Captions.Where(c => c.Enabled && c.StartTicks < end && c.StartTicks + c.DurationTicks > start).ToArray() }).ToArray() });
     }
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
