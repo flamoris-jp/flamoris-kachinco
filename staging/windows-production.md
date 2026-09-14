@@ -17,8 +17,10 @@
 - A drop places the full asset at the pointer's snapped time and extends sequence
   duration if necessary. One Undo reverses both changes. Empty-project default is
   60 seconds; Sequence > duration can change it without clipping existing items.
-- Timeline header owns zoom, fit and snapping. Drag clip bodies to move; edges trim.
-  Split uses the cursor. Escape/cancelled Thumb drags do not commit.
+- Timeline header owns zoom, fit and snapping. Fit a one-hour sequence and verify
+  both ends are visible. Drag clip bodies to move; edges trim. During each kind of
+  drag, press Escape and verify the preview returns to its original range and Undo
+  history is unchanged. Split uses the cursor.
 - Add tracks from Sequence menu; duplicate from Clip menu. Inspector exposes
   enabled, position, scale, rotation, opacity, Normal/Screen, gain and mute.
 - Subtitle menu edits captions and imports/exports SRT. Captions render bottom

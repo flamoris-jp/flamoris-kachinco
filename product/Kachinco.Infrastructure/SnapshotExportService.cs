@@ -23,7 +23,7 @@ public sealed class SnapshotExportService(IFrameRenderer video, IAudioRenderer a
                 plan.FrameCount, plan.AudioSampleRate, plan.AudioChannels, plan.AudioSampleCount), new RenderSource(plan, video, audio), settings, progress, cancellationToken);
         }
         catch (OperationCanceledException) { return new(request.JobId, ExportStage.Cancelled, null, []); }
-        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
         { return Failure(request.JobId, "EXPORT_FAILED", e.Message); }
     }
     private static ExportResult Failure(Guid id, string code, string message) => new(id, ExportStage.Failed, null, [Diagnostic.Error(code, message)]);

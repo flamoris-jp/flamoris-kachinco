@@ -99,7 +99,7 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
         }
         catch (OperationCanceledException) { return new(request.JobId, ExportStage.Cancelled, null, []); }
         catch (System.ComponentModel.Win32Exception e) { return Fail(request, "FFMPEG_NOT_FOUND", e.Message); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or OverflowException)
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or OverflowException)
         { return cancellationToken.IsCancellationRequested ? new(request.JobId, ExportStage.Cancelled, null, []) : Fail(request, "ENCODING_FAILED", e.Message); }
         finally { if (work is not null) try { Directory.Delete(work, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }

@@ -7,6 +7,28 @@ namespace Kachinco.Tests;
 public sealed class McpTests
 {
     [TestMethod]
+    public async Task FramingRejectsOversizedInvalidUtf8AndTruncatedInputWithoutThrowing()
+    {
+        var oversized = new McpBoundedLineReader(new MemoryStream("123456789\n"u8.ToArray()), maximumBytes: 8, bufferSize: 4);
+        Assert.AreEqual(McpFrameStatus.Oversized, (await oversized.ReadAsync()).Status);
+
+        var invalid = new McpBoundedLineReader(new MemoryStream([0xff, (byte)'\n']), bufferSize: 2);
+        Assert.AreEqual(McpFrameStatus.InvalidUtf8, (await invalid.ReadAsync()).Status);
+
+        var truncated = new McpBoundedLineReader(new MemoryStream("{}"u8.ToArray()), bufferSize: 2);
+        Assert.AreEqual(McpFrameStatus.Truncated, (await truncated.ReadAsync()).Status);
+    }
+
+    [TestMethod]
+    public async Task FramingBuffersReadsAndPreservesTheNextLine()
+    {
+        var reader = new McpBoundedLineReader(new MemoryStream("one\r\ntwo\n"u8.ToArray()), bufferSize: 16);
+        Assert.AreEqual("one", (await reader.ReadAsync()).Line);
+        Assert.AreEqual("two", (await reader.ReadAsync()).Line);
+        Assert.AreEqual(McpFrameStatus.EndOfStream, (await reader.ReadAsync()).Status);
+    }
+
+    [TestMethod]
     public async Task McpEditsTheSameSessionAndRejectsStaleCommands()
     {
         var f = new Fixture(); int changes = 0;

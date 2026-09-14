@@ -68,6 +68,22 @@ public sealed class RealExportTests
         }
         finally { Directory.Delete(folder,true); }
     }
+    [TestMethod]
+    public async Task InvalidRenderedSequenceBecomesEncodingFailureAndCleansTemporaryMedia()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "kachinco-invalid-encode-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var request = new EncodingRequest(Guid.NewGuid(), Path.Combine(folder, "output.mp4"), ExportPreset.YoutubeH264AacMp4,
+                SequenceSettings.Landscape, 1, 48000, 2, 1600);
+            var result = await new FfmpegEncodingBackend().EncodeAsync(request, new InvalidFrameSource(), new(null), null, default);
+            Assert.AreEqual(ExportStage.Failed, result.Stage);
+            Assert.AreEqual("ENCODING_FAILED", result.Diagnostics[0].Code);
+            Assert.AreEqual(0, Directory.GetFileSystemEntries(folder).Length);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
     private sealed class CancelOnFrame(CancellationTokenSource token) : IProgress<ExportProgress>
     { public void Report(ExportProgress value) { if(value.FramesCompleted>0) token.Cancel(); } }
     private sealed class OneFrameSource : IRenderedMediaSource
@@ -79,6 +95,16 @@ public sealed class RealExportTests
             await Task.Yield();cancellationToken.ThrowIfCancellationRequested();
         }
         public IAsyncEnumerable<RenderedAudioBlock> ReadAudioAsync(CancellationToken cancellationToken) => throw new AssertFailedException("Cancelled export must not read audio.");
+    }
+    private sealed class InvalidFrameSource : IRenderedMediaSource
+    {
+        public async IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            yield return new(0, 0, 1920, 1080, System.Collections.Immutable.ImmutableArray.Create<byte>(0));
+            await Task.Yield();
+        }
+        public IAsyncEnumerable<RenderedAudioBlock> ReadAudioAsync(CancellationToken cancellationToken) =>
+            throw new AssertFailedException("Invalid video must stop before audio rendering.");
     }
 
     private static async Task<string> Run(string executable, string[] args)

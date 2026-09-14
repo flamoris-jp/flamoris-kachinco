@@ -35,7 +35,7 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
             return Result<RenderedVideoFrame>.Ok(new(frameIndex, frame.Tick, width, height, ImmutableArray.CreateRange(output)));
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
         { return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("FRAME_RENDER_FAILED", e.Message)); }
     }
 
@@ -98,7 +98,7 @@ public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPa
                 ImmutableArray.CreateRange(mix.Select(x => (float)Math.Clamp(x, -1d, 1d)))));
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
         { return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("AUDIO_RENDER_FAILED", e.Message)); }
     }
     private static long FirstSampleAtOrAfter(long tick, int rate) => checked((long)(((System.Numerics.BigInteger)tick * rate + TimelineTime.TicksPerSecond - 1) / TimelineTime.TicksPerSecond));

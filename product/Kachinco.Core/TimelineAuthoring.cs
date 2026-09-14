@@ -5,10 +5,19 @@ namespace Kachinco.Core;
 
 public readonly record struct TimelineViewport(decimal PixelsPerSecond)
 {
-    public const decimal MinimumPixelsPerSecond = 4m;
+    public const decimal MinimumPixelsPerSecond = 0.000000000001m;
+    public const decimal MinimumInteractivePixelsPerSecond = 4m;
     public const decimal MaximumPixelsPerSecond = 1600m;
 
     public bool IsValid => PixelsPerSecond is >= MinimumPixelsPerSecond and <= MaximumPixelsPerSecond;
+
+    public static TimelineViewport Fit(long durationTicks, decimal availablePixels)
+    {
+        if (durationTicks <= 0) throw new ArgumentOutOfRangeException(nameof(durationTicks));
+        if (availablePixels <= 0) throw new ArgumentOutOfRangeException(nameof(availablePixels));
+        decimal value = checked(availablePixels * TimelineTime.TicksPerSecond / durationTicks);
+        return new(Math.Clamp(value, MinimumPixelsPerSecond, MaximumPixelsPerSecond));
+    }
 
     public decimal TicksToPixels(long ticks)
     {

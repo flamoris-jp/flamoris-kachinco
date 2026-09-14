@@ -97,7 +97,7 @@ public partial class TimelineSurface : UserControl
     {
         if (factor <= 0) throw new ArgumentOutOfRangeException(nameof(factor));
         var value = Math.Clamp(viewport.PixelsPerSecond * factor,
-            TimelineViewport.MinimumPixelsPerSecond, TimelineViewport.MaximumPixelsPerSecond);
+            TimelineViewport.MinimumInteractivePixelsPerSecond, TimelineViewport.MaximumPixelsPerSecond);
         if (value == viewport.PixelsPerSecond) return;
         viewport = new(value);
         Rebuild();
@@ -112,8 +112,7 @@ public partial class TimelineSurface : UserControl
     {
         if (sequence is null) return;
         var available = Math.Max(1, TimelineScroll.ViewportWidth);
-        var pps = (decimal)available * TimelineTime.TicksPerSecond / sequence.DurationTicks;
-        viewport = new(Math.Clamp(pps, TimelineViewport.MinimumPixelsPerSecond, TimelineViewport.MaximumPixelsPerSecond));
+        viewport = TimelineViewport.Fit(sequence.DurationTicks, (decimal)available);
         Rebuild();
         TimelineScroll.ScrollToHorizontalOffset(0);
     }
@@ -314,7 +313,8 @@ public partial class TimelineSurface : UserControl
         var thumb = (Thumb)sender;
         var state = (ClipVisual)thumb.Tag;
         Select(state.Clip.Id, rebuild: false);
-        drag = new(state, thumb.Parent as FrameworkElement ?? thumb, null);
+        drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null);
+        Focus();
     }
 
     private void Body_DragDelta(object sender, DragDeltaEventArgs e)
@@ -350,7 +350,8 @@ public partial class TimelineSurface : UserControl
         var thumb = (Thumb)sender;
         var value = (TrimVisual)thumb.Tag;
         Select(value.Visual.Clip.Id, rebuild: false);
-        drag = new(value.Visual, thumb.Parent as FrameworkElement ?? thumb, value.Edge);
+        drag = new(value.Visual, thumb, thumb.Parent as FrameworkElement ?? thumb, value.Edge);
+        Focus();
     }
 
     private void Trim_DragDelta(object sender, DragDeltaEventArgs e)
@@ -378,6 +379,13 @@ public partial class TimelineSurface : UserControl
         candidate = Math.Max(0, candidate);
         candidate = Snap(candidate, current.Visual.Clip.Id);
         Dispatch(TimelineEditPlanner.Trim(project, sequence.Id, current.Visual.Clip.Id, edge, candidate));
+    }
+
+    private void TimelineSurface_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || drag is null) return;
+        drag.Thumb.CancelDrag();
+        e.Handled = true;
     }
 
     private void Dispatch<T>(Result<T> result) where T : EditCommand
@@ -490,9 +498,10 @@ public partial class TimelineSurface : UserControl
 
     private sealed record ClipVisual(Guid TrackId, Clip Clip, int Row, double Left, double Width);
     private sealed record TrimVisual(ClipVisual Visual, TrimEdge Edge);
-    private sealed class DragState(ClipVisual visual, FrameworkElement element, TrimEdge? edge)
+    private sealed class DragState(ClipVisual visual, Thumb thumb, FrameworkElement element, TrimEdge? edge)
     {
         public ClipVisual Visual { get; } = visual;
+        public Thumb Thumb { get; } = thumb;
         public FrameworkElement Element { get; } = element;
         public TrimEdge? Edge { get; } = edge;
         public double DeltaX { get; set; }

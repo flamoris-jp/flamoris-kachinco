@@ -53,7 +53,7 @@ public sealed class RecipeCompiler(string? pythonExecutable = null)
         }
         catch (OperationCanceledException) { return Fail(token.IsCancellationRequested ? "CANCELLED" : "RECIPE_TIMEOUT", "Recipe worker stopped."); }
         catch (System.ComponentModel.Win32Exception e) { return Fail("RECIPE_WORKER_UNAVAILABLE", e.Message); }
-        catch (Exception e) when (e is IOException or InvalidOperationException or JsonException) { return Fail("RECIPE_WORKER_FAILED", e.Message); }
+        catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or JsonException) { return Fail("RECIPE_WORKER_FAILED", e.Message); }
         finally { MediaProcess.Kill(process); if (job != 0) WorkerLimits.CloseHandle(job); }
     }
     private static Result<RecipeIr> Fail(string code, string message) => Result<RecipeIr>.Fail(Diagnostic.Error(code, message));

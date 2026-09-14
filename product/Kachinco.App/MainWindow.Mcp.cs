@@ -28,47 +28,53 @@ public partial class MainWindow
             {
                 await using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                await pipe.WaitForConnectionAsync(lifetime.Token);
-                var adapter = new McpEditorAdapter(session,
-                    () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-                    () => Refresh("MCPから編集しました。"), McpJobAsync);
-                using var reader = new StreamReader(pipe, new UTF8Encoding(false, true), leaveOpen: true);
-                await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                while (pipe.IsConnected && !lifetime.IsCancellationRequested)
+                try
                 {
-                    var line = await ReadBoundedLine(reader, lifetime.Token);
-                    if (line is null) break;
-                    // This continuation executes on the WPF dispatcher, sharing the exact UI session.
-                    if (busy)
+                    await pipe.WaitForConnectionAsync(lifetime.Token);
+                    var adapter = new McpEditorAdapter(session,
+                        () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
+                        () => Refresh("MCPから編集しました。"), McpJobAsync);
+                    var reader = new McpBoundedLineReader(pipe);
+                    await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                    while (pipe.IsConnected && !lifetime.IsCancellationRequested)
                     {
-                        try
+                        var frame = await reader.ReadAsync(lifetime.Token);
+                        if (frame.Status == McpFrameStatus.EndOfStream) break;
+                        if (frame.Status != McpFrameStatus.Success)
                         {
-                            using var request=JsonDocument.Parse(line);
-                            if(request.RootElement.TryGetProperty("id",out var requestId))
-                                await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc="2.0",id=requestId,error=new {code=-32000,message="Editor is busy"} }));
+                            string message = frame.Status switch
+                            {
+                                McpFrameStatus.Oversized => "MCP message is too large.",
+                                McpFrameStatus.InvalidUtf8 => "MCP message is not valid UTF-8.",
+                                _ => "MCP message is not newline terminated."
+                            };
+                            await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = (object?)null, error = new { code = -32700, message } }));
+                            break;
                         }
-                        catch(JsonException) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Invalid JSON\"}}"); }
-                        continue;
+                        string line = frame.Line!;
+                        // This continuation executes on the WPF dispatcher, sharing the exact UI session.
+                        if (busy)
+                        {
+                            try
+                            {
+                                using var request=JsonDocument.Parse(line);
+                                if(request.RootElement.TryGetProperty("id",out var requestId))
+                                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc="2.0",id=requestId,error=new {code=-32000,message="Editor is busy"} }));
+                            }
+                            catch(JsonException) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Invalid JSON\"}}"); }
+                            continue;
+                        }
+                        var result = await adapter.HandleAsync(line);
+                        if (result is not null) await writer.WriteLineAsync(result.AsMemory(), lifetime.Token);
                     }
-                    var result = await adapter.HandleAsync(line);
-                    if (result is not null) await writer.WriteLineAsync(result.AsMemory(), lifetime.Token);
                 }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or DecoderFallbackException)
+                { Status.Text = "MCPクライアント接続を閉じました: " + ex.Message; }
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "MCP接続を終了しました: " + ex.Message; }
         finally { if (ReferenceEquals(mcpLifetime, lifetime)) mcpLifetime = null; lifetime.Dispose(); }
-    }
-    private static async Task<string?> ReadBoundedLine(StreamReader reader, CancellationToken token)
-    {
-        var text = new StringBuilder(); var buffer = new char[1];
-        while (await reader.ReadAsync(buffer.AsMemory(), token) != 0)
-        {
-            if (buffer[0] == '\n') return text.ToString();
-            if (text.Length >= 4 * 1024 * 1024) throw new InvalidDataException("MCP message is too large.");
-            text.Append(buffer[0]);
-        }
-        return text.Length == 0 ? null : text.ToString();
     }
     private Task<object> McpJobAsync(string method, JsonElement args)
     {

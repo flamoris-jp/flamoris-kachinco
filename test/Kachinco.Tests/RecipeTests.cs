@@ -26,6 +26,25 @@ public sealed class RecipeTests
         Assert.IsFalse(result.Success);
     }
     [TestMethod]
+    public async Task InvalidRasterDimensionsBecomeStructuredGenerationFailure()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "kachinco-recipe-boundary-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var f = new Fixture();
+            var clapper = new Clapper(Fixture.Id(20), "A-1", 0, Fixture.T / 10, null, f.VideoTrackId, null, "");
+            Assert.IsTrue(f.Edit(new AddClapper(f.SequenceId, clapper)).Success);
+            var recipe = new Recipe(Fixture.Id(21), clapper.Id, "text(text='x')", 1, 42, "1", "1");
+            var result = await new RecipeGenerationService(new RecipeCompiler(), new InvalidRecipeRasterizer()).PrepareAsync(
+                f.Session.GetProject(), f.SequenceId, recipe, Path.Combine(folder, "invalid.mov"));
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("RECIPE_GENERATION_FAILED", result.Diagnostics[0].Code);
+            Assert.IsFalse(File.Exists(Path.Combine(folder, "invalid.mov")));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+    [TestMethod]
     public async Task GeneratedClipRegeneratesWithoutLosingManualPlacementAndUndoesOnce()
     {
         var folder=Path.Combine(Path.GetTempPath(),"kachinco-recipe-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
@@ -57,6 +76,12 @@ public sealed class RecipeTests
             var bytes=new byte[settings.Width*settings.Height*4];bytes[0]=255;bytes[3]=255;
             return ValueTask.FromResult(System.Collections.Immutable.ImmutableArray.CreateRange(bytes));
         }
+    }
+    private sealed class InvalidRecipeRasterizer : IRecipeRasterizer
+    {
+        public ValueTask<System.Collections.Immutable.ImmutableArray<byte>> RenderAsync(RecipeIr ir, Recipe recipe, Clapper clapper,
+            SequenceSettings settings, long localTicks, CancellationToken token) =>
+            ValueTask.FromResult(System.Collections.Immutable.ImmutableArray.Create<byte>(0));
     }
 
     [TestMethod]

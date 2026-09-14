@@ -88,7 +88,7 @@ public sealed class RecipeGenerationService(RecipeCompiler compiler, IRecipeRast
             return Result<PreparedGeneration>.Ok(new(output, Build(hash), clipId, assetId));
         }
         catch (OperationCanceledException) { return Fail("CANCELLED", "Recipe generation cancelled."); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception or ArgumentException)
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception or ArgumentException)
         { return Fail("RECIPE_GENERATION_FAILED", e.Message); }
         finally { if (!published && temporary is not null) try { File.Delete(temporary); } catch (IOException) { } }
     }
