@@ -132,12 +132,12 @@ public partial class TimelineSurface : UserControl
         mediaId = trackId = Guid.Empty; ticks = 0;
         if (project is null || sequence is null || e.Data.GetData(MediaDragFormat) is not Guid id) return false;
         var point = e.GetPosition(TimelineViewportHost);
-        var rows = sequence.Tracks.Reverse().ToArray();
+        var rows = TimelineLanes.Create(sequence);
         int row = geometry.HitRow(point.Y);
         if (row < 0 || row >= rows.Length || point.X < 0) return false;
         var asset = project.Assets.FirstOrDefault(x => x.Id == id);
         if (asset is null || rows[row].Kind != (asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio)) return false;
-        mediaId = id; trackId = rows[row].Id;
+        mediaId = id; trackId = rows[row].TrackId ?? Guid.Empty;
         ticks = Coordinates.PlacementTicks((decimal)point.X, sequence.Settings.FrameRate, SnappingEnabled,
             TimelineEditPlanner.SnapTargets(sequence, null, playheadTicks));
         return true;
@@ -150,8 +150,9 @@ public partial class TimelineSurface : UserControl
         e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
         if (valid && project is not null && sequence is not null)
         {
-            var rows = sequence.Tracks.Reverse().ToArray();
-            int row = Array.FindIndex(rows, t => t.Id == trackId);
+            var rows = TimelineLanes.Create(sequence);
+            var kind = project.Assets.First(a => a.Id == mediaId).Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
+            int row = Array.FindIndex(rows, t => (t.TrackId ?? Guid.Empty) == trackId && t.Kind == kind);
             var asset = project.Assets.First(a => a.Id == mediaId);
             dropGhost = new Border { Width = Math.Max(1, ToDouble(viewport.TicksToPixels(asset.DurationTicks))),
                 Height = geometry.Row(row).ClipHeight, Background = new SolidColorBrush(Color.FromArgb(90, 210, 11, 58)),
@@ -198,6 +199,7 @@ public partial class TimelineSurface : UserControl
     private void Rebuild()
     {
         if (drag is not null) return;
+        BeginVisualPlan();
         RulerCanvas.Children.Clear();
         TimelineCanvas.Children.Clear();
         TrackHeaders.Children.Clear();
@@ -206,11 +208,12 @@ public partial class TimelineSurface : UserControl
             RulerCanvas.Width = TimelineCanvas.Width = Math.Max(1, TimelineViewportHost.ActualWidth);
             TrackHeaders.Height = TimelineCanvas.Height = 1;
             geometry = new(0);
+            SubmitVisualPlan();
             UpdateScroll();
             return;
         }
 
-        var visibleTracks = sequence.Tracks.Reverse().ToArray();
+        var visibleTracks = TimelineLanes.Create(sequence);
         double width = Math.Max(Math.Max(1, TimelineViewportHost.ActualWidth), ToDouble(viewport.TicksToPixels(sequence.DurationTicks)));
         geometry = new(visibleTracks.Length);
         double height = Math.Max(1, geometry.Height);
@@ -222,7 +225,14 @@ public partial class TimelineSurface : UserControl
         var labels = BuildTrackLabels(sequence);
         for (int row = 0; row < visibleTracks.Length; row++)
         {
-            var track = visibleTracks[row];
+            var lane = visibleTracks[row];
+            if (lane.TrackId is not { } trackId)
+            {
+                var label = lane.Kind == TrackKind.Video ? "+ V" : "+ A";
+                DrawTrack(new(Guid.Empty, EditorText.Choose("ドロップで追加", "Drop to add"), lane.Kind, true, [], []), label, row, width);
+                continue;
+            }
+            var track = sequence.Tracks.First(t => t.Id == trackId);
             DrawTrack(track, labels[track.Id], row, width);
             foreach (var clip in TimelineQueries.ListClips(track)) DrawClip(track, clip, row);
             foreach (var caption in TimelineQueries.ListCaptions(track))
@@ -241,6 +251,7 @@ public partial class TimelineSurface : UserControl
             Canvas.SetLeft(marker, ToDouble(viewport.TicksToPixels(clapper.StartTicks))); Canvas.SetTop(marker, 15); RulerCanvas.Children.Add(marker);
         }
         DrawPlayhead(height);
+        SubmitVisualPlan();
     }
 
     private void DrawRuler(double width, double timelineHeight)
@@ -280,7 +291,7 @@ public partial class TimelineSurface : UserControl
             }
         };
         Canvas.SetTop(header, geometry.Row(row).Top);
-        header.Tag = track.Id;
+        header.Tag = track.Id == Guid.Empty ? $"new-{row}" : track.Id;
         TrackHeaders.Children.Add(header);
         var background = new Rectangle
         {
@@ -289,7 +300,7 @@ public partial class TimelineSurface : UserControl
             StrokeThickness = 0,
             IsHitTestVisible = false
         };
-        background.Tag = track.Id;
+        background.Tag = header.Tag;
         Canvas.SetTop(background, geometry.Row(row).Top);
         TimelineCanvas.Children.Add(background);
         var separator = new Rectangle { Width = width, Height = 1, Fill = header.BorderBrush, IsHitTestVisible = false };
@@ -321,10 +332,12 @@ public partial class TimelineSurface : UserControl
         grid.Children.Add(body);
         grid.Children.Add(new TextBlock
         {
-            Text = AssetName(clip.MediaAssetId), Foreground = Brushes.White, FontWeight = FontWeights.SemiBold,
+            Text = (TimelineEditPlanner.Overlaps(track, clip.StartTicks, clip.DurationTicks, clip.Id) ? "⚠ " : "") + AssetName(clip.MediaAssetId), Foreground = Brushes.White, FontWeight = FontWeights.SemiBold,
             Margin = new(10, 2, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false
         });
+        if (TimelineEditPlanner.Overlaps(track, clip.StartTicks, clip.DurationTicks, clip.Id))
+            grid.ToolTip += "\n" + EditorText.Choose("同一トラックで重なっています。映像は順に合成、音声は加算されます。", "Same-track overlap: ordered video composition / summed audio.");
         AddMediaVisual(grid, clip, width);
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
@@ -392,10 +405,10 @@ public partial class TimelineSurface : UserControl
         catch (OverflowException) { Fail("INVALID_TIMELINE_RANGE", "The clip move is outside the timeline.", current.Visual.Clip.Id); Rebuild(); return; }
         candidate = SnapMove(candidate, current.Visual.Clip);
 
-        var rows = sequence.Tracks.Reverse().ToArray();
+        var rows = TimelineLanes.Create(sequence);
         int targetRow = Math.Clamp((int)Math.Round(current.Visual.Row + current.DeltaY / TrackHeight,
             MidpointRounding.AwayFromZero), 0, Math.Max(0, rows.Length - 1));
-        Guid targetTrack = rows.Length == 0 ? current.Visual.TrackId : rows[targetRow].Id;
+        Guid targetTrack = rows.Length == 0 ? current.Visual.TrackId : rows[targetRow].TrackId ?? Guid.Empty;
         var result = TimelineEditPlanner.Move(project, sequence.Id, current.Visual.Clip.Id, targetTrack, candidate);
         Dispatch(result);
     }
@@ -525,6 +538,7 @@ public partial class TimelineSurface : UserControl
     {
         if (RulerTranslation is null || TimelineTranslation is null) return;
         RulerTranslation.X = TimelineTranslation.X = -e.NewValue;
+        Rebuild();
     }
     private void ScrollTo(double offset) => HorizontalScroll.Value = Math.Clamp(offset, 0, HorizontalScroll.Maximum);
     private void UpdateScroll()
@@ -540,7 +554,7 @@ public partial class TimelineSurface : UserControl
     {
         var counts = new Dictionary<TrackKind, int>();
         var labels = new Dictionary<Guid, string>();
-        foreach (var track in value.Tracks)
+        foreach (var track in value.Tracks.Reverse())
         {
             counts.TryGetValue(track.Kind, out int number); number++; counts[track.Kind] = number;
             labels[track.Id] = $"{(track.Kind == TrackKind.Video ? "V" : track.Kind == TrackKind.Audio ? "A" : "S")}{number}";

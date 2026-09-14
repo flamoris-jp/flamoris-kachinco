@@ -155,7 +155,9 @@ public partial class MainWindow : Window
         var snapshot = session.GetProject();
         if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return;
         var clipId = Guid.NewGuid();
-        var planned = TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
+        var planned = trackId == Guid.Empty ?
+            TimelineEditPlanner.PlaceOnNewTrack(snapshot.Project, sequenceId, mediaId, Guid.NewGuid(), clipId, startTicks, snapshot.Revision) :
+            TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
         if (!planned.Success) { ShowErrors(planned.Diagnostics); return; }
         var result = session.Execute(planned.Value!);
         if (result.Success) selectedClipId = clipId;
