@@ -90,7 +90,6 @@ public partial class TimelineSurface : UserControl
         selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => t.Clips.Any(c => c.Id == id)) == true ? id : null;
         if (sequence is null) playheadTicks = 0;
         else playheadTicks = Math.Clamp(playheadTicks, 0, sequence.DurationTicks);
-        SynchronizeMediaVisuals();
         Rebuild();
     }
 

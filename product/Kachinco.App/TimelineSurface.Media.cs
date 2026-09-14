@@ -28,7 +28,6 @@ public partial class TimelineSurface
         visualDisposed = true; foreach (var token in visualActive.Values) token.Cancel();
         visualPending.Clear(); visualPlan.Clear(); mediaVisuals.Clear();
     }
-    private void SynchronizeMediaVisuals() { } // Rebuild derives visible dependencies from the immutable project.
     private void BeginVisualPlan() => visualPlan.Clear();
     private void SubmitVisualPlan()
     {
