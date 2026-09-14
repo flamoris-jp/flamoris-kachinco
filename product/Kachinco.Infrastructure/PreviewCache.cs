@@ -107,8 +107,8 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     IMediaDecoder? randomDecoder = null, IMediaDecoder? forwardVideo = null, IMediaDecoder? forwardAudio = null) : IInteractivePreviewSource, IDisposable
 {
     private readonly IMediaDecoder random = randomDecoder ?? new FfmpegMediaDecoder();
-    private readonly IMediaDecoder video = forwardVideo ?? new FfmpegMediaDecoder();
-    private readonly IMediaDecoder audio = forwardAudio ?? new FfmpegMediaDecoder();
+    private readonly IMediaDecoder video = forwardVideo ?? new FfmpegForwardDecoder();
+    private readonly IMediaDecoder audio = forwardAudio ?? new FfmpegForwardDecoder();
     public PreviewCache<RenderedVideoFrame> Frames { get; } = new(96 * 1024 * 1024);
     public PreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024);
     public async ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
