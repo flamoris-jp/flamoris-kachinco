@@ -101,9 +101,13 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         if (disposed) return;
         Cancel(); Error = null; Frame = null;
         if (context is null) { PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
-        PositionTicks = Math.Clamp(tick, 0, context.Sequence.DurationTicks - 1);
+        PositionTicks = Math.Clamp(tick, 0, context.Sequence.DurationTicks);
+        // The end cursor is an editing boundary, not a decodable frame at duration - 1 tick.
+        // Show the final canonical output frame while retaining the end cursor for replay.
+        long renderTick = PositionTicks == context.Sequence.DurationTicks ?
+            TimelineTime.FrameToTicks(Math.Max(0, TimelineTime.FrameCount(context.Sequence.DurationTicks, context.Sequence.Settings.FrameRate) - 1), context.Sequence.Settings.FrameRate) : PositionTicks;
         wantPlay = play;
-        pending = new(generation, PositionTicks, play, after);
+        pending = new(generation, renderTick, play, after);
         SetState(play ? InteractivePreviewState.Buffering : InteractivePreviewState.Scrubbing);
         if (!running) { running = true; runner = RunMailboxAsync(); }
     }

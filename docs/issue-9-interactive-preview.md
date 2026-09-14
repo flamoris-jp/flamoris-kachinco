@@ -71,7 +71,9 @@ There is no group-level creation drop target, and Place permits silent same-trac
    quantized to the next sample (less than one sample adjustment); no independent wall-clock
    timeline. Silent sequences still queue actual silence through the device. Scheduling delays
    only poll/wake work; they never advance playback time. No audio device is an explicit failure,
-   not a timer fallback. Native buffers are freed only after reset/completion/unprepare.
+   not a timer fallback. The sequence-end editing cursor shows the final canonical output
+   frame rather than attempting a source seek at duration minus one tick; Play at the end
+   restarts from zero. Native buffers are freed only after reset/completion/unprepare.
 8. **Overload:** preserve audio order/sample timing; drop late video work, keep bounded forward
    work and expose dropped frames/buffering. On PCM underrun, position stops at submitted
    samples; refill briefly and resume. Do not fabricate elapsed media time or silently export.

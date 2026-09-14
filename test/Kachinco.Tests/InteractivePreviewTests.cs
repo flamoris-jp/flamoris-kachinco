@@ -88,6 +88,17 @@ public sealed class InteractivePreviewTests
         p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
     }
     [TestMethod]
+    public void EndCursorDisplaysTheLastCanonicalFrameAndPlayRestartsAtZero()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source(); var device = new Device();
+        using var p = new InteractivePreview(source, () => device); p.SetContext(Context(f)); p.Scrub(8 * Fixture.T);
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.AreEqual(TimelineTime.FrameToTicks(239, new(30, 1)), p.Frame!.Tick);
+        Assert.AreEqual(8 * Fixture.T, p.PositionTicks);
+        source.Video.Clear(); p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing);
+        Assert.AreEqual(0L, source.Video[0]); p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+    [TestMethod]
     public void SampleMappingRoundsForwardWithoutInventingASecondTimebase()
     {
         foreach (long tick in new[] { 0L, 1L, Fixture.T, Fixture.T + 1, 219 * Fixture.T })
