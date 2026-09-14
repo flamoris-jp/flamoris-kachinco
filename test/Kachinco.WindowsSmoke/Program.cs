@@ -28,6 +28,7 @@ internal static class Program
                 if (!a.SequenceEqual(b) || !a.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Recipe RGBA determinism/visible output failed.");
                 var caption = await new WindowsCaptionRasterizer(app.Dispatcher).RasterizeAsync([new(Guid.NewGuid(),Guid.NewGuid(),"存在薄明")],1920,1080,default);
                 if (!caption.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Caption rasterization is empty.");
+                await InteractivePreviewChecks.Run(main);
                 main.Close(); exit=0; Console.WriteLine("Windows Recipe worker limits, repeatable RGBA, captions and shell: PASS");
             }
             catch(Exception e) { Console.Error.WriteLine(e); }
