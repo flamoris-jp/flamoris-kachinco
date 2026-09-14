@@ -2,6 +2,8 @@
 
 Authority: Issue #3. Use a small real `.mov` with a video stream and a real `.wav`.
 Do not use private acceptance media in Product/Test or commit it to the repository.
+This is the historical Phase 1 baseline. Current transport and editor acceptance
+are defined in [Issue #7](windows-issue7.md); disabled transport below is superseded.
 
 ## Automated gates
 

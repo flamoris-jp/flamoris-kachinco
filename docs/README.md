@@ -11,3 +11,5 @@
 - [Live MCP ADR](decisions/0003-live-mcp.md): local bridge and shared session.
 - [Authoring v2 ADR](decisions/0004-authoring-v2.md): migration, Clappers, Recipes and provenance.
 - [Production Windows workflow](../staging/windows-production.md): prerequisites and acceptance.
+- [Editor UX reference audit and coordinate contract](issue-7-editor-ux.md): Issue #7, real NLE references and Cutwork family grammar.
+- [Editor UX self-review](issue-7-self-review.md) and [Windows hands-on checklist](../staging/windows-issue7.md): automated evidence and remaining physical acceptance.
