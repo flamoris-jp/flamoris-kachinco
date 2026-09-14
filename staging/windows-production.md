@@ -8,7 +8,8 @@
    Kachinco does not download or bundle these executables.
 3. Recipe generation additionally requires Python 3 (`python` on Windows PATH).
    The distributed `recipe-worker.py` must remain beside the app.
-4. Create a landscape or portrait project and save as `.fkproj`.
+4. Import MOV/WAV directly from the welcome screen, then create a landscape or
+   portrait sequence; alternatively use File > New. Save as `.fkproj`.
    Source MOV/WAV and generated MOV files remain external assets; keep them.
 
 ## Ordinary editing
@@ -16,7 +17,7 @@
 - Import MOV/WAV; drag from the media bin onto a video/audio row.
 - A drop places the full asset at the pointer's snapped time and extends sequence
   duration if necessary. One Undo reverses both changes. Empty-project default is
-  60 seconds; Sequence > duration can change it without clipping existing items.
+  8 seconds; Sequence > duration can change it without clipping existing items.
 - Timeline header owns zoom, fit and snapping. Fit a one-hour sequence and verify
   both ends are visible. Drag clip bodies to move; edges trim. During each kind of
   drag, press Escape and verify the preview returns to its original range and Undo
@@ -29,10 +30,12 @@
 
 ## Preview and output
 
-- `プレビュー準備` renders the sequence through the same compositor/audio service
-  as final export. It is render-ahead playback, not a real-time composition claim.
-- After preparation, play/pause, stop, frame stepping and timeline seek use the
+- Play (Space) automatically prepares a cold preview, showing preparation/render
+  progress. `プレビュー準備` explicitly prepares without autoplay. Both use the same
+  compositor/audio service as final export. This remains render-ahead playback.
+- After native media opening, play/pause, stop, frame stepping and timeline seek use the
   actual media player. An edit invalidates the prepared preview.
+- Stop cancels pending preparation; render/decode/transport failures show a reason.
 - File > export creates H.264/AAC MP4. Progress window supports cancellation.
   Existing output is replaced only after successful encoding; source paths cannot
   be used as output. Preview/export are flattened onto black. Generated MOV retains
@@ -85,6 +88,8 @@ particles(count=24, x=100, y=200, vx=80, vy=-20, size=5)
 - [ ] Cancel preview/export/Recipe and close/reopen without stale dialogs or media.
 
 Automated evidence is recorded in the PR; startup checks are not visual acceptance.
+Run the focused [Issue #7 editor checklist](windows-issue7.md) for startup, clip
+visualization, family styling, geometry, coordinate mapping and transport feedback.
 Phase 9 remains needs-driven for performance and external integrations. Kinetai,
 AudioAnalyzer, unrestricted Python, extra effects and broader media formats are
 not implemented by this slice.
