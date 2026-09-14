@@ -11,7 +11,9 @@ sequence-end cursor fix does not change this measured decode path.
 Three-second 1920×1080/30 H.264 MOV plus 48 kHz WAV; real source pixels/PCM, shared
 compositor/mixer. The 219.6-second sequence contains the fixture at 110 seconds.
 The 60-frame loop requests two seconds of visible content and 20 mixed audio blocks.
-It is an unpaced throughput measurement, not actual device playback.
+It is an unpaced throughput measurement, not actual device playback. Cold/cached scrub
+numbers time the engine frame request; WPF paint/vsync and pointer-to-display latency
+are excluded.
 
 | Quality | Cold scrub ms | Cached scrub ms | 60 frames + PCM seconds | Host CPU seconds | Sampled host + FFmpeg peak MiB | Frame cache MiB / entries |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

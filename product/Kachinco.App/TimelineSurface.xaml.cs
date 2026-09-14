@@ -65,6 +65,7 @@ public partial class TimelineSurface : UserControl
         TimelineCanvas.DragOver += Media_DragOver;
         TimelineCanvas.Drop += Media_Drop;
         TimelineCanvas.DragLeave += (_, _) => ClearDropGhost();
+        TimelineScroll.ScrollChanged += (_, e) => { if (e.VerticalChange != 0 || e.ViewportHeightChange != 0) Rebuild(); };
         SizeChanged += (_, _) => Rebuild();
     }
 
@@ -351,7 +352,7 @@ public partial class TimelineSurface : UserControl
         });
         if (TimelineEditPlanner.Overlaps(track, clip.StartTicks, clip.DurationTicks, clip.Id))
             grid.ToolTip += "\n" + EditorText.Choose("同一トラックで重なっています。映像は順に合成、音声は加算されます。", "Same-track overlap: ordered video composition / summed audio.");
-        AddMediaVisual(grid, clip, width);
+        AddMediaVisual(grid, clip, width, geometry.Row(row));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
         Canvas.SetLeft(grid, left); Canvas.SetTop(grid, geometry.Row(row).ClipTop);

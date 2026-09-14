@@ -53,6 +53,11 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
 13. A cursor at the half-open sequence end must not seek at duration minus one tick.
     It now shows the final canonical output frame; Play from the end restarts at zero.
 
+14. Counting only missing thumbnail keys could churn a working set larger than cache.
+    The 96-key visible plan now counts cached entries too, culls vertically offscreen lanes
+    and omits unreadably narrow cells. Excess detail shows a zoom hint instead of repeatedly
+    decoding a fixed oversized view.
+
 ## Regression coverage
 
 - Scrub: arbitrary tick, 1,000 coalesced requests, cancellation-ignoring stale completion,

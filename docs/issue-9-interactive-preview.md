@@ -105,8 +105,10 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
 
 ## Implemented limits and review clarifications
 
-- Thumbnail planning retains at most 96 desired jobs, two active jobs and 48 cells per
-  visible clip. It replaces the pending viewport plan; obsolete active jobs are canceled.
+- Thumbnail planning retains at most 96 desired keys (including cache hits), two active jobs and 48 cells per
+  visible clip. Both horizontal and vertical viewport bounds apply; cells narrower than
+  12 DIPs omit images until zoomed. Excess keys show a detail hint instead of cache churn.
+  It replaces the pending viewport plan; obsolete active jobs are canceled.
   Source samples use a half-second grid clamped to the clip's source-in. The 16 MiB cache
   owns WPF thumbnail pixels or waveform peaks, with a 256-entry cap. Small bookkeeping
   overhead is included in the byte charge; runtime/decoder overhead is separate.

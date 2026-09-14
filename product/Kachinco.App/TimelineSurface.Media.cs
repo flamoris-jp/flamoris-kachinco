@@ -80,17 +80,21 @@ public partial class TimelineSurface
         if (!path.IsAvailable || path.ResolvedPath is null) return new(null, null, EditorText.VisualFailed);
         string stamp = PreviewContext.FileStamp(path.ResolvedPath);
         string key = $"{asset.Id}|{asset.SourcePath}|{asset.DurationTicks}|{asset.Provenance}|{path.ResolvedPath}|{stamp}|{tick}";
-        if (mediaVisuals.TryGet(key, out var cached)) return cached;
-        if (visualPlan.Count < 96) visualPlan.TryAdd(key, new(key, asset, path.ResolvedPath, stamp, tick));
-        return null;
+        // Count cached and pending keys together: a fixed visible plan must fit in cache.
+        // Counting only misses would cycle forever when the visible working set exceeds it.
+        if (!visualPlan.ContainsKey(key) && visualPlan.Count >= 96) return new(null, null, null, Omitted: true);
+        visualPlan.TryAdd(key, new(key, asset, path.ResolvedPath, stamp, tick));
+        return mediaVisuals.TryGet(key, out var cached) ? cached : null;
     }
-    private void AddMediaVisual(Grid grid, Clip clip, double width)
+    private void AddMediaVisual(Grid grid, Clip clip, double width, TimelineRow row)
     {
+        double visibleHeight = Math.Max(1, TimelineScroll.ViewportHeight);
+        if (row.Bottom <= TimelineScroll.VerticalOffset || row.Top >= TimelineScroll.VerticalOffset + visibleHeight) return;
         if (project?.Assets.FirstOrDefault(a => a.Id == clip.MediaAssetId) is not { } asset) return;
         double clipLeft = (double)viewport.TicksToPixels(clip.StartTicks);
         double start = Math.Max(0, HorizontalScroll.Value - clipLeft);
         double end = Math.Min(width, HorizontalScroll.Value + TimelineViewportHost.ActualWidth - clipLeft);
-        if (end <= start) return;
+        if (end - start < 12) return; // Less than a readable thumbnail; zoom reveals source detail.
         var area = new Canvas { Margin = new Thickness(start + 3, 21, 0, 3), Width = Math.Max(0, end - start - 6),
             HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false, ClipToBounds = true };
         grid.Children.Insert(0, area);
@@ -100,7 +104,7 @@ public partial class TimelineSurface
             {
                 var entry = RequestVisual(asset, slot.SourceTicks);
                 FrameworkElement tile = entry?.Image is { } image ? new Image { Source = image, Stretch = Stretch.UniformToFill, Width = Math.Max(.1, slot.Width - 1), Height = 40 } :
-                    new TextBlock { Text = entry?.Error is null ? EditorText.VisualLoading : "⚠ " + EditorText.VisualFailed,
+                    new TextBlock { Text = entry?.Omitted == true ? EditorText.Choose("拡大で表示", "Zoom for detail") : entry?.Error is null ? EditorText.VisualLoading : "⚠ " + EditorText.VisualFailed,
                         Width = Math.Max(.1, slot.Width - 1), Foreground = Brushes.White, FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis };
                 Canvas.SetLeft(tile, slot.Left); area.Children.Add(tile);
                 if (entry?.Error is { } error) grid.ToolTip += "\n" + error;
@@ -110,7 +114,7 @@ public partial class TimelineSurface
         var audio = RequestVisual(asset, 0);
         if (audio?.Data is not { } data || data.Peaks.IsDefaultOrEmpty)
         {
-            area.Children.Add(new TextBlock { Text = audio?.Error is null ? EditorText.VisualLoading : "⚠ " + EditorText.VisualFailed, Foreground = Brushes.White, FontSize = 10 });
+            area.Children.Add(new TextBlock { Text = audio?.Omitted == true ? EditorText.Choose("拡大で表示", "Zoom for detail") : audio?.Error is null ? EditorText.VisualLoading : "⚠ " + EditorText.VisualFailed, Foreground = Brushes.White, FontSize = 10 });
             return;
         }
         int columns = Math.Clamp((int)Math.Ceiling(end - start), 1, 1024);
@@ -130,5 +134,5 @@ public partial class TimelineSurface
         area.Children.Add(new Image { Source = new DrawingImage(group), Width = area.Width, Height = 40, Stretch = Stretch.Fill });
     }
     private sealed record VisualWork(string Key, MediaAsset Asset, string Path, string Stamp, long SourceTicks);
-    private sealed record VisualEntry(MediaVisualization? Data, BitmapSource? Image, string? Error);
+    private sealed record VisualEntry(MediaVisualization? Data, BitmapSource? Image, string? Error, bool Omitted = false);
 }
