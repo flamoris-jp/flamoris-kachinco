@@ -100,3 +100,30 @@ Windows: existing build/startup/geometry plus viewer pixels and thumbnail visibi
 1080p MOV/WAV cold/warm scrub, first-frame/first-device-progress latency, sustained throughput,
 Full/Half/Quarter CPU/RSS/cache and overload metrics. Record unavailable audio devices as such;
 test clocks do not establish physical sound/A-V acceptance. Perceptual checks remain Akino's.
+
+## Implemented limits and review clarifications
+
+- Thumbnail planning retains at most 96 desired jobs, two active jobs and 48 cells per
+  visible clip. It replaces the pending viewport plan; obsolete active jobs are canceled.
+  Source samples use a half-second grid clamped to the clip's source-in. The 16 MiB cache
+  owns WPF thumbnail pixels or waveform peaks, with a 256-entry cap. Small bookkeeping
+  overhead is included in the byte charge; runtime/decoder overhead is separate.
+- Codec streams retain at most two video sources and two audio sources, each capped at
+  two seconds; video additionally caps 64 frames and timestamp entries. Raw pipe backpressure
+  bounds ahead-of-consumption bytes. Full identity opaque composition uses an equivalent
+  bulk copy; alpha/transform/blend paths keep the shared reference equations.
+- Track creation inserts below the last displayed compatible lane. Labels count in display
+  order, giving A1 then A2; IDs, not labels, remain authority. Commands are AddTrack,
+  ReorderTrack, optional SetSequenceDuration, InsertClip in one expected-revision EditBatch.
+  MCP can submit exactly that batch. Low-level explicit InsertClip remains compatible with
+  existing overlap semantics; authoring gestures reject accidental overlap before submission.
+  Intentional overlaps compose by the evaluator's stable start/ID order within each track,
+  or sum PCM before clamp. The visible warning also covers explicit MCP-authored overlaps.
+- Duration changes conservatively restart the local transport, even beyond the device window,
+  so a paused producer cannot retain an obsolete endpoint. Other outside-window edits keep
+  the current device queue. Initial source fingerprints protect queued content on relink or
+  source replacement; per-frame/block cache keys recheck current file metadata.
+- Selection/scroll/zoom do not call SetContext with a new revision. If another caller supplies
+  an equivalent snapshot, deterministic dependency keys still reuse its frames/PCM.
+- Scrub is deliberately silent and pauses Play. Paused quality is the selected playback
+  quality too; there is no separate paused-resolution preference or proxy authoring UI.

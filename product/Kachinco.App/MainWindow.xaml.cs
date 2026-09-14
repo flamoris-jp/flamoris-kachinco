@@ -328,7 +328,7 @@ public partial class MainWindow : Window
     }
 
     private void ShowErrors(IEnumerable<Diagnostic> diagnostics) =>
-        Refresh(string.Join("  ", diagnostics.Select(d => $"[{d.Code}] {d.Message}")));
+        Refresh(string.Join("  ", diagnostics.Select(d => d.Code == "CLIP_OVERLAP" ? EditorText.Choose("クリップが重なります。空いている位置か「+ V / + A」の追加行へ配置してください。", d.Message) : $"[{d.Code}] {d.Message}")));
 
     private void Refresh(string? message = null)
     {

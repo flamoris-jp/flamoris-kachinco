@@ -13,3 +13,5 @@
 - [Production Windows workflow](../staging/windows-production.md): prerequisites and acceptance.
 - [Editor UX reference audit and coordinate contract](issue-7-editor-ux.md): Issue #7, real NLE references and Cutwork family grammar.
 - [Editor UX self-review](issue-7-self-review.md) and [Windows hands-on checklist](../staging/windows-issue7.md): automated evidence and remaining physical acceptance.
+
+- [Interactive preview contract](issue-9-interactive-preview.md), [self-review](issue-9-self-review.md) and [Windows hands-on](../staging/windows-issue9.md): Issue #9 current preview engine and remaining perceptual checks.
