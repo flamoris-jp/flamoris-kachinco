@@ -16,6 +16,7 @@ internal static class Program
             try
             {
                 var main = new MainWindow(); main.Show();
+                await TimelineLayoutChecks.Run(main);
                 var compiler = new RecipeCompiler();
                 var compiled = await compiler.CompileAsync("text(text='グエー', x=10, y=20)\nparticles(count=3,x=30,y=100,size=3)");
                 if (!compiled.Success) throw new Exception(string.Join(";",compiled.Diagnostics.Select(d=>d.Message)));
