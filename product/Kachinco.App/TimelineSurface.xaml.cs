@@ -40,7 +40,9 @@ public partial class TimelineSurface : UserControl
     public const string MediaDragFormat = "Kachinco.MediaAssetId";
     public event EventHandler<MediaPlacementEventArgs>? MediaPlacementRequested;
     public event EventHandler? PlayheadChanged;
-    private const double TrackHeight = 46;
+    private TimelineTrackGeometry geometry = new(0);
+    private double TrackHeight => geometry.RowHeight;
+    private TimelineCoordinates Coordinates => new(viewport, (decimal)HorizontalScroll.Value);
     private const double MinimumClipWidth = 8;
     private const int SnapThresholdPixels = 8;
     private readonly Brush videoBrush = new SolidColorBrush(Color.FromRgb(47, 112, 170));
@@ -57,9 +59,12 @@ public partial class TimelineSurface : UserControl
     public TimelineSurface()
     {
         InitializeComponent();
+        RulerHeaderColumn.Width = TrackHeaderColumn.Width = ScrollHeaderColumn.Width = new GridLength(TimelineTrackGeometry.HeaderWidth);
+        RulerHost.Height = RulerCanvas.Height = TimelineTrackGeometry.RulerHeight;
         TimelineCanvas.AllowDrop = true;
         TimelineCanvas.DragOver += Media_DragOver;
         TimelineCanvas.Drop += Media_Drop;
+        TimelineCanvas.DragLeave += (_, _) => ClearDropGhost();
         SizeChanged += (_, _) => Rebuild();
     }
 
@@ -74,27 +79,33 @@ public partial class TimelineSurface : UserControl
 
     public void LoadProject(Project? value, Guid? sequenceId, Guid? selectedId = null)
     {
+        CancelGesture();
         if (sequence?.Id != sequenceId || project?.Id != value?.Id)
         {
             playheadTicks = 0;
-            TimelineScroll.ScrollToHorizontalOffset(0);
+            ScrollTo(0);
         }
         project = value;
         sequence = value?.Sequences.FirstOrDefault(x => x.Id == sequenceId);
         selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => t.Clips.Any(c => c.Id == id)) == true ? id : null;
         if (sequence is null) playheadTicks = 0;
         else playheadTicks = Math.Clamp(playheadTicks, 0, sequence.DurationTicks);
+        SynchronizeMediaVisuals();
         Rebuild();
     }
 
+    private void CancelGesture() { if (drag is { } active) active.Thumb.CancelDrag(); }
+
     public void ToggleSnapping()
     {
+        CancelGesture();
         SnappingEnabled = !SnappingEnabled;
         Rebuild();
     }
 
     public void ZoomBy(decimal factor)
     {
+        CancelGesture();
         var next = viewport.ZoomBy(factor);
         if (next == viewport) return;
         viewport = next;
@@ -102,40 +113,61 @@ public partial class TimelineSurface : UserControl
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             var x = ToDouble(viewport.TicksToPixels(playheadTicks));
-            TimelineScroll.ScrollToHorizontalOffset(Math.Max(0, x - TimelineScroll.ViewportWidth / 2));
+            ScrollTo(Math.Max(0, x - TimelineViewportHost.ActualWidth / 2));
         });
     }
 
     public void FitSequence()
     {
+        CancelGesture();
         if (sequence is null) return;
-        var available = Math.Max(1, TimelineScroll.ViewportWidth);
+        var available = Math.Max(1, TimelineViewportHost.ActualWidth);
         viewport = TimelineViewport.Fit(sequence.DurationTicks, (decimal)available);
         Rebuild();
-        TimelineScroll.ScrollToHorizontalOffset(0);
+        ScrollTo(0);
     }
 
     private bool TryDrop(DragEventArgs e, out Guid mediaId, out Guid trackId, out long ticks)
     {
         mediaId = trackId = Guid.Empty; ticks = 0;
         if (project is null || sequence is null || e.Data.GetData(MediaDragFormat) is not Guid id) return false;
-        var point = e.GetPosition(TimelineCanvas);
+        var point = e.GetPosition(TimelineViewportHost);
         var rows = sequence.Tracks.Reverse().ToArray();
-        int row = (int)Math.Floor(point.Y / TrackHeight);
+        int row = geometry.HitRow(point.Y);
         if (row < 0 || row >= rows.Length || point.X < 0) return false;
         var asset = project.Assets.FirstOrDefault(x => x.Id == id);
         if (asset is null || rows[row].Kind != (asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio)) return false;
         mediaId = id; trackId = rows[row].Id;
-        ticks = Snap(TimelineSnapping.QuantizeToFrame(viewport.PixelsToTicks((decimal)point.X), sequence.Settings.FrameRate), Guid.Empty);
+        ticks = Coordinates.PlacementTicks((decimal)point.X, sequence.Settings.FrameRate, SnappingEnabled,
+            TimelineEditPlanner.SnapTargets(sequence, null, playheadTicks));
         return true;
     }
+    private Border? dropGhost;
     private void Media_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryDrop(e, out _, out _, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        ClearDropGhost();
+        bool valid = TryDrop(e, out var mediaId, out var trackId, out var ticks);
+        e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
+        if (valid && project is not null && sequence is not null)
+        {
+            var rows = sequence.Tracks.Reverse().ToArray();
+            int row = Array.FindIndex(rows, t => t.Id == trackId);
+            var asset = project.Assets.First(a => a.Id == mediaId);
+            dropGhost = new Border { Width = Math.Max(1, ToDouble(viewport.TicksToPixels(asset.DurationTicks))),
+                Height = geometry.Row(row).ClipHeight, Background = new SolidColorBrush(Color.FromArgb(90, 210, 11, 58)),
+                BorderBrush = Brushes.White, BorderThickness = new Thickness(1), IsHitTestVisible = false,
+                Child = new TextBlock { Text = $"{asset.Name} · {FormatTime(ticks)}", Foreground = Brushes.White, Margin = new Thickness(8, 2, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis } };
+            Canvas.SetLeft(dropGhost, ToDouble(Coordinates.ContentX(ticks)));
+            Canvas.SetTop(dropGhost, geometry.Row(row).ClipTop);
+            Panel.SetZIndex(dropGhost, 4);
+            TimelineCanvas.Children.Add(dropGhost);
+        }
         e.Handled = true;
     }
+    private void ClearDropGhost() { if (dropGhost is not null) TimelineCanvas.Children.Remove(dropGhost); dropGhost = null; }
     private void Media_Drop(object sender, DragEventArgs e)
     {
+        ClearDropGhost();
         if (TryDrop(e, out var mediaId, out var trackId, out var ticks))
             MediaPlacementRequested?.Invoke(this, new(mediaId, trackId, ticks));
         e.Handled = true;
@@ -165,21 +197,26 @@ public partial class TimelineSurface : UserControl
 
     private void Rebuild()
     {
+        if (drag is not null) return;
         RulerCanvas.Children.Clear();
         TimelineCanvas.Children.Clear();
         TrackHeaders.Children.Clear();
         if (sequence is null)
         {
-            RulerCanvas.Width = TimelineCanvas.Width = Math.Max(1, ActualWidth - 104);
-            TimelineCanvas.Height = 1;
+            RulerCanvas.Width = TimelineCanvas.Width = Math.Max(1, TimelineViewportHost.ActualWidth);
+            TrackHeaders.Height = TimelineCanvas.Height = 1;
+            geometry = new(0);
+            UpdateScroll();
             return;
         }
 
         var visibleTracks = sequence.Tracks.Reverse().ToArray();
-        double width = Math.Max(Math.Max(1, ActualWidth - 104), ToDouble(viewport.TicksToPixels(sequence.DurationTicks)));
-        double height = Math.Max(1, visibleTracks.Length * TrackHeight);
+        double width = Math.Max(Math.Max(1, TimelineViewportHost.ActualWidth), ToDouble(viewport.TicksToPixels(sequence.DurationTicks)));
+        geometry = new(visibleTracks.Length);
+        double height = Math.Max(1, geometry.Height);
         RulerCanvas.Width = TimelineCanvas.Width = width;
-        TimelineCanvas.Height = height;
+        TrackHeaders.Height = TimelineCanvas.Height = height;
+        UpdateScroll();
 
         DrawRuler(width, height);
         var labels = BuildTrackLabels(sequence);
@@ -190,10 +227,11 @@ public partial class TimelineSurface : UserControl
             foreach (var clip in TimelineQueries.ListClips(track)) DrawClip(track, clip, row);
             foreach (var caption in TimelineQueries.ListCaptions(track))
             {
-                var block = new Border { Width = Math.Max(8, ToDouble(viewport.TicksToPixels(caption.DurationTicks))), Height = TrackHeight - 8,
+                var block = new Border { Width = ToDouble(viewport.TicksToPixels(caption.DurationTicks)), Height = geometry.Row(row).ClipHeight,
                     Background = Brushes.DarkMagenta, IsHitTestVisible = false,
                     Child = new TextBlock { Text = caption.Text, Foreground = Brushes.White, Margin = new(5), TextTrimming = TextTrimming.CharacterEllipsis } };
-                Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, row * TrackHeight + 4);
+                Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, geometry.Row(row).ClipTop);
+                Panel.SetZIndex(block, 1);
                 TimelineCanvas.Children.Add(block);
             }
         }
@@ -228,7 +266,7 @@ public partial class TimelineSurface : UserControl
     {
         var header = new Border
         {
-            Height = TrackHeight,
+            Height = geometry.Row(row).Height, Width = TimelineTrackGeometry.HeaderWidth,
             Background = row % 2 == 0 ? new SolidColorBrush(Color.FromRgb(45, 50, 59)) : new SolidColorBrush(Color.FromRgb(40, 45, 53)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(74, 81, 92)), BorderThickness = new(0, 0, 1, 1),
             Child = new StackPanel
@@ -241,33 +279,40 @@ public partial class TimelineSurface : UserControl
                 }
             }
         };
+        Canvas.SetTop(header, geometry.Row(row).Top);
+        header.Tag = track.Id;
         TrackHeaders.Children.Add(header);
         var background = new Rectangle
         {
-            Width = width, Height = TrackHeight,
+            Width = width, Height = geometry.Row(row).Height,
             Fill = row % 2 == 0 ? new SolidColorBrush(Color.FromRgb(34, 39, 47)) : new SolidColorBrush(Color.FromRgb(31, 35, 42)),
-            Stroke = new SolidColorBrush(Color.FromRgb(57, 63, 73)), StrokeThickness = 0.5,
+            StrokeThickness = 0,
             IsHitTestVisible = false
         };
-        Canvas.SetTop(background, row * TrackHeight);
+        background.Tag = track.Id;
+        Canvas.SetTop(background, geometry.Row(row).Top);
         TimelineCanvas.Children.Add(background);
+        var separator = new Rectangle { Width = width, Height = 1, Fill = header.BorderBrush, IsHitTestVisible = false };
+        Canvas.SetTop(separator, geometry.Row(row).Bottom - 1);
+        TimelineCanvas.Children.Add(separator);
     }
 
     private void DrawClip(Track track, Clip clip, int row)
     {
         double left = ToDouble(viewport.TicksToPixels(clip.StartTicks));
-        double width = Math.Max(MinimumClipWidth, ToDouble(viewport.TicksToPixels(clip.DurationTicks)));
+        double width = ToDouble(viewport.TicksToPixels(clip.DurationTicks));
         var state = new ClipVisual(track.Id, clip, row, left, width);
         var grid = new Grid
         {
-            Width = width, Height = TrackHeight - 8,
+            Width = width, Height = geometry.Row(row).ClipHeight,
             Background = track.Kind == TrackKind.Video ? videoBrush : audioBrush,
             ToolTip = $"{AssetName(clip.MediaAssetId)}\n{FormatTime(clip.StartTicks)} — {FormatTime(clip.EndTicks)}",
+            Tag = clip.Id,
             ClipToBounds = true
         };
         grid.Children.Add(new Border
         {
-            BorderBrush = clip.Id == selectedClipId ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(145, 175, 202)),
+            BorderBrush = clip.Id == selectedClipId ? Brushes.White : new SolidColorBrush(Color.FromRgb(145, 175, 202)),
             BorderThickness = clip.Id == selectedClipId ? new(2) : new(1),
             IsHitTestVisible = false
         });
@@ -277,19 +322,28 @@ public partial class TimelineSurface : UserControl
         grid.Children.Add(new TextBlock
         {
             Text = AssetName(clip.MediaAssetId), Foreground = Brushes.White, FontWeight = FontWeights.SemiBold,
-            Margin = new(10, 5, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new(10, 2, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false
         });
+        AddMediaVisual(grid, clip, width);
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
-        Canvas.SetLeft(grid, left); Canvas.SetTop(grid, row * TrackHeight + 4);
+        Canvas.SetLeft(grid, left); Canvas.SetTop(grid, geometry.Row(row).ClipTop);
+        // Clips may cross rows during a gesture; later lane backgrounds must not cover them.
+        Panel.SetZIndex(grid, 1);
         TimelineCanvas.Children.Add(grid);
     }
 
     private Thumb TrimThumb(ClipVisual state, HorizontalAlignment alignment, TrimEdge edge)
     {
         var thumb = GestureThumb();
-        thumb.Width = 7; thumb.HorizontalAlignment = alignment;
+        thumb.Width = Math.Min(7, state.Width / 3); thumb.HorizontalAlignment = alignment;
+        thumb.ToolTip = edge == TrimEdge.Start ? EditorText.Choose("開始位置をトリム", "Trim start") : EditorText.Choose("終了位置をトリム", "Trim end");
+        var handle = new FrameworkElementFactory(typeof(Border));
+        handle.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
+        handle.SetValue(Border.BorderBrushProperty, Brushes.White);
+        handle.SetValue(Border.BorderThicknessProperty, new Thickness(1, 0, 1, 0));
+        thumb.Template = new ControlTemplate(typeof(Thumb)) { VisualTree = handle };
         thumb.Cursor = Cursors.SizeWE; thumb.Tag = new TrimVisual(state, edge);
         thumb.DragStarted += Trim_DragStarted;
         thumb.DragDelta += Trim_DragDelta;
@@ -300,9 +354,10 @@ public partial class TimelineSurface : UserControl
     private void DrawPlayhead(double height)
     {
         double x = ToDouble(viewport.TicksToPixels(playheadTicks));
-        var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = Brushes.OrangeRed, StrokeThickness = 2, IsHitTestVisible = false };
+        var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 2, IsHitTestVisible = false };
         rulerPlayhead = rulerLine; RulerCanvas.Children.Add(rulerLine);
-        var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = Brushes.OrangeRed, StrokeThickness = 1.5, IsHitTestVisible = false };
+        var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 1.5, IsHitTestVisible = false };
+        Panel.SetZIndex(line, 3);
         canvasPlayhead = line; TimelineCanvas.Children.Add(line);
     }
 
@@ -311,17 +366,19 @@ public partial class TimelineSurface : UserControl
         var thumb = (Thumb)sender;
         var state = (ClipVisual)thumb.Tag;
         Select(state.Clip.Id, rebuild: false);
-        drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null);
+        drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null, Mouse.GetPosition(TimelineViewportHost));
+        Panel.SetZIndex(drag.Element, 2);
         Focus();
     }
 
     private void Body_DragDelta(object sender, DragDeltaEventArgs e)
     {
         if (drag is null) return;
-        drag.DeltaX += e.HorizontalChange; drag.DeltaY += e.VerticalChange;
+        var pointer = Mouse.GetPosition(TimelineViewportHost);
+        drag.DeltaX = pointer.X - drag.PointerStart.X; drag.DeltaY = pointer.Y - drag.PointerStart.Y;
         Canvas.SetLeft(drag.Element, Math.Max(0, drag.Visual.Left + drag.DeltaX));
-        Canvas.SetTop(drag.Element, Math.Clamp(drag.Visual.Row * TrackHeight + 4 + drag.DeltaY, 4,
-            Math.Max(4, TimelineCanvas.Height - TrackHeight + 4)));
+        Canvas.SetTop(drag.Element, Math.Clamp(geometry.Row(drag.Visual.Row).ClipTop + drag.DeltaY, geometry.Row(0).ClipTop,
+            geometry.Row(geometry.Count - 1).ClipTop));
     }
 
     private void Body_DragCompleted(object sender, DragCompletedEventArgs e)
@@ -348,17 +405,18 @@ public partial class TimelineSurface : UserControl
         var thumb = (Thumb)sender;
         var value = (TrimVisual)thumb.Tag;
         Select(value.Visual.Clip.Id, rebuild: false);
-        drag = new(value.Visual, thumb, thumb.Parent as FrameworkElement ?? thumb, value.Edge);
+        drag = new(value.Visual, thumb, thumb.Parent as FrameworkElement ?? thumb, value.Edge, Mouse.GetPosition(TimelineViewportHost));
+        Panel.SetZIndex(drag.Element, 2);
         Focus();
     }
 
     private void Trim_DragDelta(object sender, DragDeltaEventArgs e)
     {
         if (drag is null) return;
-        drag.DeltaX += e.HorizontalChange;
+        drag.DeltaX = Mouse.GetPosition(TimelineViewportHost).X - drag.PointerStart.X;
         if (drag.Edge == TrimEdge.Start)
         {
-            double delta = Math.Clamp(drag.DeltaX, -drag.Visual.Left, drag.Visual.Width - MinimumClipWidth);
+            double delta = Math.Clamp(drag.DeltaX, -drag.Visual.Left, drag.Visual.Width - Math.Min(MinimumClipWidth, drag.Visual.Width));
             Canvas.SetLeft(drag.Element, drag.Visual.Left + delta);
             drag.Element.Width = drag.Visual.Width - delta;
         }
@@ -415,10 +473,10 @@ public partial class TimelineSurface : UserControl
             TimelineEditPlanner.SnapTargets(sequence, excludedClipId, playheadTicks)).Ticks;
     }
 
-    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => SetPlayhead(e.GetPosition(RulerCanvas).X);
+    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => SetPlayhead(e.GetPosition(RulerViewportHost).X);
     private void Timeline_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource == TimelineCanvas) { Select(null); SetPlayhead(e.GetPosition(TimelineCanvas).X); }
+        if (e.OriginalSource == TimelineCanvas) { Select(null); SetPlayhead(e.GetPosition(TimelineViewportHost).X); }
     }
 
     public void SetCursorTicks(long ticks)
@@ -436,7 +494,7 @@ public partial class TimelineSurface : UserControl
     private void SetPlayhead(double pixel)
     {
         if (sequence is null) return;
-        long value = viewport.PixelsToTicks((decimal)Math.Max(0, pixel));
+        long value = Coordinates.ViewXToTicks((decimal)pixel);
         value = Math.Min(sequence.DurationTicks, TimelineSnapping.QuantizeToFrame(value, sequence.Settings.FrameRate));
         playheadTicks = value;
         PlayheadChanged?.Invoke(this, EventArgs.Empty);
@@ -451,10 +509,20 @@ public partial class TimelineSurface : UserControl
         if (rebuild) Rebuild();
     }
 
-    private void TimelineScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    private void Viewport_SizeChanged(object sender, SizeChangedEventArgs e) => Rebuild();
+    private void HorizontalScroll_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        RulerScroll.ScrollToHorizontalOffset(e.HorizontalOffset);
-        HeaderScroll.ScrollToVerticalOffset(e.VerticalOffset);
+        if (RulerTranslation is null || TimelineTranslation is null) return;
+        RulerTranslation.X = TimelineTranslation.X = -e.NewValue;
+    }
+    private void ScrollTo(double offset) => HorizontalScroll.Value = Math.Clamp(offset, 0, HorizontalScroll.Maximum);
+    private void UpdateScroll()
+    {
+        HorizontalScroll.ViewportSize = Math.Max(1, TimelineViewportHost.ActualWidth);
+        HorizontalScroll.Maximum = Math.Max(0, TimelineCanvas.Width - HorizontalScroll.ViewportSize);
+        HorizontalScroll.LargeChange = HorizontalScroll.ViewportSize * .8;
+        HorizontalScroll.SmallChange = 32;
+        ScrollTo(HorizontalScroll.Value);
     }
 
     private Dictionary<Guid, string> BuildTrackLabels(Sequence value)
@@ -496,8 +564,9 @@ public partial class TimelineSurface : UserControl
 
     private sealed record ClipVisual(Guid TrackId, Clip Clip, int Row, double Left, double Width);
     private sealed record TrimVisual(ClipVisual Visual, TrimEdge Edge);
-    private sealed class DragState(ClipVisual visual, Thumb thumb, FrameworkElement element, TrimEdge? edge)
+    private sealed class DragState(ClipVisual visual, Thumb thumb, FrameworkElement element, TrimEdge? edge, Point pointerStart)
     {
+        public Point PointerStart { get; } = pointerStart;
         public ClipVisual Visual { get; } = visual;
         public Thumb Thumb { get; } = thumb;
         public FrameworkElement Element { get; } = element;

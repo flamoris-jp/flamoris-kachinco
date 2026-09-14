@@ -34,7 +34,16 @@ public partial class MainWindow : Window
         relink = new(mediaProbe);
         InitializeProduction();
         BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
-        Refresh("新規プロジェクトを作成するか、保存済みのプロジェクトを開いてください。");
+        Refresh(EditorText.ImportGuidance);
+    }
+
+    private void Language_Click(object sender, RoutedEventArgs e)
+    {
+        string language = ((MenuItem)sender).Tag?.ToString() == "en" ? "en" : "ja";
+        EditorText.Culture = CultureInfo.GetCultureInfo(language == "ja" ? "ja-JP" : "en-US");
+        Resources.MergedDictionaries[0] = new ResourceDictionary { Source = new Uri($"/Kachinco.App;component/Strings.{language}.xaml", UriKind.Relative) };
+        JapaneseMenu.IsChecked = language == "ja"; EnglishMenu.IsChecked = language == "en";
+        Refresh();
     }
 
     private void NewLandscape_Click(object sender, RoutedEventArgs e) => NewProject(SequenceSettings.Landscape);
@@ -47,10 +56,27 @@ public partial class MainWindow : Window
         selectedSequenceId = Guid.NewGuid(); selectedMediaId = selectedClipId = null;
         Apply("新しいプロジェクトを作成しました。",
             new CreateProject(Guid.NewGuid(), "新しいプロジェクト"),
-            new CreateSequence(selectedSequenceId.Value, "シーケンス 1", settings, 60 * TimelineTime.TicksPerSecond),
+            new CreateSequence(selectedSequenceId.Value, "シーケンス 1", settings, 8 * TimelineTime.TicksPerSecond),
             new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "音声 1", TrackKind.Audio),
             new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "映像 1", TrackKind.Video),
             new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "字幕 1", TrackKind.Subtitle));
+    }
+
+    private void AddLandscapeSequence_Click(object sender, RoutedEventArgs e) => AddSequence(SequenceSettings.Landscape);
+    private void AddPortraitSequence_Click(object sender, RoutedEventArgs e) => AddSequence(SequenceSettings.Portrait);
+    private void AddSequence(SequenceSettings settings)
+    {
+        var snapshot = session.GetProject();
+        var id = Guid.NewGuid();
+        var commands = new List<EditCommand>();
+        if (snapshot.Project is null) commands.Add(new CreateProject(Guid.NewGuid(), "新しいプロジェクト"));
+        commands.Add(new CreateSequence(id, $"シーケンス {(snapshot.Project?.Sequences.Length ?? 0) + 1}", settings, 8 * TimelineTime.TicksPerSecond));
+        commands.Add(new AddTrack(id, Guid.NewGuid(), "音声", TrackKind.Audio));
+        commands.Add(new AddTrack(id, Guid.NewGuid(), "映像", TrackKind.Video));
+        commands.Add(new AddTrack(id, Guid.NewGuid(), "字幕", TrackKind.Subtitle));
+        var result = session.Execute(new([.. commands], snapshot.Revision));
+        if (result.Success) selectedSequenceId = id;
+        Show(result, EditorText.PlacementGuidance);
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
@@ -97,7 +123,6 @@ public partial class MainWindow : Window
 
     private async void Register_Click(object sender, RoutedEventArgs e)
     {
-        if (session.GetProject().Project is null) { Refresh("先にプロジェクトを作成してください。"); return; }
         var picker = new OpenFileDialog { Filter = "MOV / WAV (*.mov;*.wav)|*.mov;*.wav" };
         if (picker.ShowDialog(this) != true) return;
         SetBusy(true);
@@ -107,7 +132,8 @@ public partial class MainWindow : Window
             if (!probed.Success) { ShowErrors(probed.Diagnostics); return; }
             var asset = probed.Value!.ToMediaAsset(Guid.NewGuid());
             selectedMediaId = asset.Id; selectedClipId = null;
-            Apply($"{asset.Name} を読み込みました。", new RegisterMedia(asset));
+            var snapshot = session.GetProject();
+            Show(session.Execute(EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト")), $"{asset.Name} を読み込みました。");
         }
         finally { SetBusy(false); }
     }
@@ -278,7 +304,9 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         bool editingText = Keyboard.FocusedElement is TextBoxBase { IsReadOnly: false } or PasswordBox;
-        if (!editingText && e.Key == Key.Delete) { Timeline.DeleteSelected(); e.Handled = true; }
+        if (!editingText && Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Space) { Play_Click(sender, e); e.Handled = true; }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.S) { Save_Click(sender, e); e.Handled = true; }
+        else if (!editingText && e.Key == Key.Delete) { Timeline.DeleteSelected(); e.Handled = true; }
         else if (!editingText && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Z) { Undo_Click(sender, e); e.Handled = true; }
         else if (!editingText && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Y) { Redo_Click(sender, e); e.Handled = true; }
         else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.O) { Open_Click(sender, e); e.Handled = true; }
@@ -315,10 +343,19 @@ public partial class MainWindow : Window
         SequenceList.ItemsSource = project is null ? Array.Empty<Sequence>() : TimelineQueries.ListSequences(project);
         var sequence = project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId) ?? project?.Sequences.FirstOrDefault();
         selectedSequenceId = sequence?.Id; SequenceList.SelectedItem = sequence;
+        Timeline.SetMediaContext(filename);
         Timeline.LoadProject(project, selectedSequenceId, selectedClipId);
+        var guidance = EditorStartup.Guidance(project, sequence);
+        MediaGuidance.Text = guidance switch { EditorGuidance.ImportMedia => EditorText.ImportGuidance, EditorGuidance.CreateSequence => EditorText.SequenceGuidance, EditorGuidance.PlaceMedia => EditorText.PlacementGuidance, _ => EditorText.EditGuidance };
+        WelcomeText.Text = MediaGuidance.Text;
+        WelcomeSequenceChoices.Visibility = guidance == EditorGuidance.CreateSequence ? Visibility.Visible : Visibility.Collapsed;
+        WelcomePanel.Visibility = sequence is null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewInfo.Visibility = sequence is null || PreviewImage.Source is not null ? Visibility.Collapsed : Visibility.Visible;
+        SaveButton.IsEnabled = project is not null;
+        PlayButton.IsEnabled = PrepareButton.IsEnabled = sequence is not null;
         selectedClipId = Timeline.SelectedClipId;
-        PreviewInfo.Text = sequence is null ? "シーケンスがありません" :
-            $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} 秒";
+        PreviewInfo.Text = sequence is null ? EditorText.Choose("シーケンスがありません", "No sequence") :
+            $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} s";
         UndoButton.IsEnabled = UndoMenuItem.IsEnabled = snapshot.CanUndo;
         RedoButton.IsEnabled = RedoMenuItem.IsEnabled = snapshot.CanRedo;
         SplitButton.IsEnabled = selectedClipId is not null;
@@ -329,12 +366,13 @@ public partial class MainWindow : Window
         if (message is not null) Status.Text = message;
         refreshing = false;
         RefreshInspector(); RefreshTimelineStatus();
+        RefreshPlaybackFeedback();
     }
 
     private void RefreshTimelineStatus()
     {
         RefreshClapperOverlay();
-        PlayheadText.Text = $"再生ヘッド {Seconds(Timeline.PlayheadTicks)} 秒";
+        PlayheadText.Text = $"{EditorText.Choose("再生ヘッド", "Playhead")} {Seconds(Timeline.PlayheadTicks)} s";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         SplitButton.IsEnabled = selectedClipId is not null;
     }
@@ -343,6 +381,8 @@ public partial class MainWindow : Window
     {
         var project = session.GetProject().Project;
         var selected = FindSelectedClip(project);
+        ClipContext.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        ContextClipName.Text = selected is { } chosen ? project?.Assets.FirstOrDefault(a => a.Id == chosen.Clip.MediaAssetId)?.Name : "";
         InspectorEmpty.Visibility = selected is null && SelectedAsset(project) is null ? Visibility.Visible : Visibility.Collapsed;
         ClipInspector.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         AssetInspector.Visibility = selected is null && SelectedAsset(project) is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -365,9 +405,9 @@ public partial class MainWindow : Window
             var state = MediaReferenceResolver.Inspect(project!, filename).First(x => x.MediaAssetId == asset.Id);
             AssetNameText.Text = asset.Name; AssetIdText.Text = asset.Id.ToString();
             AssetPathText.Text = state.ResolvedPath ?? asset.SourcePath;
-            AssetMetadataText.Text = $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} 秒" +
+            AssetMetadataText.Text = $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s" +
                 (asset.SampleRate is { } rate ? $"\n{rate} Hz · {asset.Channels ?? 0} ch" : "") +
-                (state.IsAvailable ? "\n利用可能" : "\n見つかりません");
+                "\n" + (state.IsAvailable ? EditorText.Choose("利用可能", "Available") : EditorText.Choose("見つかりません", "Missing"));
         }
     }
 
@@ -409,7 +449,7 @@ public partial class MainWindow : Window
     private sealed record MediaAssetRow(MediaAsset Asset, string Name, string Details, string State, Brush StateBrush)
     {
         public static MediaAssetRow Create(MediaAsset asset, MediaAvailability availability) => new(asset, asset.Name,
-            $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} 秒",
+            $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s",
             availability.IsAvailable ? "●" : "⚠",
             availability.IsAvailable ? Brushes.SeaGreen : Brushes.OrangeRed);
     }

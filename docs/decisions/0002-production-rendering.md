@@ -18,7 +18,9 @@ same snapshot exporter as final output. Windows MediaPlayer supplies actual
 playback and media position; the adapter converts that position to canonical ticks.
 UI redraw notifications never advance time themselves. Editing invalidates the
 preview by project revision; no stale preview is presented as the current project.
-Preparing a preview is explicit and cancellable. This is render-ahead playback,
+Preparing a preview is visible and cancellable. Issue #7 makes Play prepare a cold
+preview automatically; the explicit prepare-without-playing action remains.
+This is render-ahead playback,
 not a claim of interactive real-time full-resolution compositing.
 
 The encoder accepts only rendered frames and mixed audio. It writes temporary
