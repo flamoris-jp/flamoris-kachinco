@@ -1,7 +1,28 @@
-# Production architecture — foundation v1
+# Production architecture — shared foundation and production slice
 
 Authority: Issue #1 defines this implementation's scope. This document defines the
 implemented contracts; `project-plan.md` retains the broader product vision.
+
+## Current production implementation (Issue #5)
+
+The sections below preserve the original foundation rationale. Their explicitly
+foundation-only deferrals are superseded by these current contracts:
+
+- [ADR 0002](decisions/0002-production-rendering.md): shared decode/composition/mix,
+  render-ahead playback and FFmpeg production encoding.
+- [ADR 0003](decisions/0003-live-mcp.md): stdio bridge to the live Windows session.
+- [ADR 0004](decisions/0004-authoring-v2.md): persistent Clappers/Recipes/provenance,
+  v1 migration and bounded worker. Current output is schema v2.
+- [Production acceptance](../staging/windows-production.md): concrete UI workflow,
+  prerequisites, limits and unperformed human acceptance.
+
+`SetSequenceDuration` now explicitly changes sequence duration. Media placement may
+include that command before `InsertClip` in one transaction; neither WPF nor an
+encoder silently changes persistent duration. Core is still independent of WPF,
+FFmpeg and Python. Windows rasterizers are injected shared RGBA producers, not
+viewport capture. All new features preserve the existing command/evaluator authority.
+
+## Foundation rationale (historical implementation scope)
 
 ## Goals and non-goals
 

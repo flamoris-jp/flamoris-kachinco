@@ -2,7 +2,12 @@
 
 - [Production architecture](production-architecture.md): implemented decisions and boundaries.
 - [Roadmap](roadmap.md): active phased delivery order.
-- [Editing API](api-contract.md): headless commands/queries and future MCP mapping.
-- [Project format v1](project-format-v1.md): stable `.fkproj` contract.
+- [Editing API](api-contract.md): headless commands/queries and live MCP mapping.
+- [Project format v1](project-format-v1.md): frozen input `.fkproj` contract.
 - [Project plan](project-plan.md): original long-term Clapper/Recipe vision.
 - [Windows acceptance](../staging/windows-foundation.md): manual shell checks.
+
+- [Rendering ADR](decisions/0002-production-rendering.md): shared compositor/export/playback.
+- [Live MCP ADR](decisions/0003-live-mcp.md): local bridge and shared session.
+- [Authoring v2 ADR](decisions/0004-authoring-v2.md): migration, Clappers, Recipes and provenance.
+- [Production Windows workflow](../staging/windows-production.md): prerequisites and acceptance.

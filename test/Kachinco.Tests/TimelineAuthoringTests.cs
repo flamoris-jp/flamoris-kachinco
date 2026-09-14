@@ -7,6 +7,29 @@ namespace Kachinco.Tests;
 public sealed class TimelineAuthoringTests
 {
     [TestMethod]
+    public void FitProjectsLongSequencesBelowInteractiveZoomFloor()
+    {
+        long duration = TimelineTime.SecondsToTicks(60 * 60);
+        var viewport = TimelineViewport.Fit(duration, 900m);
+        Assert.IsTrue(viewport.IsValid);
+        Assert.IsTrue(viewport.PixelsPerSecond < TimelineViewport.MinimumInteractivePixelsPerSecond);
+        Assert.AreEqual(900m, viewport.TicksToPixels(duration));
+    }
+
+    [TestMethod]
+    public void ZoomPreservesDirectionAfterFitBelowInteractiveFloor()
+    {
+        var fitted = TimelineViewport.Fit(TimelineTime.SecondsToTicks(60 * 60), 900m);
+        var zoomedOut = fitted.ZoomBy(0.8m);
+        var zoomedIn = fitted.ZoomBy(1.25m);
+        Assert.IsTrue(zoomedOut.PixelsPerSecond < fitted.PixelsPerSecond);
+        Assert.IsTrue(zoomedIn.PixelsPerSecond > fitted.PixelsPerSecond);
+        Assert.IsTrue(zoomedIn.PixelsPerSecond < TimelineViewport.MinimumInteractivePixelsPerSecond);
+        Assert.AreEqual(TimelineViewport.MinimumInteractivePixelsPerSecond,
+            new TimelineViewport(TimelineViewport.MinimumInteractivePixelsPerSecond).ZoomBy(0.8m).PixelsPerSecond);
+    }
+
+    [TestMethod]
     public void PixelTimeProjectionIsDeterministicAcrossZoomAndDoesNotAccumulate()
     {
         foreach (var pixelsPerSecond in new decimal[] { 4m, 31.25m, 80m, 1600m })

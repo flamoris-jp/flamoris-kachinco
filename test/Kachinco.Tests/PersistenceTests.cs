@@ -72,7 +72,7 @@ public sealed class PersistenceTests
     public void DuplicatePropertiesTimebaseAndDuplicateIdsFail()
     {
         var f = new Fixture(); var json = ProjectJson.Serialize(f.Project).Value!;
-        Assert.IsFalse(ProjectJson.Deserialize(json.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 1, \"schemaVersion\": 1")).Success);
+        Assert.IsFalse(ProjectJson.Deserialize(json.Replace("\"schemaVersion\": 2", "\"schemaVersion\": 2, \"schemaVersion\": 2")).Success);
         var root = JsonNode.Parse(json)!; root["timebase"] = "120000";
         Assert.IsFalse(ProjectJson.Deserialize(root.ToJsonString()).Success);
         root = JsonNode.Parse(json)!; root["project"]!["assets"]![0]!["id"] = f.ProjectId.ToString();
