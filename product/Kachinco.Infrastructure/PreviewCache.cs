@@ -87,8 +87,9 @@ public sealed class PreviewContext
     // Conservative intersection signature for the device queue plus in-flight forward work.
     public string WindowKey(long start, long end)
     {
-        return Hash(new { Project.Id, Sequence.Id, Sequence.Settings, Sequence.DurationTicks,
-            Tracks = Sequence.Tracks.Where(t => t.Enabled).Select(t => new { t.Id, t.Kind,
+        return Hash(new { ProjectId = Project.Id, SequenceId = Sequence.Id, Sequence.Settings,
+            Tracks = Sequence.Tracks.Where(t => t.Enabled && (t.Clips.Any(c => c.Enabled && c.StartTicks < end && c.EndTicks > start) ||
+                t.Captions.Any(c => c.Enabled && c.StartTicks < end && c.StartTicks + c.DurationTicks > start))).Select(t => new { t.Id, t.Kind,
                 Clips = t.Clips.Where(c => c.Enabled && c.StartTicks < end && c.EndTicks > start)
                     .Select(c => new { Clip = c, Media = MediaKey(c.MediaAssetId) }).ToArray(),
                 Captions = t.Captions.Where(c => c.Enabled && c.StartTicks < end && c.StartTicks + c.DurationTicks > start).ToArray() }).ToArray() });
