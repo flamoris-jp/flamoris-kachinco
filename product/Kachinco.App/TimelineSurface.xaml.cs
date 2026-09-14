@@ -196,7 +196,14 @@ public partial class TimelineSurface : UserControl
         else InteractionFailed?.Invoke(this, new(result.Diagnostics));
     }
 
+    private bool rebuilding;
     private void Rebuild()
+    {
+        if (rebuilding) return;
+        rebuilding = true;
+        try { RebuildCore(); } finally { rebuilding = false; }
+    }
+    private void RebuildCore()
     {
         if (drag is not null) return;
         BeginVisualPlan();
