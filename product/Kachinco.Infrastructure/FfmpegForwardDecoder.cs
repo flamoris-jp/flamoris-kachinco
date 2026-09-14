@@ -73,7 +73,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             Process.Start(); cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
-        protected async Task<byte[]> ReadAsync(int size, CancellationToken token)
+        protected async Task<byte[]> ReadAsync(int size, CancellationToken token, bool padPcmTail = false)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, Lifetime);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -86,6 +86,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
                 {
                     await Process.WaitForExitAsync(timeout.Token); await ErrorTask;
                     if (Process.ExitCode != 0) throw new InvalidDataException("FFmpeg forward decode failed: " + Error);
+                    if (padPcmTail && offset % 8 == 0) return data; // Match independent decoder: final missing PCM samples are silence.
                     if (offset == 0) throw new EndOfStreamException("Source has no frame at the requested time.");
                     throw new InvalidDataException("Incomplete decoded frame/PCM block.");
                 }
@@ -186,7 +187,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
         {
-            var bytes = await ReadAsync(count * 8, token); var samples = new float[count * 2];
+            var bytes = await ReadAsync(count * 8, token, padPcmTail: true); var samples = new float[count * 2];
             for (int i = 0; i < samples.Length; i++)
             {
                 samples[i] = BitConverter.Int32BitsToSingle(System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i * 4, 4)));
