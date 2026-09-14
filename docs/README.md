@@ -15,3 +15,5 @@
 - [Editor UX self-review](issue-7-self-review.md) and [Windows hands-on checklist](../staging/windows-issue7.md): automated evidence and remaining physical acceptance.
 
 - [Interactive preview contract](issue-9-interactive-preview.md), [self-review](issue-9-self-review.md) and [Windows hands-on](../staging/windows-issue9.md): Issue #9 current preview engine and remaining perceptual checks.
+
+- [Issue #9 Windows performance evidence](issue-9-performance.md): real codec timing, resource/cache measurements, restart investigation and unavailable device acceptance.

@@ -46,6 +46,13 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
 11. The unattended Windows fixture was marked dirty and opened a discard dialog at teardown.
     The test's injected snapshot is now marked clean; product save/discard behavior is intact.
 
+12. Windows measurements exposed 4–5 second restart stalls outside process start/stop.
+    Persistent redirected stderr drains now use one dedicated reader per bounded process,
+    isolating them from the frame/PCM ThreadPool. Instrumented before/after results are
+    retained in the performance note; Recipe kill/job isolation remains unchanged.
+13. A cursor at the half-open sequence end must not seek at duration minus one tick.
+    It now shows the final canonical output frame; Play from the end restarts at zero.
+
 ## Regression coverage
 
 - Scrub: arbitrary tick, 1,000 coalesced requests, cancellation-ignoring stale completion,
@@ -68,7 +75,7 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
 
 The current Windows harness records real 1080p/30 MOV + WAV codec measurements and separately
 attempts native device playback. See [Windows hands-on](../staging/windows-issue9.md) and the
-performance evidence recorded alongside it. CI audio-device absence is a limitation, not
+[performance evidence](issue-9-performance.md). CI audio-device absence is a limitation, not
 passed sound/sync acceptance. Full throughput can be below 30 fps; default 1/2 and selectable
 1/4, explicit dropped-frame counts and bounded buffering expose the degradation policy.
 
