@@ -55,6 +55,7 @@ public partial class TimelineSurface : UserControl
     private DragState? drag;
     private Line? rulerPlayhead;
     private Line? canvasPlayhead;
+    private Thumb? playheadHandle;
 
     public TimelineSurface()
     {
@@ -379,6 +380,13 @@ public partial class TimelineSurface : UserControl
         var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 1.5, IsHitTestVisible = false };
         Panel.SetZIndex(line, 3);
         canvasPlayhead = line; TimelineCanvas.Children.Add(line);
+        playheadHandle = GestureThumb(); playheadHandle.Width = 10; playheadHandle.Height = height;
+        playheadHandle.Cursor = Cursors.SizeWE; playheadHandle.ToolTip = EditorText.Choose("ドラッグしてフレームを確認", "Drag to scrub");
+        playheadHandle.DragStarted += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
+        playheadHandle.DragDelta += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
+        playheadHandle.DragCompleted += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
+        Canvas.SetLeft(playheadHandle, x - 5); Canvas.SetTop(playheadHandle, 0); Panel.SetZIndex(playheadHandle, 4);
+        TimelineCanvas.Children.Add(playheadHandle);
     }
 
     private void Body_DragStarted(object sender, DragStartedEventArgs e)
@@ -521,6 +529,7 @@ public partial class TimelineSurface : UserControl
         double pixel = ToDouble(viewport.TicksToPixels(next));
         if (rulerPlayhead is not null) rulerPlayhead.X1 = rulerPlayhead.X2 = pixel;
         if (canvasPlayhead is not null) canvasPlayhead.X1 = canvasPlayhead.X2 = pixel;
+        if (playheadHandle is not null) Canvas.SetLeft(playheadHandle, pixel - 5);
         PlayheadChanged?.Invoke(this, EventArgs.Empty);
     }
 

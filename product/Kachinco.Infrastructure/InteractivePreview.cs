@@ -53,7 +53,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         { context = value; return; }
         context = value;
         if (value is null) { Cancel(); Frame = null; PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
-        bool resume = playSession && wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
+        bool resume = (playSession || pending?.Play == true) && wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
         long next = old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id ? Math.Min(tick, value.Sequence.DurationTicks - 1) : 0;
         RequestFrame(next, resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
     }
@@ -83,7 +83,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     {
         if (value is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(value));
         if (Quality == value) return;
-        Quality = value; bool resume = playSession && wantPlay;
+        Quality = value; bool resume = (playSession || pending?.Play == true) && wantPlay;
         RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
     }
     public long ReadPositionTicks()
