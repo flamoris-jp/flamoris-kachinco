@@ -11,7 +11,7 @@
     <Grid x:Name="RulerHost" Grid.Row="0" Height="30">
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="RulerHeaderColumn"/><ColumnDefinition Width="*"/><ColumnDefinition Width="{x:Static SystemParameters.VerticalScrollBarWidth}"/></Grid.ColumnDefinitions>
       <Border Background="#2B2D31" BorderBrush="#484B50" BorderThickness="0,0,1,1">
-        <TextBlock Text="トラック" Foreground="#E7E7E7" VerticalAlignment="Center" Margin="8,0" />
+        <TextBlock Text="{DynamicResource Shell.Track}" Foreground="#E7E7E7" VerticalAlignment="Center" Margin="8,0" />
       </Border>
       <Grid x:Name="RulerViewportHost" Grid.Column="1" ClipToBounds="True" Background="#2B2D31" PreviewMouseLeftButtonDown="Ruler_MouseLeftButtonDown">
         <Canvas x:Name="RulerCanvas" HorizontalAlignment="Left" VerticalAlignment="Top" Height="30" Background="#2B2D31">

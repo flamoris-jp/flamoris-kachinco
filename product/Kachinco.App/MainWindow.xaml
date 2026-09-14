@@ -5,6 +5,8 @@
         Title="FLAMORIS Kachinco" Width="1320" Height="820" MinWidth="980" MinHeight="640"
         Background="#202124" Closing="Window_Closing" PreviewKeyDown="Window_PreviewKeyDown">
   <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Strings.ja.xaml"/></ResourceDictionary.MergedDictionaries>
     <SolidColorBrush x:Key="FamilyAccent" Color="#D20B3A" />
     <Style x:Key="CommandIconButton" TargetType="Button">
       <Setter Property="Width" Value="34"/><Setter Property="Height" Value="30"/>
@@ -18,62 +20,67 @@
     <Style TargetType="ComboBox"><Setter Property="Foreground" Value="#202124"/></Style>
     <Style TargetType="Button"><Setter Property="Foreground" Value="#202124"/><Setter Property="Padding" Value="8,3"/><Setter Property="Margin" Value="2"/></Style>
     <Style x:Key="PanelText" TargetType="TextBlock"><Setter Property="Foreground" Value="#E7E7E7"/></Style>
+      </ResourceDictionary>
   </Window.Resources>
   <DockPanel>
     <Menu DockPanel.Dock="Top">
-      <MenuItem Header="ファイル(_F)">
-        <MenuItem Header="新規・横長(_L)" Click="NewLandscape_Click" />
-        <MenuItem Header="新規・縦長(_P)" Click="NewPortrait_Click" />
+      <MenuItem Header="{DynamicResource Shell.FileF}">
+        <MenuItem Header="{DynamicResource Shell.NewlandscapeL}" Click="NewLandscape_Click" />
+        <MenuItem Header="{DynamicResource Shell.NewportraitP}" Click="NewPortrait_Click" />
         <Separator />
-        <MenuItem Header="開く(_O)…" Click="Open_Click" InputGestureText="Ctrl+O" />
-        <MenuItem Header="名前を付けて保存(_A)…" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
+        <MenuItem Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
+        <MenuItem Header="{DynamicResource Shell.SaveasA}" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
         <Separator />
-        <MenuItem Header="素材を読み込む(_I)…" Click="Register_Click" />
-        <MenuItem Header="動画を書き出す…" Click="Export_Click" />
+        <MenuItem Header="{DynamicResource Shell.ImportmediaI}" Click="Register_Click" />
+        <MenuItem Header="{DynamicResource Shell.Exportvideo}" Click="Export_Click" />
       </MenuItem>
-      <MenuItem Header="字幕(_T)">
-        <MenuItem Header="字幕を編集…" Click="EditCaptions_Click" />
-        <MenuItem Header="SRTを読み込む…" Click="ImportSrt_Click" />
-        <MenuItem Header="SRTを書き出す…" Click="ExportSrt_Click" />
+      <MenuItem Header="{DynamicResource Shell.CaptionsT}">
+        <MenuItem Header="{DynamicResource Shell.Editcaptions}" Click="EditCaptions_Click" />
+        <MenuItem Header="{DynamicResource Shell.ImportSRT}" Click="ImportSrt_Click" />
+        <MenuItem Header="{DynamicResource Shell.ExportSRT}" Click="ExportSrt_Click" />
       </MenuItem>
-      <MenuItem Header="編集(_E)">
-        <MenuItem x:Name="UndoMenuItem" Header="元に戻す(_U)" Click="Undo_Click" InputGestureText="Ctrl+Z" />
-        <MenuItem x:Name="RedoMenuItem" Header="やり直す(_R)" Click="Redo_Click" InputGestureText="Ctrl+Y" />
+      <MenuItem Header="{DynamicResource Shell.EditE}">
+        <MenuItem x:Name="UndoMenuItem" Header="{DynamicResource Shell.UndoU}" Click="Undo_Click" InputGestureText="Ctrl+Z" />
+        <MenuItem x:Name="RedoMenuItem" Header="{DynamicResource Shell.RedoR}" Click="Redo_Click" InputGestureText="Ctrl+Y" />
       </MenuItem>
-      <MenuItem Header="クリップ(_C)">
-        <MenuItem Header="再生ヘッド位置で分割(_S)" Click="Split_Click" />
-        <MenuItem Header="選択クリップを複製" Click="Duplicate_Click" />
-        <MenuItem Header="選択クリップを削除(_D)" Click="Delete_Click" InputGestureText="Delete" />
+      <MenuItem Header="{DynamicResource Shell.ClipC}">
+        <MenuItem Header="{DynamicResource Shell.SplitatplayheadS}" Click="Split_Click" />
+        <MenuItem Header="{DynamicResource Shell.Duplicateselectedclip}" Click="Duplicate_Click" />
+        <MenuItem Header="{DynamicResource Shell.DeleteselectedclipD}" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
-      <MenuItem Header="シーケンス(_S)"><MenuItem Header="映像トラックを追加" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="音声トラックを追加" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="長さを変更…" Click="SequenceDuration_Click" /></MenuItem>
-      <MenuItem Header="表示(_V)">
-        <MenuItem x:Name="SnappingMenuItem" Header="スナップ(_N)" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
-        <MenuItem Header="拡大(_I)" Click="ZoomIn_Click" />
-        <MenuItem Header="縮小(_O)" Click="ZoomOut_Click" />
+      <MenuItem Header="{DynamicResource Shell.SequenceS}"><MenuItem Header="{DynamicResource Shell.Addvideotrack}" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Addaudiotrack}" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Changeduration}" Click="SequenceDuration_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.ViewV}">
+        <MenuItem x:Name="SnappingMenuItem" Header="{DynamicResource Shell.SnappingN}" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
+        <MenuItem Header="{DynamicResource Shell.ZoominI}" Click="ZoomIn_Click" />
+        <MenuItem Header="{DynamicResource Shell.ZoomoutO}" Click="ZoomOut_Click" />
       </MenuItem>
-      <MenuItem Header="Clapper / Recipe"><MenuItem Header="名前付き範囲とRecipeを編集…" Click="Authoring_Click" /></MenuItem>
-      <MenuItem Header="AI接続"><MenuItem Header="MCPを開始 / 停止" Click="Mcp_Click" /></MenuItem>
-      <MenuItem Header="ヘルプ(_H)" />
+      <MenuItem Header="Clapper / Recipe"><MenuItem Header="{DynamicResource Shell.EditnamedrangesandRecipes}" Click="Authoring_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.AIconnection}"><MenuItem Header="{DynamicResource Shell.StartstopMCP}" Click="Mcp_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.Language}">
+        <MenuItem x:Name="JapaneseMenu" Header="日本語" IsCheckable="True" IsChecked="True" Tag="ja" Click="Language_Click"/>
+        <MenuItem x:Name="EnglishMenu" Header="English" IsCheckable="True" Tag="en" Click="Language_Click"/>
+      </MenuItem>
+      <MenuItem Header="{DynamicResource Shell.HelpH}" />
     </Menu>
     <ToolBarTray DockPanel.Dock="Top" IsLocked="True" Background="#F6F3F1">
       <ToolBar Background="#F6F3F1" BorderBrush="#D8D3D0" BorderThickness="0,0,0,1">
-        <Button Content="📂" Click="Open_Click" Style="{StaticResource CommandIconButton}" ToolTip="プロジェクトを開く (Ctrl+O)" />
-        <Button x:Name="SaveButton" Content="▣" Click="Save_Click" Style="{StaticResource CommandIconButton}" ToolTip="名前を付けて保存 (Ctrl+Shift+S)" />
+        <Button Content="📂" Click="Open_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.OpenprojectCtrlO}" />
+        <Button x:Name="SaveButton" Content="▣" Click="Save_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.SaveasCtrlShiftS}" />
         <Separator />
-        <Button x:Name="UndoButton" Content="↶" Click="Undo_Click" Style="{StaticResource CommandIconButton}" ToolTip="元に戻す (Ctrl+Z)" />
-        <Button x:Name="RedoButton" Content="↷" Click="Redo_Click" Style="{StaticResource CommandIconButton}" ToolTip="やり直す (Ctrl+Y)" />
+        <Button x:Name="UndoButton" Content="↶" Click="Undo_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.UndoCtrlZ}" />
+        <Button x:Name="RedoButton" Content="↷" Click="Redo_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.RedoCtrlY}" />
         <Separator />
-        <Button x:Name="PrepareButton" Content="プレビュー準備" Click="PreparePreview_Click" ToolTip="再生せずにプレビューを準備" />
-        <Button Content="|◀" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="前のフレーム" />
-        <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="再生 / 一時停止 (Space)" />
-        <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="停止 / 準備をキャンセル" />
-        <Button Content="▶|" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="次のフレーム" />
+        <Button x:Name="PrepareButton" Content="{DynamicResource Shell.Preparepreview}" Click="PreparePreview_Click" ToolTip="{DynamicResource Shell.Preparepreviewwithoutplaying}" />
+        <Button Content="|◀" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}" />
+        <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.PlaypauseSpace}" />
+        <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Stopcancelpreparation}" />
+        <Button Content="▶|" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}" />
         <Separator />
         <StackPanel x:Name="ClipContext" Orientation="Horizontal" Visibility="Collapsed">
           <TextBlock x:Name="ContextClipName" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="#D20B3A" Margin="4,0,8,0"/>
-          <Button x:Name="SplitButton" Content="✂" Click="Split_Click" Style="{StaticResource CommandIconButton}" ToolTip="再生ヘッド位置で分割" />
-          <Button Content="複製" Click="Duplicate_Click" />
-          <Button Content="削除" Click="Delete_Click" />
+          <Button x:Name="SplitButton" Content="✂" Click="Split_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Splitatplayhead}" />
+          <Button Content="{DynamicResource Shell.Duplicate}" Click="Duplicate_Click" />
+          <Button Content="{DynamicResource Shell.Delete}" Click="Delete_Click" />
         </StackPanel>
       </ToolBar>
     </ToolBarTray>
@@ -94,10 +101,10 @@
       <Border Background="#2B2D31" Padding="8">
         <DockPanel TextElement.Foreground="#E7E7E7">
           <StackPanel DockPanel.Dock="Top">
-            <TextBlock Text="プロジェクト / 素材" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <TextBlock Text="{DynamicResource Shell.ProjectMedia}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
             <WrapPanel>
-              <Button x:Name="ImportButton" Foreground="#202124" Content="MOV / WAV を読み込む" Click="Register_Click" />
-              <Button Foreground="#202124" Content="配置" Click="Insert_Click" ToolTip="再生ヘッド位置の互換トラックへ配置" />
+              <Button x:Name="ImportButton" Foreground="#202124" Content="{DynamicResource Shell.ImportMOVWAV}" Click="Register_Click" />
+              <Button Foreground="#202124" Content="{DynamicResource Shell.Place}" Click="Insert_Click" ToolTip="{DynamicResource Shell.Placeonacompatibletrackattheplayhead}" />
             </WrapPanel>
             <TextBlock x:Name="MediaGuidance" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,6,0,0"/>
           </StackPanel>
@@ -127,8 +134,8 @@
           <StackPanel x:Name="WelcomePanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380">
             <TextBlock Text="FLAMORIS Kachinco" Foreground="#E7E7E7" FontSize="20" TextAlignment="Center" Margin="0,0,0,12"/>
             <TextBlock x:Name="WelcomeText" Foreground="#B5BAC2" TextWrapping="Wrap" TextAlignment="Center"/>
-            <Button x:Name="WelcomeImport" Content="MOV / WAVを読み込む" Click="Register_Click" Margin="0,12,0,4"/>
-            <Button Content="プロジェクトを開く…" Click="Open_Click"/>
+            <Button x:Name="WelcomeImport" Content="{DynamicResource Shell.ImportMOVWAV}" Click="Register_Click" Margin="0,12,0,4"/>
+            <Button Content="{DynamicResource Shell.Openproject}" Click="Open_Click"/>
           </StackPanel>
           <Border x:Name="PlaybackOverlay" Background="#DE202124" VerticalAlignment="Bottom" Padding="12" Visibility="Collapsed">
             <StackPanel><TextBlock x:Name="PlaybackDetail" Foreground="#E7E7E7" TextWrapping="Wrap"/><ProgressBar x:Name="PlaybackProgress" Height="4" Margin="0,8,0,0" Foreground="#D20B3A"/></StackPanel>
@@ -141,32 +148,32 @@
       <Border Grid.Column="4" Background="#2B2D31" Padding="8">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Foreground="#E7E7E7">
           <StackPanel>
-            <TextBlock Text="インスペクター" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10" />
-            <TextBlock x:Name="InspectorEmpty" Text="素材またはクリップを選択してください。" Foreground="#B5BAC2" TextWrapping="Wrap" />
+            <TextBlock Text="{DynamicResource Shell.Inspector}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10" />
+            <TextBlock x:Name="InspectorEmpty" Text="{DynamicResource Shell.Selectmediaoraclip}" Foreground="#B5BAC2" TextWrapping="Wrap" />
             <StackPanel x:Name="AssetInspector" Visibility="Collapsed">
-              <TextBlock Text="素材" Foreground="#B5BAC2" />
+              <TextBlock Text="{DynamicResource Shell.Media}" Foreground="#B5BAC2" />
               <TextBlock x:Name="AssetNameText" FontWeight="SemiBold" TextWrapping="Wrap" />
               <TextBlock Visibility="Collapsed" x:Name="AssetIdText" FontSize="10" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,3" />
               <TextBlock x:Name="AssetPathText" TextWrapping="Wrap" Margin="0,4" />
               <TextBlock x:Name="AssetMetadataText" TextWrapping="Wrap" />
-              <Button x:Name="RelinkButton" Content="素材を再リンク…" Click="Relink_Click" Margin="0,8,0,0" />
+              <Button x:Name="RelinkButton" Content="{DynamicResource Shell.Relinkmedia}" Click="Relink_Click" Margin="0,8,0,0" />
             </StackPanel>
             <StackPanel x:Name="ClipInspector" Visibility="Collapsed">
-              <TextBlock Text="クリップ" Foreground="#B5BAC2" />
+              <TextBlock Text="{DynamicResource Shell.Clip}" Foreground="#B5BAC2" />
               <TextBlock x:Name="ClipNameText" FontWeight="SemiBold" TextWrapping="Wrap" />
               <TextBlock Visibility="Collapsed" x:Name="ClipIdText" FontSize="10" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,3,0,8" />
-              <TextBlock Text="開始（秒）" /><TextBox x:Name="ClipStartBox" />
-              <TextBlock Text="ソースイン（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipSourceInBox" />
-              <TextBlock Text="長さ（秒）" Margin="0,6,0,0" /><TextBox x:Name="ClipDurationBox" />
-              <TextBlock Text="合成" Margin="0,6,0,0" /><ComboBox x:Name="BlendBox" />
-              <TextBlock Text="不透明度（0〜1）" /><TextBox x:Name="OpacityBox" />
-              <TextBlock Text="位置 X / Y（px）" /><TextBox x:Name="TransformXBox" /><TextBox x:Name="TransformYBox" />
-              <TextBlock Text="拡大率 X / Y" /><TextBox x:Name="ScaleXBox" /><TextBox x:Name="ScaleYBox" />
-              <TextBlock Text="回転（度）" /><TextBox x:Name="RotationBox" />
-              <TextBlock Text="音量（0〜16）" /><TextBox x:Name="GainBox" />
-              <CheckBox x:Name="MutedBox" Content="音声をミュート" />
-              <CheckBox x:Name="ClipEnabledBox" Content="有効" Margin="0,8,0,0" />
-              <Button Content="変更を適用" Click="ApplyInspector_Click" Margin="0,8,0,0" />
+              <TextBlock Text="{DynamicResource Shell.Startseconds}" /><TextBox x:Name="ClipStartBox" />
+              <TextBlock Text="{DynamicResource Shell.Sourceinseconds}" Margin="0,6,0,0" /><TextBox x:Name="ClipSourceInBox" />
+              <TextBlock Text="{DynamicResource Shell.Durationseconds}" Margin="0,6,0,0" /><TextBox x:Name="ClipDurationBox" />
+              <TextBlock Text="{DynamicResource Shell.Blend}" Margin="0,6,0,0" /><ComboBox x:Name="BlendBox" />
+              <TextBlock Text="{DynamicResource Shell.Opacity01}" /><TextBox x:Name="OpacityBox" />
+              <TextBlock Text="{DynamicResource Shell.PositionXYpx}" /><TextBox x:Name="TransformXBox" /><TextBox x:Name="TransformYBox" />
+              <TextBlock Text="{DynamicResource Shell.ScaleXY}" /><TextBox x:Name="ScaleXBox" /><TextBox x:Name="ScaleYBox" />
+              <TextBlock Text="{DynamicResource Shell.Rotationdegrees}" /><TextBox x:Name="RotationBox" />
+              <TextBlock Text="{DynamicResource Shell.Gain016}" /><TextBox x:Name="GainBox" />
+              <CheckBox x:Name="MutedBox" Content="{DynamicResource Shell.Muteaudio}" />
+              <CheckBox x:Name="ClipEnabledBox" Content="{DynamicResource Shell.Enabled}" Margin="0,8,0,0" />
+              <Button Content="{DynamicResource Shell.Applychanges}" Click="ApplyInspector_Click" Margin="0,8,0,0" />
             </StackPanel>
           </StackPanel>
         </ScrollViewer>
@@ -177,15 +184,15 @@
         <DockPanel>
           <Border DockPanel.Dock="Top" Background="#2B2D31" Padding="8,5">
             <WrapPanel>
-              <TextBlock Text="タイムライン" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <TextBlock Text="{DynamicResource Shell.Timeline}" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
               <ComboBox x:Name="SequenceList" Width="170" DisplayMemberPath="Name" SelectionChanged="Sequence_Changed" />
-              <Button Content="＋ 横長" Click="AddLandscapeSequence_Click" ToolTip="横長シーケンスを追加"/>
-              <Button Content="＋ 縦長" Click="AddPortraitSequence_Click" ToolTip="縦長シーケンスを追加"/>
-        <ToggleButton x:Name="SnappingButton" Content="磁石 スナップ" IsChecked="True" Click="Snapping_Click" />
-        <Button Content="−" Click="ZoomOut_Click" ToolTip="タイムラインを縮小" />
+              <Button Content="{DynamicResource Shell.Landscape}" Click="AddLandscapeSequence_Click" ToolTip="{DynamicResource Shell.Addlandscapesequence}"/>
+              <Button Content="{DynamicResource Shell.Portrait}" Click="AddPortraitSequence_Click" ToolTip="{DynamicResource Shell.Addportraitsequence}"/>
+        <ToggleButton x:Name="SnappingButton" Content="{DynamicResource Shell.Snap}" IsChecked="True" Click="Snapping_Click" />
+        <Button Content="−" Click="ZoomOut_Click" ToolTip="{DynamicResource Shell.Zoomtimelineout}" />
         <TextBlock Foreground="#E7E7E7" x:Name="ZoomText" VerticalAlignment="Center" MinWidth="62" TextAlignment="Center" />
-        <Button Content="＋" Click="ZoomIn_Click" ToolTip="タイムラインを拡大" />
-              <Button Content="全体" Click="FitTimeline_Click" ToolTip="シーケンス全体を表示" />
+        <Button Content="＋" Click="ZoomIn_Click" ToolTip="{DynamicResource Shell.Zoomtimelinein}" />
+              <Button Content="{DynamicResource Shell.Fit}" Click="FitTimeline_Click" ToolTip="{DynamicResource Shell.Fitsequence}" />
               <TextBlock x:Name="PlayheadText" Foreground="#D5DAE1" VerticalAlignment="Center" Margin="14,0,0,0" />
             </WrapPanel>
           </Border>

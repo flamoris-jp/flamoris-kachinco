@@ -37,6 +37,15 @@ public partial class MainWindow : Window
         Refresh(EditorText.ImportGuidance);
     }
 
+    private void Language_Click(object sender, RoutedEventArgs e)
+    {
+        string language = ((MenuItem)sender).Tag?.ToString() == "en" ? "en" : "ja";
+        EditorText.Culture = CultureInfo.GetCultureInfo(language == "ja" ? "ja-JP" : "en-US");
+        Resources.MergedDictionaries[0] = new ResourceDictionary { Source = new Uri($"/Kachinco.App;component/Strings.{language}.xaml", UriKind.Relative) };
+        JapaneseMenu.IsChecked = language == "ja"; EnglishMenu.IsChecked = language == "en";
+        Refresh();
+    }
+
     private void NewLandscape_Click(object sender, RoutedEventArgs e) => NewProject(SequenceSettings.Landscape);
     private void NewPortrait_Click(object sender, RoutedEventArgs e) => NewProject(SequenceSettings.Portrait);
     private void NewProject(SequenceSettings settings)
@@ -362,7 +371,7 @@ public partial class MainWindow : Window
     private void RefreshTimelineStatus()
     {
         RefreshClapperOverlay();
-        PlayheadText.Text = $"再生ヘッド {Seconds(Timeline.PlayheadTicks)} 秒";
+        PlayheadText.Text = $"{EditorText.Choose("再生ヘッド", "Playhead")} {Seconds(Timeline.PlayheadTicks)} s";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         SplitButton.IsEnabled = selectedClipId is not null;
     }
