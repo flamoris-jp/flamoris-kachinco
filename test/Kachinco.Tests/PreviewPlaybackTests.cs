@@ -82,6 +82,41 @@ public sealed class PreviewPlaybackTests
         Assert.IsFalse(playback.Matches(f.Session.GetProject().Revision + 1, f.SequenceId));
     }
     [TestMethod]
+    public async Task NativePositionAndTransportExceptionsBecomeFailures()
+    {
+        var f = new Fixture();
+        foreach (string operation in new[] { "read", "seek", "pause", "stop", "resume" })
+        {
+            var player = new FakePlayer();
+            using var playback = new PreviewPlayback(() => player, Complete);
+            var task = playback.PrepareAsync(f.Session.GetProject(), f.SequenceId, 0, true);
+            player.SignalOpen(); await task;
+            if (operation == "resume") playback.Pause();
+            player.ThrowOnOperation = true;
+            switch (operation)
+            {
+                case "read": playback.ReadPositionTicks(); break;
+                case "seek": playback.Seek(Fixture.T); break;
+                case "pause": playback.Pause(); break;
+                case "stop": playback.Stop(); break;
+                case "resume": playback.Toggle(); break;
+            }
+            Assert.AreEqual(PreviewState.Failed, playback.State, operation);
+            StringAssert.Contains(playback.Error!, "native operation failed");
+            Assert.IsTrue(player.Disposed);
+        }
+    }
+    [TestMethod]
+    public async Task PauseDuringPreparationCancelsPendingAutoplay()
+    {
+        var f = new Fixture(); var player = new FakePlayer();
+        using var playback = new PreviewPlayback(() => player, Complete);
+        var task = playback.PrepareAsync(f.Session.GetProject(), f.SequenceId, 0, true);
+        playback.Pause(); player.SignalOpen(); await task;
+        Assert.AreEqual(PreviewState.Stopped, playback.State);
+        Assert.AreEqual(0, player.PlayCalls); Assert.IsTrue(player.Disposed);
+    }
+    [TestMethod]
     public async Task RenderingProgressPrecedesPlayingAndRejectsLateProgress()
     {
         // A deterministic context lets us drain queued progress without timing-based assertions.
@@ -118,12 +153,15 @@ public sealed class PreviewPlaybackTests
         public event EventHandler? Opened;
         public event EventHandler? Ended;
         public event EventHandler<Exception>? Failed;
-        public TimeSpan Position { get; set; }
+        private TimeSpan position;
+        public bool ThrowOnOperation { get; set; }
+        public TimeSpan Position { get { Check(); return position; } set { Check(); position = value; } }
         public int PlayCalls { get; private set; }
         public bool Disposed { get; private set; }
         public void Open(string path) { }
-        public void Play() => PlayCalls++;
-        public void Pause() { }
+        public void Play() { Check(); PlayCalls++; }
+        public void Pause() => Check();
+        private void Check() { if (ThrowOnOperation) throw new InvalidOperationException("native operation failed"); }
         public void Dispose() => Disposed = true;
         public void SignalOpen() => Opened?.Invoke(this, EventArgs.Empty);
         public void SignalEnd() => Ended?.Invoke(this, EventArgs.Empty);

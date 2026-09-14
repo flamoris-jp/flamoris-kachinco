@@ -83,6 +83,7 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
                 try
                 {
                     Seek(requestedTicks);
+                    if (request != generation || Player != player) return;
                     if (autoPlay) { player.Play(); SetState(PreviewState.Playing); }
                     else SetState(PreviewState.Paused);
                 }
@@ -91,8 +92,7 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
             player.Ended += (_, _) =>
             {
                 if (request != generation || Player != player) return;
-                player.Pause(); player.Position = TimeSpan.Zero;
-                SetState(PreviewState.Stopped);
+                Stop();
             };
             player.Failed += (_, e) => { if (request == generation && Player == player) Fail(e.Message); };
             player.Open(path);
@@ -118,7 +118,9 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
             if (State == PreviewState.Playing) { Player.Pause(); SetState(PreviewState.Paused); }
             else if (State is PreviewState.Paused or PreviewState.Stopped)
             {
+                long request = generation;
                 if (ReadPositionTicks() >= durationTicks) Seek(0);
+                if (request != generation || Player is null) return;
                 Player.Play(); SetState(PreviewState.Playing);
             }
         }
@@ -127,23 +129,41 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
 
     public void Pause()
     {
+        // Export may pause while a cold preview is still rendering. Cancel its autoplay.
+        if (IsPreparing) { Invalidate(); return; }
         if (!opened || Player is null) return;
-        Player.Pause(); SetState(PreviewState.Paused);
+        try { Player.Pause(); SetState(PreviewState.Paused); }
+        catch (Exception e) { Fail(e.Message); }
     }
     public void Stop()
     {
         if (IsPreparing) { Invalidate(); return; }
-        if (Player is not null) { Player.Pause(); Player.Position = TimeSpan.Zero; }
-        requestedTicks = 0; SetState(PreviewState.Stopped);
+        try
+        {
+            if (Player is not null) { Player.Pause(); Player.Position = TimeSpan.Zero; }
+            requestedTicks = 0; Error = null; SetState(PreviewState.Stopped);
+        }
+        catch (Exception e) { Fail(e.Message); }
     }
     public void Seek(long ticks)
     {
         requestedTicks = Math.Clamp(ticks, 0, durationTicks);
-        if (opened && Player is not null)
-            Player.Position = TimeSpan.FromTicks(TimelineTime.RoundHalfUp((System.Numerics.BigInteger)requestedTicks * TimeSpan.TicksPerSecond, TimelineTime.TicksPerSecond));
+        try
+        {
+            if (opened && Player is not null)
+                Player.Position = TimeSpan.FromTicks(TimelineTime.RoundHalfUp((System.Numerics.BigInteger)requestedTicks * TimeSpan.TicksPerSecond, TimelineTime.TicksPerSecond));
+        }
+        catch (Exception e) { Fail(e.Message); }
     }
-    public long ReadPositionTicks() => opened && Player is not null ?
-        Math.Clamp(TimelineTime.SecondsToTicks((decimal)Math.Max(0, Player.Position.Ticks) / TimeSpan.TicksPerSecond), 0, durationTicks) : requestedTicks;
+    public long ReadPositionTicks()
+    {
+        try
+        {
+            return opened && Player is not null ?
+                Math.Clamp(TimelineTime.SecondsToTicks((decimal)Math.Max(0, Player.Position.Ticks) / TimeSpan.TicksPerSecond), 0, durationTicks) : requestedTicks;
+        }
+        catch (Exception e) { Fail(e.Message); return 0; }
+    }
 
     public void Invalidate()
     {
