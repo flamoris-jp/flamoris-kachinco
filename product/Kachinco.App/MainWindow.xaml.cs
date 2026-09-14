@@ -348,13 +348,14 @@ public partial class MainWindow : Window
         var guidance = EditorStartup.Guidance(project, sequence);
         MediaGuidance.Text = guidance switch { EditorGuidance.ImportMedia => EditorText.ImportGuidance, EditorGuidance.CreateSequence => EditorText.SequenceGuidance, EditorGuidance.PlaceMedia => EditorText.PlacementGuidance, _ => EditorText.EditGuidance };
         WelcomeText.Text = MediaGuidance.Text;
+        WelcomeSequenceChoices.Visibility = guidance == EditorGuidance.CreateSequence ? Visibility.Visible : Visibility.Collapsed;
         WelcomePanel.Visibility = sequence is null ? Visibility.Visible : Visibility.Collapsed;
         PreviewInfo.Visibility = sequence is null || PreviewImage.Source is not null ? Visibility.Collapsed : Visibility.Visible;
         SaveButton.IsEnabled = project is not null;
         PlayButton.IsEnabled = PrepareButton.IsEnabled = sequence is not null;
         selectedClipId = Timeline.SelectedClipId;
-        PreviewInfo.Text = sequence is null ? "シーケンスがありません" :
-            $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} 秒";
+        PreviewInfo.Text = sequence is null ? EditorText.Choose("シーケンスがありません", "No sequence") :
+            $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} s";
         UndoButton.IsEnabled = UndoMenuItem.IsEnabled = snapshot.CanUndo;
         RedoButton.IsEnabled = RedoMenuItem.IsEnabled = snapshot.CanRedo;
         SplitButton.IsEnabled = selectedClipId is not null;
@@ -404,9 +405,9 @@ public partial class MainWindow : Window
             var state = MediaReferenceResolver.Inspect(project!, filename).First(x => x.MediaAssetId == asset.Id);
             AssetNameText.Text = asset.Name; AssetIdText.Text = asset.Id.ToString();
             AssetPathText.Text = state.ResolvedPath ?? asset.SourcePath;
-            AssetMetadataText.Text = $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} 秒" +
+            AssetMetadataText.Text = $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s" +
                 (asset.SampleRate is { } rate ? $"\n{rate} Hz · {asset.Channels ?? 0} ch" : "") +
-                (state.IsAvailable ? "\n利用可能" : "\n見つかりません");
+                "\n" + (state.IsAvailable ? EditorText.Choose("利用可能", "Available") : EditorText.Choose("見つかりません", "Missing"));
         }
     }
 
@@ -448,7 +449,7 @@ public partial class MainWindow : Window
     private sealed record MediaAssetRow(MediaAsset Asset, string Name, string Details, string State, Brush StateBrush)
     {
         public static MediaAssetRow Create(MediaAsset asset, MediaAvailability availability) => new(asset, asset.Name,
-            $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} 秒",
+            $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s",
             availability.IsAvailable ? "●" : "⚠",
             availability.IsAvailable ? Brushes.SeaGreen : Brushes.OrangeRed);
     }

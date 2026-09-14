@@ -94,7 +94,7 @@ public partial class TimelineSurface
         grid.Children.Insert(0, area);
         if (!mediaVisuals.TryGetValue(clip.MediaAssetId, out var entry))
         {
-            area.Children.Add(new TextBlock { Text = "表示キャッシュの上限（128素材）", Foreground = Brushes.White, FontSize = 10 });
+            area.Children.Add(new TextBlock { Text = EditorText.Choose("表示を省略しています", "Visualization omitted"), Foreground = Brushes.White, FontSize = 10 });
             return;
         }
         if (entry.Loading)

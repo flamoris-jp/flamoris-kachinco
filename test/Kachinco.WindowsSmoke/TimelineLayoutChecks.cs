@@ -15,6 +15,22 @@ internal static class TimelineLayoutChecks
         var welcome = (FrameworkElement)main.FindName("WelcomePanel");
         if (!import.IsEnabled || !welcome.IsVisible || string.IsNullOrWhiteSpace(((TextBlock)main.FindName("WelcomeText")).Text))
             throw new Exception("Startup must offer enabled import with actionable guidance.");
+        var japanese = main.Resources.MergedDictionaries[0];
+        ((MenuItem)main.FindName("EnglishMenu")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        await Layout(main);
+        var english = main.Resources.MergedDictionaries[0];
+        if (!japanese.Keys.Cast<string>().Order().SequenceEqual(english.Keys.Cast<string>().Order()) ||
+            english.Keys.Cast<string>().Any(key => string.IsNullOrWhiteSpace(english[key]?.ToString())) ||
+            import.Content?.ToString() != "Import MOV / WAV" ||
+            !((TextBlock)main.FindName("WelcomeText")).Text.Contains("Import MOV / WAV") ||
+            ((TextBlock)main.FindName("PlaybackStatus")).Text != "Stopped")
+            throw new Exception("English resources and live startup/transport labels must switch together.");
+        ((MenuItem)main.FindName("JapaneseMenu")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        await Layout(main);
+        if (import.Content?.ToString() != japanese["Shell.ImportMOVWAV"]?.ToString() ||
+            ((TextBlock)main.FindName("PlaybackStatus")).Text != "停止")
+            throw new Exception("Japanese labels must restore without changing project state.");
+        Console.WriteLine("WPF startup guidance and Japanese/English resource switching: PASS");
         var session = new EditorSession(); var sequence = Guid.NewGuid(); var asset = Guid.NewGuid(); var clip = Guid.NewGuid();
         var tracks = Enumerable.Range(0, 12).Select(_ => Guid.NewGuid()).ToArray();
         var commands = new List<EditCommand> {

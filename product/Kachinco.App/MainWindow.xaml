@@ -134,6 +134,10 @@
           <StackPanel x:Name="WelcomePanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380">
             <TextBlock Text="FLAMORIS Kachinco" Foreground="#E7E7E7" FontSize="20" TextAlignment="Center" Margin="0,0,0,12"/>
             <TextBlock x:Name="WelcomeText" Foreground="#B5BAC2" TextWrapping="Wrap" TextAlignment="Center"/>
+            <WrapPanel x:Name="WelcomeSequenceChoices" HorizontalAlignment="Center" Visibility="Collapsed" Margin="0,8,0,0">
+              <Button Content="{DynamicResource Shell.Landscape}" Click="AddLandscapeSequence_Click"/>
+              <Button Content="{DynamicResource Shell.Portrait}" Click="AddPortraitSequence_Click"/>
+            </WrapPanel>
             <Button x:Name="WelcomeImport" Content="{DynamicResource Shell.ImportMOVWAV}" Click="Register_Click" Margin="0,12,0,4"/>
             <Button Content="{DynamicResource Shell.Openproject}" Click="Open_Click"/>
           </StackPanel>

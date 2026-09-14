@@ -94,8 +94,9 @@ public partial class MainWindow
         PlaybackStatus.Text = label;
         PlaybackDetail.Text = playback.Error is { } error ? label + "\n" + error : label;
         if (playback.Progress is { } progress)
-            PlaybackDetail.Text += progress.Stage == ExportStage.Encoding ? " — 音声・映像をまとめています" :
-                $" — 映像 {progress.FramesCompleted}/{progress.TotalFrames} フレーム · 音声 {progress.AudioSamplesCompleted / 48000m:0.0} 秒";
+            PlaybackDetail.Text += progress.Stage == ExportStage.Encoding ? EditorText.Choose(" — 音声・映像をまとめています", " — Encoding audio and video") :
+                EditorText.Choose($" — 映像 {progress.FramesCompleted}/{progress.TotalFrames} フレーム · 音声 {progress.AudioSamplesCompleted / 48000m:0.0} 秒",
+                    $" — Video {progress.FramesCompleted}/{progress.TotalFrames} frames · Audio {progress.AudioSamplesCompleted / 48000m:0.0} s");
         PlaybackOverlay.Visibility = playback.IsPreparing || playback.State == PreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
         PlaybackProgress.Visibility = playback.IsPreparing ? Visibility.Visible : Visibility.Collapsed;
         PlaybackProgress.IsIndeterminate = playback.Progress is not { TotalFrames: > 0 };

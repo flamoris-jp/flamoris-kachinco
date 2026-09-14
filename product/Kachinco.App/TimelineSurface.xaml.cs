@@ -334,7 +334,7 @@ public partial class TimelineSurface : UserControl
     {
         var thumb = GestureThumb();
         thumb.Width = Math.Min(7, state.Width / 3); thumb.HorizontalAlignment = alignment;
-        thumb.ToolTip = edge == TrimEdge.Start ? "開始位置をトリム" : "終了位置をトリム";
+        thumb.ToolTip = edge == TrimEdge.Start ? EditorText.Choose("開始位置をトリム", "Trim start") : EditorText.Choose("終了位置をトリム", "Trim end");
         var handle = new FrameworkElementFactory(typeof(Border));
         handle.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
         handle.SetValue(Border.BorderBrushProperty, Brushes.White);
