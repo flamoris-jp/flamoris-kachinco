@@ -64,6 +64,7 @@ public partial class TimelineSurface : UserControl
         TimelineCanvas.AllowDrop = true;
         TimelineCanvas.DragOver += Media_DragOver;
         TimelineCanvas.Drop += Media_Drop;
+        TimelineCanvas.DragLeave += (_, _) => ClearDropGhost();
         SizeChanged += (_, _) => Rebuild();
     }
 
@@ -88,6 +89,7 @@ public partial class TimelineSurface : UserControl
         selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => t.Clips.Any(c => c.Id == id)) == true ? id : null;
         if (sequence is null) playheadTicks = 0;
         else playheadTicks = Math.Clamp(playheadTicks, 0, sequence.DurationTicks);
+        SynchronizeMediaVisuals();
         Rebuild();
     }
 
@@ -134,13 +136,31 @@ public partial class TimelineSurface : UserControl
             TimelineEditPlanner.SnapTargets(sequence, null, playheadTicks));
         return true;
     }
+    private Border? dropGhost;
     private void Media_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryDrop(e, out _, out _, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        ClearDropGhost();
+        bool valid = TryDrop(e, out var mediaId, out var trackId, out var ticks);
+        e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
+        if (valid && project is not null && sequence is not null)
+        {
+            var rows = sequence.Tracks.Reverse().ToArray();
+            int row = Array.FindIndex(rows, t => t.Id == trackId);
+            var asset = project.Assets.First(a => a.Id == mediaId);
+            dropGhost = new Border { Width = Math.Max(1, ToDouble(viewport.TicksToPixels(asset.DurationTicks))),
+                Height = geometry.Row(row).ClipHeight, Background = new SolidColorBrush(Color.FromArgb(90, 210, 11, 58)),
+                BorderBrush = Brushes.White, BorderThickness = new Thickness(1), IsHitTestVisible = false,
+                Child = new TextBlock { Text = $"{asset.Name} · {FormatTime(ticks)}", Foreground = Brushes.White, Margin = new Thickness(8, 2, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis } };
+            Canvas.SetLeft(dropGhost, ToDouble(Coordinates.ContentX(ticks)));
+            Canvas.SetTop(dropGhost, geometry.Row(row).ClipTop);
+            TimelineCanvas.Children.Add(dropGhost);
+        }
         e.Handled = true;
     }
+    private void ClearDropGhost() { if (dropGhost is not null) TimelineCanvas.Children.Remove(dropGhost); dropGhost = null; }
     private void Media_Drop(object sender, DragEventArgs e)
     {
+        ClearDropGhost();
         if (TryDrop(e, out var mediaId, out var trackId, out var ticks))
             MediaPlacementRequested?.Invoke(this, new(mediaId, trackId, ticks));
         e.Handled = true;
@@ -280,7 +300,7 @@ public partial class TimelineSurface : UserControl
         };
         grid.Children.Add(new Border
         {
-            BorderBrush = clip.Id == selectedClipId ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(145, 175, 202)),
+            BorderBrush = clip.Id == selectedClipId ? Brushes.White : new SolidColorBrush(Color.FromRgb(145, 175, 202)),
             BorderThickness = clip.Id == selectedClipId ? new(2) : new(1),
             IsHitTestVisible = false
         });
@@ -290,9 +310,10 @@ public partial class TimelineSurface : UserControl
         grid.Children.Add(new TextBlock
         {
             Text = AssetName(clip.MediaAssetId), Foreground = Brushes.White, FontWeight = FontWeights.SemiBold,
-            Margin = new(10, 5, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new(10, 2, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false
         });
+        AddMediaVisual(grid, clip, width);
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
         Canvas.SetLeft(grid, left); Canvas.SetTop(grid, geometry.Row(row).ClipTop);
@@ -303,6 +324,12 @@ public partial class TimelineSurface : UserControl
     {
         var thumb = GestureThumb();
         thumb.Width = Math.Min(7, state.Width / 3); thumb.HorizontalAlignment = alignment;
+        thumb.ToolTip = edge == TrimEdge.Start ? "開始位置をトリム" : "終了位置をトリム";
+        var handle = new FrameworkElementFactory(typeof(Border));
+        handle.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
+        handle.SetValue(Border.BorderBrushProperty, Brushes.White);
+        handle.SetValue(Border.BorderThicknessProperty, new Thickness(1, 0, 1, 0));
+        thumb.Template = new ControlTemplate(typeof(Thumb)) { VisualTree = handle };
         thumb.Cursor = Cursors.SizeWE; thumb.Tag = new TrimVisual(state, edge);
         thumb.DragStarted += Trim_DragStarted;
         thumb.DragDelta += Trim_DragDelta;

@@ -74,10 +74,12 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
             var player = playerFactory(); Player = player;
             previewFile = path; retained = true; Progress = null;
             SetState(PreviewState.Preparing);
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             player.Opened += (_, _) =>
             {
                 if (request != generation || Player != player || !IsPreparing) return;
                 opened = true;
+                ready.TrySetResult();
                 try
                 {
                     Seek(requestedTicks);
@@ -95,7 +97,7 @@ public sealed class PreviewPlayback(Func<IPreviewPlayer> playerFactory, PreviewR
             player.Failed += (_, e) => { if (request == generation && Player == player) Fail(e.Message); };
             player.Open(path);
             // Native MediaOpened/MediaFailed must eventually arrive; a silent decoder is a failure.
-            await Task.Delay(TimeSpan.FromSeconds(20), cancellation.Token);
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellation.Token);
             if (request == generation && !opened) Fail("プレビューを開けませんでした（応答待ち時間超過）。 / Preview decoder timed out.");
         }
         catch (OperationCanceledException) { if (request == generation) Invalidate(); }

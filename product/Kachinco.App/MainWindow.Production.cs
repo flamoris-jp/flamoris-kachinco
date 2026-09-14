@@ -24,6 +24,7 @@ public partial class MainWindow
             mcpLifetime?.Cancel();
             foreach (var job in exportJobs.Values) job.Cancellation.Cancel();
             CompositionTarget.Rendering -= PlaybackRendering;
+            Timeline.DisposeVisualizations();
             playback.Dispose();
         };
     }

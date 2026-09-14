@@ -334,6 +334,7 @@ public partial class MainWindow : Window
         SequenceList.ItemsSource = project is null ? Array.Empty<Sequence>() : TimelineQueries.ListSequences(project);
         var sequence = project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId) ?? project?.Sequences.FirstOrDefault();
         selectedSequenceId = sequence?.Id; SequenceList.SelectedItem = sequence;
+        Timeline.SetMediaContext(filename);
         Timeline.LoadProject(project, selectedSequenceId, selectedClipId);
         var guidance = EditorStartup.Guidance(project, sequence);
         MediaGuidance.Text = guidance switch { EditorGuidance.ImportMedia => EditorText.ImportGuidance, EditorGuidance.CreateSequence => EditorText.SequenceGuidance, EditorGuidance.PlaceMedia => EditorText.PlacementGuidance, _ => EditorText.EditGuidance };
