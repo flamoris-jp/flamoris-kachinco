@@ -16,43 +16,51 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
     private readonly Dictionary<string, VideoStream> videos = [];
     private readonly Dictionary<string, AudioStream> audios = [];
     private long processStarts;
+    private long startElapsed, stopElapsed;
+    public double ProcessStartMilliseconds => startElapsed * 1000d / Stopwatch.Frequency;
+    public double ProcessStopMilliseconds => stopElapsed * 1000d / Stopwatch.Frequency;
+    private void Close(StreamProcess stream) { long at = Stopwatch.GetTimestamp(); try { stream.Dispose(); } finally { Interlocked.Add(ref stopElapsed, Stopwatch.GetTimestamp() - at); } }
     public long ProcessStarts => Interlocked.Read(ref processStarts);
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         string key = Key(path) + $"|{width}|{height}";
-        if (videos.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, token)) { found.Dispose(); videos.Remove(key); found = null; }
+        if (videos.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, token)) { Close(found); videos.Remove(key); found = null; }
         if (found is null) found = Open();
         try { return await found.FrameAsync(sourceTicks, token); }
         catch (EndOfStreamException)
         {
-            found.Dispose(); videos.Remove(key); found = Open();
+            Close(found); videos.Remove(key); found = Open();
             return await found.FrameAsync(sourceTicks, token);
         }
         VideoStream Open()
         {
-            if (videos.Count >= 2) { var old = videos.First(); old.Value.Dispose(); videos.Remove(old.Key); }
+            if (videos.Count >= 2) { var old = videos.First(); Close(old.Value); videos.Remove(old.Key); }
             Interlocked.Increment(ref processStarts);
-            var stream = new VideoStream(executable, path, sourceTicks, width, height, token); videos.Add(key, stream); return stream;
+            long at = Stopwatch.GetTimestamp();
+            var stream = new VideoStream(executable, path, sourceTicks, width, height, token);
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); videos.Add(key, stream); return stream;
         }
     }
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
     {
         if (rate != 48000 || channels != 2 || count is < 1 or > 48000) throw new InvalidDataException("Invalid forward PCM request.");
         string key = Key(path);
-        if (audios.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, count, token)) { found.Dispose(); audios.Remove(key); found = null; }
+        if (audios.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, count, token)) { Close(found); audios.Remove(key); found = null; }
         if (found is null)
         {
-            if (audios.Count >= 2) { var old = audios.First(); old.Value.Dispose(); audios.Remove(old.Key); }
+            if (audios.Count >= 2) { var old = audios.First(); Close(old.Value); audios.Remove(old.Key); }
             Interlocked.Increment(ref processStarts);
-            found = new(executable, path, sourceTicks, token); audios.Add(key, found);
+            long at = Stopwatch.GetTimestamp();
+            found = new(executable, path, sourceTicks, token);
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); audios.Add(key, found);
         }
         return await found.BlockAsync(count, token);
     }
     public void Dispose()
     {
-        foreach (var stream in videos.Values) stream.Dispose(); videos.Clear();
-        foreach (var stream in audios.Values) stream.Dispose(); audios.Clear();
+        foreach (var stream in videos.Values) Close(stream); videos.Clear();
+        foreach (var stream in audios.Values) Close(stream); audios.Clear();
     }
 
     private abstract class StreamProcess : IDisposable
