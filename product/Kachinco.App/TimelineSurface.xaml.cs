@@ -95,11 +95,9 @@ public partial class TimelineSurface : UserControl
 
     public void ZoomBy(decimal factor)
     {
-        if (factor <= 0) throw new ArgumentOutOfRangeException(nameof(factor));
-        var value = Math.Clamp(viewport.PixelsPerSecond * factor,
-            TimelineViewport.MinimumInteractivePixelsPerSecond, TimelineViewport.MaximumPixelsPerSecond);
-        if (value == viewport.PixelsPerSecond) return;
-        viewport = new(value);
+        var next = viewport.ZoomBy(factor);
+        if (next == viewport) return;
+        viewport = next;
         Rebuild();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {

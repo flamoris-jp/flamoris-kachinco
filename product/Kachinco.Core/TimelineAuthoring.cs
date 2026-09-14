@@ -19,6 +19,16 @@ public readonly record struct TimelineViewport(decimal PixelsPerSecond)
         return new(Math.Clamp(value, MinimumPixelsPerSecond, MaximumPixelsPerSecond));
     }
 
+    public TimelineViewport ZoomBy(decimal factor)
+    {
+        if (!IsValid) throw new InvalidOperationException("Timeline viewport is invalid.");
+        if (factor <= 0) throw new ArgumentOutOfRangeException(nameof(factor));
+        decimal lowerBound = PixelsPerSecond < MinimumInteractivePixelsPerSecond
+            ? MinimumPixelsPerSecond
+            : MinimumInteractivePixelsPerSecond;
+        return new(Math.Clamp(checked(PixelsPerSecond * factor), lowerBound, MaximumPixelsPerSecond));
+    }
+
     public decimal TicksToPixels(long ticks)
     {
         if (!IsValid || ticks < 0) throw new ArgumentOutOfRangeException(nameof(ticks));
