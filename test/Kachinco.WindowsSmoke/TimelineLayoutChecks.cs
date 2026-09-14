@@ -98,6 +98,8 @@ internal static class TimelineLayoutChecks
                 separator.TranslatePoint(new(0,separator.ActualHeight),surface).Y, "separator paint bottom");
         }
         var body = lanes.Children.OfType<Grid>().Single(g => Equals(g.Tag,clipId));
+        if (lanes.Children.OfType<Rectangle>().Any(r => Panel.GetZIndex(r) >= Panel.GetZIndex(body)))
+            throw new Exception("Moving a clip across a later row must not hide it behind that lane's background.");
         double top = Canvas.GetTop(body);
         var containing = lanes.Children.OfType<Rectangle>().Single(r => top >= Canvas.GetTop(r) && top < Canvas.GetTop(r) + r.ActualHeight);
         if (top + body.ActualHeight > Canvas.GetTop(containing) + containing.ActualHeight) throw new Exception("Clip escapes lane.");

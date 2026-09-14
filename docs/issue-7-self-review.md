@@ -18,6 +18,7 @@ Reference/design decisions were committed before implementation in
 | Race found and fixed | Starting final export while preview preparation was pending could leave an autoplay request active. Pause now cancels preparation. A dedicated regression covers the pending-native-open case. |
 | Native failure found and fixed | Native seek, position polling and transport exceptions could escape UI handlers. They now become Failed with the original reason; tests cover read, seek, pause, stop and resume. |
 | Gesture issue found and fixed | Async visualization/layout refresh could replace active Thumbs. Rebuild waits while a gesture is active; explicit model/zoom/snap changes cancel it. Pointer displacement is measured from the original gesture, not accumulated Thumb deltas. |
+| Paint order found and fixed | Later lane backgrounds could cover a clip while it moves across rows. Clip/caption layers now sit above every lane background; the playhead sits above clips. WPF semantic checks protect the ordering. |
 | Localization | Japanese-first shell resources have live English switching and matching keys. Existing secondary dialogs/domain diagnostics remain partly Japanese/English; complete application translation is not claimed. |
 
 No unresolved implementation blocker was found in this review. This is a source and

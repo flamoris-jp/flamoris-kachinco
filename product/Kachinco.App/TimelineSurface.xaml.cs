@@ -159,6 +159,7 @@ public partial class TimelineSurface : UserControl
                 Child = new TextBlock { Text = $"{asset.Name} · {FormatTime(ticks)}", Foreground = Brushes.White, Margin = new Thickness(8, 2, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis } };
             Canvas.SetLeft(dropGhost, ToDouble(Coordinates.ContentX(ticks)));
             Canvas.SetTop(dropGhost, geometry.Row(row).ClipTop);
+            Panel.SetZIndex(dropGhost, 4);
             TimelineCanvas.Children.Add(dropGhost);
         }
         e.Handled = true;
@@ -230,6 +231,7 @@ public partial class TimelineSurface : UserControl
                     Background = Brushes.DarkMagenta, IsHitTestVisible = false,
                     Child = new TextBlock { Text = caption.Text, Foreground = Brushes.White, Margin = new(5), TextTrimming = TextTrimming.CharacterEllipsis } };
                 Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, geometry.Row(row).ClipTop);
+                Panel.SetZIndex(block, 1);
                 TimelineCanvas.Children.Add(block);
             }
         }
@@ -327,6 +329,8 @@ public partial class TimelineSurface : UserControl
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
         Canvas.SetLeft(grid, left); Canvas.SetTop(grid, geometry.Row(row).ClipTop);
+        // Clips may cross rows during a gesture; later lane backgrounds must not cover them.
+        Panel.SetZIndex(grid, 1);
         TimelineCanvas.Children.Add(grid);
     }
 
@@ -353,6 +357,7 @@ public partial class TimelineSurface : UserControl
         var rulerLine = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = 30, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 2, IsHitTestVisible = false };
         rulerPlayhead = rulerLine; RulerCanvas.Children.Add(rulerLine);
         var line = new Line { X1 = x, X2 = x, Y1 = 0, Y2 = height, Stroke = new SolidColorBrush(Color.FromRgb(210, 11, 58)), StrokeThickness = 1.5, IsHitTestVisible = false };
+        Panel.SetZIndex(line, 3);
         canvasPlayhead = line; TimelineCanvas.Children.Add(line);
     }
 
@@ -362,6 +367,7 @@ public partial class TimelineSurface : UserControl
         var state = (ClipVisual)thumb.Tag;
         Select(state.Clip.Id, rebuild: false);
         drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null, Mouse.GetPosition(TimelineViewportHost));
+        Panel.SetZIndex(drag.Element, 2);
         Focus();
     }
 
@@ -400,6 +406,7 @@ public partial class TimelineSurface : UserControl
         var value = (TrimVisual)thumb.Tag;
         Select(value.Visual.Clip.Id, rebuild: false);
         drag = new(value.Visual, thumb, thumb.Parent as FrameworkElement ?? thumb, value.Edge, Mouse.GetPosition(TimelineViewportHost));
+        Panel.SetZIndex(drag.Element, 2);
         Focus();
     }
 
