@@ -31,7 +31,7 @@ internal static class TimelineLayoutChecks
             ((TextBlock)main.FindName("PlaybackStatus")).Text != "停止")
             throw new Exception("Japanese labels must restore without changing project state.");
         Console.WriteLine("WPF startup guidance and Japanese/English resource switching: PASS");
-        var session = new EditorSession(); var sequence = Guid.NewGuid(); var asset = Guid.NewGuid(); var clip = Guid.NewGuid();
+        var session = new EditorSession(); var sequence = Guid.NewGuid(); var asset = Guid.NewGuid(); var clip = Guid.NewGuid(); var tinyClip = Guid.NewGuid();
         var tracks = Enumerable.Range(0, 12).Select(_ => Guid.NewGuid()).ToArray();
         var commands = new List<EditCommand> {
             new CreateProject(Guid.NewGuid(), "Layout fixture"),
@@ -40,6 +40,7 @@ internal static class TimelineLayoutChecks
         };
         foreach (var track in tracks) commands.Add(new AddTrack(sequence, track, "映像", TrackKind.Video));
         commands.Add(new InsertClip(sequence, tracks[7], new(clip, asset, 8 * TimelineTime.TicksPerSecond, 0, 5 * TimelineTime.TicksPerSecond, true, ClipAppearance.Default, AudioProperties.Default)));
+        commands.Add(new InsertClip(sequence, tracks[7], new(tinyClip, asset, 20 * TimelineTime.TicksPerSecond, 0, TimelineTime.FrameToTicks(1, SequenceSettings.Landscape.FrameRate), true, ClipAppearance.Default, AudioProperties.Default)));
         if (!session.Execute(new([.. commands])).Success) throw new Exception("Invalid geometry fixture.");
         var surface = new TimelineSurface { Width = 760, Height = 250 };
         var host = new Window { Width = 800, Height = 320, Content = surface, ShowInTaskbar = false };
@@ -60,10 +61,10 @@ internal static class TimelineLayoutChecks
                         ((ScrollViewer)surface.FindName("TimelineScroll")).ScrollToVerticalOffset(y);
                         surface.SetCursorTicks(8 * TimelineTime.TicksPerSecond);
                         await Layout(surface);
-                        Check(surface, clip);
+                        Check(surface, clip, tinyClip);
                     }
                 }
-                surface.FitSequence(); await Layout(surface); Check(surface, clip);
+                surface.FitSequence(); await Layout(surface); Check(surface, clip, tinyClip);
             }
             Console.WriteLine("WPF semantic geometry: header/lane rows, clip bounds, ruler/playhead origins, resize/zoom/horizontal/vertical scroll: PASS");
         }
@@ -74,7 +75,7 @@ internal static class TimelineLayoutChecks
         element.UpdateLayout();
         await element.Dispatcher.InvokeAsync(() => element.UpdateLayout(), DispatcherPriority.ContextIdle);
     }
-    private static void Check(TimelineSurface surface, Guid clipId)
+    private static void Check(TimelineSurface surface, Guid clipId, Guid tinyClipId)
     {
         var headers = (Canvas)surface.FindName("TrackHeaders");
         var lanes = (Canvas)surface.FindName("TimelineCanvas");
@@ -89,12 +90,21 @@ internal static class TimelineLayoutChecks
             Near(header.TranslatePoint(new(0,0),surface).Y, lane.TranslatePoint(new(0,0),surface).Y, "row top");
             Near(header.TranslatePoint(new(0,header.ActualHeight),surface).Y,
                 lane.TranslatePoint(new(0,lane.ActualHeight),surface).Y, "row bottom/separator");
+            var separator = lanes.Children.OfType<Rectangle>().Single(r => r.Tag is null &&
+                Math.Abs(Canvas.GetTop(r) - (Canvas.GetTop(lane) + lane.ActualHeight - header.BorderThickness.Bottom)) < .01);
+            Near(header.TranslatePoint(new(0,header.ActualHeight - header.BorderThickness.Bottom),surface).Y,
+                separator.TranslatePoint(new(0,0),surface).Y, "separator paint top");
+            Near(header.TranslatePoint(new(0,header.ActualHeight),surface).Y,
+                separator.TranslatePoint(new(0,separator.ActualHeight),surface).Y, "separator paint bottom");
         }
         var body = lanes.Children.OfType<Grid>().Single(g => Equals(g.Tag,clipId));
         double top = Canvas.GetTop(body);
         var containing = lanes.Children.OfType<Rectangle>().Single(r => top >= Canvas.GetTop(r) && top < Canvas.GetTop(r) + r.ActualHeight);
         if (top + body.ActualHeight > Canvas.GetTop(containing) + containing.ActualHeight) throw new Exception("Clip escapes lane.");
         Near((double)new TimelineViewport(surface.PixelsPerSecond).TicksToPixels(5 * TimelineTime.TicksPerSecond), body.ActualWidth, "clip time width");
+        var tiny = lanes.Children.OfType<Grid>().Single(g => Equals(g.Tag,tinyClipId));
+        Near((double)new TimelineViewport(surface.PixelsPerSecond).TicksToPixels(TimelineTime.FrameToTicks(1, SequenceSettings.Landscape.FrameRate)),
+            tiny.ActualWidth, "one-frame clip must not inflate to minimum gesture width");
         var rulerLine = ruler.Children.OfType<Line>().Last();
         var laneLine = lanes.Children.OfType<Line>().Last();
         double rulerX = ruler.TranslatePoint(new(rulerLine.X1,0),surface).X;
