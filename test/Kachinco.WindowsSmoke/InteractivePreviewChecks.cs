@@ -94,6 +94,7 @@ internal static class InteractivePreviewChecks
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var session = (EditorSession)typeof(MainWindow).GetField("session", flags)!.GetValue(main)!;
         Require(session.ReplaceProject(fixture.Session.GetProject().Project!).Success, "Viewer fixture session.");
+        typeof(MainWindow).GetField("savedJson", flags)!.SetValue(main, ProjectJson.Serialize(session.GetProject().Project!).Value); // Fixture is clean; smoke teardown must not open a discard dialog.
         typeof(MainWindow).GetField("selectedSequenceId", flags)!.SetValue(main, fixture.Sequence);
         typeof(MainWindow).GetMethod("Refresh", flags)!.Invoke(main, new object?[] { null });
         var timeline = (TimelineSurface)main.FindName("Timeline");
