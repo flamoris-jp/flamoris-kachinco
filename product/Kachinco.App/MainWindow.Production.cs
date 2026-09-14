@@ -11,69 +11,54 @@ namespace Kachinco.App;
 
 public partial class MainWindow
 {
-    private readonly MediaPlayer previewPlayer = new();
-    private long previewRevision = -1;
-    private Guid? previewSequence;
-    private string? previewFile;
-    private bool playing;
+    private PreviewPlayback playback = null!;
     private bool clockUpdate;
 
     private void InitializeProduction()
     {
+        playback = new(() => new WindowsPreviewPlayer(), RenderPreviewAsync);
+        playback.Changed += (_, _) => RefreshPlaybackFeedback();
         CompositionTarget.Rendering += PlaybackRendering;
-        previewPlayer.MediaEnded += (_, _) => { playing = false; previewPlayer.Pause(); };
-        previewPlayer.MediaFailed += (_, e) => { playing = false; Status.Text = "プレビューの再生に失敗しました: " + e.ErrorException.Message; };
-        previewPlayer.MediaOpened += (_, _) =>
+        Closed += (_, _) =>
         {
-            if (previewRevision != session.GetProject().Revision) return;
-            previewPlayer.Position = TimeSpan.FromSeconds((double)Timeline.PlayheadTicks / TimelineTime.TicksPerSecond);
-            PreviewImage.Source = new DrawingImage(new VideoDrawing
-            {
-                Player = previewPlayer,
-                Rect = new Rect(0, 0, Math.Max(1, previewPlayer.NaturalVideoWidth), Math.Max(1, previewPlayer.NaturalVideoHeight))
-            });
-            PreviewInfo.Visibility = Visibility.Collapsed;
+            mcpLifetime?.Cancel();
+            foreach (var job in exportJobs.Values) job.Cancellation.Cancel();
+            CompositionTarget.Rendering -= PlaybackRendering;
+            playback.Dispose();
         };
-        Closed += (_, _) => { mcpLifetime?.Cancel(); foreach (var job in exportJobs.Values) job.Cancellation.Cancel(); CompositionTarget.Rendering -= PlaybackRendering; InvalidatePreview(); };
     }
-    private void InvalidatePreview()
-    {
-        playing = false; previewPlayer.Close(); PreviewImage.Source = null;
-        PreviewInfo.Visibility = Visibility.Visible;
-        previewRevision = -1; previewSequence = null;
-        if (previewFile is not null) try { File.Delete(previewFile); } catch (IOException) { }
-        previewFile = null;
-    }
+    private void InvalidatePreview() => playback.Invalidate();
     private void InvalidateChangedPreview()
     {
-        if (previewRevision >= 0 && (previewRevision != session.GetProject().Revision || previewSequence != selectedSequenceId)) InvalidatePreview();
+        if (playback.Revision >= 0 && !playback.Matches(session.GetProject().Revision, selectedSequenceId)) playback.Invalidate();
     }
     private void PlaybackRendering(object? sender, EventArgs e)
     {
-        if (!playing || previewRevision != session.GetProject().Revision) return;
+        if (playback.State != PreviewState.Playing || !playback.Matches(session.GetProject().Revision, selectedSequenceId)) return;
         clockUpdate = true;
-        try { Timeline.SetCursorTicks(TimelineTime.SecondsToTicks((decimal)previewPlayer.Position.Ticks / TimeSpan.TicksPerSecond)); }
+        try { Timeline.SetCursorTicks(playback.ReadPositionTicks()); }
         finally { clockUpdate = false; }
     }
     private void SeekPreview()
     {
-        if (!clockUpdate && previewRevision == session.GetProject().Revision)
-            previewPlayer.Position = TimeSpan.FromSeconds((double)Timeline.PlayheadTicks / TimelineTime.TicksPerSecond);
+        if (!clockUpdate && playback.Matches(session.GetProject().Revision, selectedSequenceId)) playback.Seek(Timeline.PlayheadTicks);
     }
-    private void Play_Click(object sender, RoutedEventArgs e)
+    private async void Play_Click(object sender, RoutedEventArgs e)
     {
-        if (previewRevision != session.GetProject().Revision) { Status.Text = "先に「プレビュー準備」を押してください。"; return; }
-        if (playing) previewPlayer.Pause(); else previewPlayer.Play();
-        playing = !playing;
+        if (playback.IsPreparing) return;
+        var snapshot = session.GetProject();
+        if (selectedSequenceId is not { } sequenceId) { Status.Text = EditorText.SequenceGuidance; return; }
+        if (playback.Matches(snapshot.Revision, sequenceId) && playback.Player is not null) playback.Toggle();
+        else await playback.PrepareAsync(snapshot, sequenceId, Timeline.PlayheadTicks, true);
     }
-    private void Stop_Click(object sender, RoutedEventArgs e) { playing = false; previewPlayer.Pause(); Timeline.SetCursorTicks(0); }
+    private void Stop_Click(object sender, RoutedEventArgs e) { playback.Stop(); Timeline.SetCursorTicks(0); }
     private void PreviousFrame_Click(object sender, RoutedEventArgs e) => StepFrame(-1);
     private void NextFrame_Click(object sender, RoutedEventArgs e) => StepFrame(1);
     private void StepFrame(int direction)
     {
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
-        if (sequence is null) return;
-        playing = false; previewPlayer.Pause();
+        if (sequence is null || playback.IsPreparing) return;
+        playback.Pause();
         var fps = sequence.Settings.FrameRate;
         long frame = TimelineTime.RoundHalfUp((System.Numerics.BigInteger)Timeline.PlayheadTicks * fps.Numerator,
             (System.Numerics.BigInteger)TimelineTime.TicksPerSecond * fps.Denominator);
@@ -82,13 +67,48 @@ public partial class MainWindow
     }
     private async void PreparePreview_Click(object sender, RoutedEventArgs e)
     {
-        InvalidatePreview();
-        string path = Path.Combine(Path.GetTempPath(), "kachinco-preview-" + Guid.NewGuid().ToString("N") + ".mp4");
-        var result = await RenderOutput(path);
-        if (result?.Stage != ExportStage.Completed) return;
-        previewFile = path; previewRevision = session.GetProject().Revision; previewSequence = selectedSequenceId;
-        previewPlayer.Open(new Uri(path));
-        Status.Text = "プレビュー準備完了。再生・シークできます。";
+        if (playback.IsPreparing || selectedSequenceId is not { } sequenceId) return;
+        await playback.PrepareAsync(session.GetProject(), sequenceId, Timeline.PlayheadTicks, false);
+    }
+    private Task<ExportResult> RenderPreviewAsync(ProjectSnapshot snapshot, Guid sequenceId, string path,
+        IProgress<ExportProgress> progress, CancellationToken token)
+    {
+        // Resolve paths against the captured project location. UI remains responsive/cancellable.
+        var projectPath = filename;
+        var decoder = new FfmpegMediaDecoder();
+        var service = new SnapshotExportService(new SharedFrameRenderer(decoder, projectPath, new WindowsCaptionRasterizer(Dispatcher)),
+            new SharedAudioRenderer(decoder, projectPath), new FfmpegEncodingBackend(), new(null), projectPath);
+        return Task.Run(() => service.ExportAsync(snapshot,
+            new(Guid.NewGuid(), sequenceId, path, ExportPreset.YoutubeH264AacMp4, snapshot.Revision), progress, token), token);
+    }
+    private void RefreshPlaybackFeedback()
+    {
+        if (playback is null || PlaybackStatus is null) return;
+        string label = playback.State switch
+        {
+            PreviewState.Preparing => EditorText.Preparing, PreviewState.Rendering => EditorText.Rendering,
+            PreviewState.Playing => EditorText.Playing, PreviewState.Paused => EditorText.Paused,
+            PreviewState.Failed => EditorText.Failed, _ => EditorText.Stopped
+        };
+        PlaybackStatus.Text = label;
+        PlaybackDetail.Text = playback.Error is { } error ? label + "\n" + error : label;
+        if (playback.Progress is { } progress)
+            PlaybackDetail.Text += progress.Stage == ExportStage.Encoding ? " — 音声・映像をまとめています" :
+                $" — 映像 {progress.FramesCompleted}/{progress.TotalFrames} フレーム · 音声 {progress.AudioSamplesCompleted / 48000m:0.0} 秒";
+        PlaybackOverlay.Visibility = playback.IsPreparing || playback.State == PreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
+        PlaybackProgress.Visibility = playback.IsPreparing ? Visibility.Visible : Visibility.Collapsed;
+        PlaybackProgress.IsIndeterminate = playback.Progress is not { TotalFrames: > 0 };
+        if (playback.Progress is { TotalFrames: > 0 } p) PlaybackProgress.Value = 100d * p.FramesCompleted / p.TotalFrames;
+        PlayButton.Content = playback.State == PreviewState.Playing ? "Ⅱ" : "▶";
+        PlayButton.IsEnabled = PrepareButton.IsEnabled = selectedSequenceId is not null && !playback.IsPreparing;
+        PreviewImage.Source = (playback.Player as WindowsPreviewPlayer)?.Image;
+        PreviewInfo.Visibility = PreviewImage.Source is null && selectedSequenceId is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (playback.State == PreviewState.Stopped && playback.Player is not null)
+        {
+            clockUpdate = true;
+            try { Timeline.SetCursorTicks(playback.ReadPositionTicks()); }
+            finally { clockUpdate = false; }
+        }
     }
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
@@ -100,7 +120,7 @@ public partial class MainWindow
     {
         var snapshot = session.GetProject();
         if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return null;
-        playing = false; previewPlayer.Pause();
+        playback.Pause();
         using var token = new CancellationTokenSource();
         var status = new TextBlock { Text = "描画を準備しています…", Margin = new Thickness(16) };
         var cancel = new Button { Content = "キャンセル", Margin = new Thickness(16) };
