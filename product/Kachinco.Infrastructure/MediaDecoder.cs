@@ -59,13 +59,20 @@ internal static class MediaProcess
         try { if (!process.HasExited) process.Kill(true); }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
-    internal static async Task<string> DrainErrorAsync(StreamReader reader, CancellationToken token)
-    {
-        var result = new StringBuilder(); var buffer = new char[4096]; int read;
-        while ((read = await reader.ReadAsync(buffer.AsMemory(), token)) != 0)
-            if (result.Length < 4096) result.Append(buffer, 0, Math.Min(read, 4096 - result.Length));
-        return result.ToString();
-    }
+    // Process redirection uses blocking anonymous-pipe reads on Windows. Long-lived stderr
+    // drains must not occupy the same ThreadPool that schedules frame/PCM requests.
+    // Each bounded child process owns one dedicated reader; killing it closes the pipe.
+    internal static Task<string> DrainErrorAsync(StreamReader reader, CancellationToken token) =>
+        Task.Factory.StartNew(() =>
+        {
+            var result = new StringBuilder(); var buffer = new char[4096]; int read;
+            while ((read = reader.Read(buffer, 0, buffer.Length)) != 0)
+            {
+                token.ThrowIfCancellationRequested();
+                if (result.Length < 4096) result.Append(buffer, 0, Math.Min(read, 4096 - result.Length));
+            }
+            return result.ToString();
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     internal static async Task<byte[]> ReadAsync(string executable, IEnumerable<string> args, int limit, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();

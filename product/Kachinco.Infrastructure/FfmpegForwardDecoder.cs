@@ -127,7 +127,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
                 "-i", Path.GetFullPath(path), "-map", "0:v:0", "-an", "-t", "2", "-frames:v", "64",
                 "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,showinfo=checksum=0",
                 "-fps_mode", "passthrough", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], token)
-        { start = tick; size = checked(width * height * 4); ErrorTask = ReadMetadataAsync(); }
+        { start = tick; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
         public bool Accepts(long tick, CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested &&
             tick >= lastRequest && tick >= start && tick - start < 2 * TimelineTime.TicksPerSecond;
         public async Task<ImmutableArray<byte>> FrameAsync(long tick, CancellationToken token)
@@ -149,12 +149,12 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             }
             return last;
         }
-        private async Task ReadMetadataAsync()
+        private void ReadMetadata()
         {
             try
             {
                 var buffer = new char[2048]; var line = new StringBuilder(); int read;
-                while ((read = await Process.StandardError.ReadAsync(buffer.AsMemory(), Lifetime)) > 0)
+                while ((read = Process.StandardError.Read(buffer, 0, buffer.Length)) > 0)
                     for (int i = 0; i < read; i++)
                     {
                         if (buffer[i] == '\n') { Parse(line.ToString()); line.Clear(); }
@@ -191,6 +191,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
                 "-map", "0:a:0", "-vn", "-t", "2", "-ac", "2", "-ar", "48000", "-f", "f32le", "pipe:1"], token)
         { start = tick; ErrorTask = Drain(); }
         private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime));
+
         public bool Accepts(long tick, int count, CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested &&
             tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
