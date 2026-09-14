@@ -473,7 +473,20 @@ public partial class TimelineSurface : UserControl
             TimelineEditPlanner.SnapTargets(sequence, excludedClipId, playheadTicks)).Ticks;
     }
 
-    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => SetPlayhead(e.GetPosition(RulerViewportHost).X);
+    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sequence is null) return;
+        RulerViewportHost.CaptureMouse(); SetPlayhead(e.GetPosition(RulerViewportHost).X); e.Handled = true;
+    }
+    private void Ruler_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (RulerViewportHost.IsMouseCaptured && e.LeftButton == MouseButtonState.Pressed) SetPlayhead(e.GetPosition(RulerViewportHost).X);
+    }
+    private void Ruler_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!RulerViewportHost.IsMouseCaptured) return;
+        SetPlayhead(e.GetPosition(RulerViewportHost).X); RulerViewportHost.ReleaseMouseCapture(); e.Handled = true;
+    }
     private void Timeline_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource == TimelineCanvas) { Select(null); SetPlayhead(e.GetPosition(TimelineViewportHost).X); }
@@ -496,9 +509,7 @@ public partial class TimelineSurface : UserControl
         if (sequence is null) return;
         long value = Coordinates.ViewXToTicks((decimal)pixel);
         value = Math.Min(sequence.DurationTicks, TimelineSnapping.QuantizeToFrame(value, sequence.Settings.FrameRate));
-        playheadTicks = value;
-        PlayheadChanged?.Invoke(this, EventArgs.Empty);
-        Rebuild();
+        SetCursorTicks(value);
     }
 
     private void Select(Guid? clipId, bool rebuild = true)

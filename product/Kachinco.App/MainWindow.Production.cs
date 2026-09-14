@@ -11,54 +11,68 @@ namespace Kachinco.App;
 
 public partial class MainWindow
 {
-    private PreviewPlayback playback = null!;
+    private InteractivePreview playback = null!;
+    private InteractivePreviewSource previewSource = null!;
+    private PreviewContext? previewContext;
+    private RenderedVideoFrame? displayedFrame;
+    private System.Windows.Media.Imaging.WriteableBitmap? previewBitmap;
     private bool clockUpdate;
 
     private void InitializeProduction()
     {
-        playback = new(() => new WindowsPreviewPlayer(), RenderPreviewAsync);
+        previewSource = new(new WindowsCaptionRasterizer(Dispatcher));
+        playback = new(previewSource, () => new WindowsPreviewAudioOutput());
         playback.Changed += (_, _) => RefreshPlaybackFeedback();
         CompositionTarget.Rendering += PlaybackRendering;
-        Closed += (_, _) =>
+        Closed += async (_, _) =>
         {
             mcpLifetime?.Cancel();
             foreach (var job in exportJobs.Values) job.Cancellation.Cancel();
             CompositionTarget.Rendering -= PlaybackRendering;
             Timeline.DisposeVisualizations();
             playback.Dispose();
+            await playback.Completion;
+            previewSource.Dispose();
         };
     }
-    private void InvalidatePreview() => playback.Invalidate();
-    private void InvalidateChangedPreview()
+    private void RefreshInteractiveContext()
     {
-        if (playback.Revision >= 0 && !playback.Matches(session.GetProject().Revision, selectedSequenceId)) playback.Invalidate();
+        var snapshot = session.GetProject();
+        if (snapshot.Project is null || selectedSequenceId is not { } id)
+        { previewContext = null; playback.SetContext(null); return; }
+        if (previewContext?.Snapshot.Revision == snapshot.Revision && previewContext.Sequence.Id == id && previewContext.ProjectPath == filename) return;
+        var created = PreviewContext.Create(snapshot, id, filename);
+        if (!created.Success) { playback.SetContext(null); Status.Text = string.Join(" / ", created.Diagnostics.Select(d => d.Message)); return; }
+        previewContext = created.Value; playback.SetContext(previewContext);
     }
     private void PlaybackRendering(object? sender, EventArgs e)
     {
-        if (playback.State != PreviewState.Playing || !playback.Matches(session.GetProject().Revision, selectedSequenceId)) return;
+        if (playback.State is not (InteractivePreviewState.Playing or InteractivePreviewState.Buffering)) return;
         clockUpdate = true;
         try { Timeline.SetCursorTicks(playback.ReadPositionTicks()); }
         finally { clockUpdate = false; }
     }
     private void SeekPreview()
     {
-        if (!clockUpdate && playback.Matches(session.GetProject().Revision, selectedSequenceId)) playback.Seek(Timeline.PlayheadTicks);
+        if (!clockUpdate && !refreshing && previewContext is not null) playback.Scrub(Timeline.PlayheadTicks);
     }
-    private async void Play_Click(object sender, RoutedEventArgs e)
+    private void Play_Click(object sender, RoutedEventArgs e)
     {
-        if (playback.IsPreparing) return;
-        var snapshot = session.GetProject();
-        if (selectedSequenceId is not { } sequenceId) { Status.Text = EditorText.SequenceGuidance; return; }
-        if (playback.Matches(snapshot.Revision, sequenceId) && playback.Player is not null) playback.Toggle();
-        else await playback.PrepareAsync(snapshot, sequenceId, Timeline.PlayheadTicks, true);
+        if (selectedSequenceId is null) { Status.Text = EditorText.SequenceGuidance; return; }
+        if (playback.State is InteractivePreviewState.Playing or InteractivePreviewState.Buffering) playback.Pause();
+        else playback.Play();
     }
-    private void Stop_Click(object sender, RoutedEventArgs e) { playback.Stop(); Timeline.SetCursorTicks(0); }
+    private void Stop_Click(object sender, RoutedEventArgs e)
+    {
+        playback.Stop(); clockUpdate = true;
+        try { Timeline.SetCursorTicks(0); } finally { clockUpdate = false; }
+    }
     private void PreviousFrame_Click(object sender, RoutedEventArgs e) => StepFrame(-1);
     private void NextFrame_Click(object sender, RoutedEventArgs e) => StepFrame(1);
     private void StepFrame(int direction)
     {
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
-        if (sequence is null || playback.IsPreparing) return;
+        if (sequence is null) return;
         playback.Pause();
         var fps = sequence.Settings.FrameRate;
         long frame = TimelineTime.RoundHalfUp((System.Numerics.BigInteger)Timeline.PlayheadTicks * fps.Numerator,
@@ -66,50 +80,50 @@ public partial class MainWindow
         frame = Math.Clamp(frame + direction, 0, Math.Max(0, TimelineTime.FrameCount(sequence.DurationTicks, fps) - 1));
         Timeline.SetCursorTicks(TimelineTime.FrameToTicks(frame, fps));
     }
-    private async void PreparePreview_Click(object sender, RoutedEventArgs e)
+    private void PreparePreview_Click(object sender, RoutedEventArgs e) => playback.Scrub(Timeline.PlayheadTicks);
+    private void Quality_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (playback.IsPreparing || selectedSequenceId is not { } sequenceId) return;
-        await playback.PrepareAsync(session.GetProject(), sequenceId, Timeline.PlayheadTicks, false);
-    }
-    private Task<ExportResult> RenderPreviewAsync(ProjectSnapshot snapshot, Guid sequenceId, string path,
-        IProgress<ExportProgress> progress, CancellationToken token)
-    {
-        // Resolve paths against the captured project location. UI remains responsive/cancellable.
-        var projectPath = filename;
-        var decoder = new FfmpegMediaDecoder();
-        var service = new SnapshotExportService(new SharedFrameRenderer(decoder, projectPath, new WindowsCaptionRasterizer(Dispatcher)),
-            new SharedAudioRenderer(decoder, projectPath), new FfmpegEncodingBackend(), new(null), projectPath);
-        return Task.Run(() => service.ExportAsync(snapshot,
-            new(Guid.NewGuid(), sequenceId, path, ExportPreset.YoutubeH264AacMp4, snapshot.Revision), progress, token), token);
+        if (playback is null) return;
+        playback.SetQuality(PreviewQualityBox.SelectedIndex switch { 0 => PreviewQuality.Full, 2 => PreviewQuality.Quarter, _ => PreviewQuality.Half });
     }
     private void RefreshPlaybackFeedback()
     {
         if (playback is null || PlaybackStatus is null) return;
         string label = playback.State switch
         {
-            PreviewState.Preparing => EditorText.Preparing, PreviewState.Rendering => EditorText.Rendering,
-            PreviewState.Playing => EditorText.Playing, PreviewState.Paused => EditorText.Paused,
-            PreviewState.Failed => EditorText.Failed, _ => EditorText.Stopped
+            InteractivePreviewState.Scrubbing => EditorText.Choose("フレームを取得中", "Scrubbing"),
+            InteractivePreviewState.Buffering => EditorText.Choose("再生バッファを準備中", "Buffering"),
+            InteractivePreviewState.Playing => EditorText.Playing, InteractivePreviewState.Paused => EditorText.Paused,
+            InteractivePreviewState.Failed => EditorText.Failed, _ => EditorText.Stopped
         };
         PlaybackStatus.Text = label;
         PlaybackDetail.Text = playback.Error is { } error ? label + "\n" + error : label;
-        if (playback.Progress is { } progress)
-            PlaybackDetail.Text += progress.Stage == ExportStage.Encoding ? EditorText.Choose(" — 音声・映像をまとめています", " — Encoding audio and video") :
-                EditorText.Choose($" — 映像 {progress.FramesCompleted}/{progress.TotalFrames} フレーム · 音声 {progress.AudioSamplesCompleted / 48000m:0.0} 秒",
-                    $" — Video {progress.FramesCompleted}/{progress.TotalFrames} frames · Audio {progress.AudioSamplesCompleted / 48000m:0.0} s");
-        PlaybackOverlay.Visibility = playback.IsPreparing || playback.State == PreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
-        PlaybackProgress.Visibility = playback.IsPreparing ? Visibility.Visible : Visibility.Collapsed;
-        PlaybackProgress.IsIndeterminate = playback.Progress is not { TotalFrames: > 0 };
-        if (playback.Progress is { TotalFrames: > 0 } p) PlaybackProgress.Value = 100d * p.FramesCompleted / p.TotalFrames;
-        PlayButton.Content = playback.State == PreviewState.Playing ? "Ⅱ" : "▶";
-        PlayButton.IsEnabled = PrepareButton.IsEnabled = selectedSequenceId is not null && !playback.IsPreparing;
-        PreviewImage.Source = (playback.Player as WindowsPreviewPlayer)?.Image;
-        PreviewInfo.Visibility = PreviewImage.Source is null && selectedSequenceId is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (playback.State == PreviewState.Stopped && playback.Player is not null)
+        if (playback.DroppedVideoFrames > 0) PlaybackStatus.Text += EditorText.Choose($" · 映像スキップ {playback.DroppedVideoFrames}（1/4で軽減）", $" · Video skipped {playback.DroppedVideoFrames} (try 1/4)");
+        PlaybackOverlay.Visibility = playback.State is InteractivePreviewState.Scrubbing or InteractivePreviewState.Buffering or InteractivePreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
+        PlaybackProgress.Visibility = playback.State is InteractivePreviewState.Scrubbing or InteractivePreviewState.Buffering ? Visibility.Visible : Visibility.Collapsed;
+        PlaybackProgress.IsIndeterminate = true;
+        PlayButton.Content = playback.State is InteractivePreviewState.Playing or InteractivePreviewState.Buffering ? "Ⅱ" : "▶";
+        PlayButton.IsEnabled = PrepareButton.IsEnabled = selectedSequenceId is not null;
+        if (!ReferenceEquals(displayedFrame, playback.Frame))
+        {
+            displayedFrame = playback.Frame;
+            if (displayedFrame is null) PreviewImage.Source = null;
+            else
+            {
+                var f = displayedFrame;
+                if (previewBitmap is null || previewBitmap.PixelWidth != f.Width || previewBitmap.PixelHeight != f.Height)
+                    previewBitmap = new(f.Width, f.Height, 96, 96, PixelFormats.Bgra32, null);
+                var bytes = f.Rgba8.ToArray();
+                for (int i = 0; i < bytes.Length; i += 4) (bytes[i], bytes[i + 2]) = (bytes[i + 2], bytes[i]);
+                previewBitmap.WritePixels(new Int32Rect(0, 0, f.Width, f.Height), bytes, f.Width * 4, 0);
+                PreviewImage.Source = previewBitmap;
+            }
+        }
+        PreviewInfo.Visibility = PreviewImage.Source is null && selectedSequenceId is not null && playback.State != InteractivePreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
+        if (playback.State == InteractivePreviewState.Stopped && previewContext is not null)
         {
             clockUpdate = true;
-            try { Timeline.SetCursorTicks(playback.ReadPositionTicks()); }
-            finally { clockUpdate = false; }
+            try { Timeline.SetCursorTicks(playback.PositionTicks); } finally { clockUpdate = false; }
         }
     }
     private async void Export_Click(object sender, RoutedEventArgs e)

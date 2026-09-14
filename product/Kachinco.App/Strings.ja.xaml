@@ -33,8 +33,8 @@
   <system:String x:Key="Shell.SaveasCtrlShiftS">名前を付けて保存 (Ctrl+Shift+S)</system:String>
   <system:String x:Key="Shell.UndoCtrlZ">元に戻す (Ctrl+Z)</system:String>
   <system:String x:Key="Shell.RedoCtrlY">やり直す (Ctrl+Y)</system:String>
-  <system:String x:Key="Shell.Preparepreview">プレビュー準備</system:String>
-  <system:String x:Key="Shell.Preparepreviewwithoutplaying">再生せずにプレビューを準備</system:String>
+  <system:String x:Key="Shell.Preparepreview">フレーム更新</system:String>
+  <system:String x:Key="Shell.Preparepreviewwithoutplaying">現在位置のフレームを表示</system:String>
   <system:String x:Key="Shell.Previousframe">前のフレーム</system:String>
   <system:String x:Key="Shell.PlaypauseSpace">再生 / 一時停止 (Space)</system:String>
   <system:String x:Key="Shell.Stopcancelpreparation">停止 / 準備をキャンセル</system:String>
@@ -76,4 +76,5 @@
   <system:String x:Key="Shell.Fitsequence">シーケンス全体を表示</system:String>
   <system:String x:Key="Shell.Track">トラック</system:String>
   <system:String x:Key="Shell.Language">言語</system:String>
+  <system:String x:Key="Shell.Previewquality">プレビュー画質（書き出し品質は変更しません）</system:String>
 </ResourceDictionary>

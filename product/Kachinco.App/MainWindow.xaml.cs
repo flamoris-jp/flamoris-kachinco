@@ -332,7 +332,6 @@ public partial class MainWindow : Window
     {
         refreshing = true;
         var snapshot = session.GetProject();
-        InvalidateChangedPreview();
         var project = snapshot.Project;
         var availability = project is null ? new Dictionary<Guid, MediaAvailability>() :
             MediaReferenceResolver.Inspect(project, filename).ToDictionary(x => x.MediaAssetId);
@@ -366,7 +365,7 @@ public partial class MainWindow : Window
         if (message is not null) Status.Text = message;
         refreshing = false;
         RefreshInspector(); RefreshTimelineStatus();
-        RefreshPlaybackFeedback();
+        RefreshInteractiveContext(); RefreshPlaybackFeedback();
     }
 
     private void RefreshTimelineStatus()

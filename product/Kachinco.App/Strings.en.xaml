@@ -33,8 +33,8 @@
   <system:String x:Key="Shell.SaveasCtrlShiftS">Save as (Ctrl+Shift+S)</system:String>
   <system:String x:Key="Shell.UndoCtrlZ">Undo (Ctrl+Z)</system:String>
   <system:String x:Key="Shell.RedoCtrlY">Redo (Ctrl+Y)</system:String>
-  <system:String x:Key="Shell.Preparepreview">Prepare preview</system:String>
-  <system:String x:Key="Shell.Preparepreviewwithoutplaying">Prepare preview without playing</system:String>
+  <system:String x:Key="Shell.Preparepreview">Refresh frame</system:String>
+  <system:String x:Key="Shell.Preparepreviewwithoutplaying">Display the frame at the playhead</system:String>
   <system:String x:Key="Shell.Previousframe">Previous frame</system:String>
   <system:String x:Key="Shell.PlaypauseSpace">Play / pause (Space)</system:String>
   <system:String x:Key="Shell.Stopcancelpreparation">Stop / cancel preparation</system:String>
@@ -76,4 +76,5 @@
   <system:String x:Key="Shell.Fitsequence">Fit sequence</system:String>
   <system:String x:Key="Shell.Track">Track</system:String>
   <system:String x:Key="Shell.Language">Language</system:String>
+  <system:String x:Key="Shell.Previewquality">Preview quality (export is unchanged)</system:String>
 </ResourceDictionary>
