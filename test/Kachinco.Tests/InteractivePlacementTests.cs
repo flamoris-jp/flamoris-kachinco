@@ -19,6 +19,13 @@ public sealed class InteractivePlacementTests
             int added = Array.FindIndex(lanes, l => l.TrackId == id);
             int original = Array.FindIndex(lanes, l => l.TrackId == (video ? f.VideoTrackId : f.AudioTrackId));
             Assert.AreEqual(original + 1, added); Assert.IsNull(lanes[added + 1].TrackId);
+            var geometry = new TimelineTrackGeometry(lanes);
+            for (int row = 0; row < lanes.Length; row++)
+            {
+                Assert.AreEqual(row, geometry.HitRow(geometry.Row(row).Top));
+                Assert.AreEqual(row, geometry.HitRow(geometry.Row(row).Bottom - .01));
+                Assert.AreEqual(lanes[row].TrackId is null ? TimelineTrackGeometry.CreationRowHeight : TimelineTrackGeometry.DefaultRowHeight, geometry.Row(row).Height);
+            }
             Assert.AreEqual(video ? "V2" : "A2", after.Project.Sequences[0].Tracks.First(t => t.Id == id).Name);
             Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(before.Project, f.Session.GetProject().Project);
             Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(after.Project, f.Session.GetProject().Project);

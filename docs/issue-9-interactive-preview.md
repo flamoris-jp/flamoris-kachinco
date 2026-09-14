@@ -112,7 +112,9 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
   two seconds; video additionally caps 64 frames and timestamp entries. Raw pipe backpressure
   bounds ahead-of-consumption bytes. Full identity opaque composition uses an equivalent
   bulk copy; alpha/transform/blend paths keep the shared reference equations.
-- Track creation inserts below the last displayed compatible lane. Labels count in display
+- Creation rows are compact 24 DIPs; existing clip lanes remain 72 DIPs. Both header and
+  content use the same precomputed TimelineTrackGeometry row boundaries and hit testing.
+  Track creation inserts below the last displayed compatible lane. Labels count in display
   order, giving A1 then A2; IDs, not labels, remain authority. Commands are AddTrack,
   ReorderTrack, optional SetSequenceDuration, InsertClip in one expected-revision EditBatch.
   MCP can submit exactly that batch. Low-level explicit InsertClip remains compatible with

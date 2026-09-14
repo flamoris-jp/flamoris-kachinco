@@ -41,7 +41,6 @@ public partial class TimelineSurface : UserControl
     public event EventHandler<MediaPlacementEventArgs>? MediaPlacementRequested;
     public event EventHandler? PlayheadChanged;
     private TimelineTrackGeometry geometry = new(0);
-    private double TrackHeight => geometry.RowHeight;
     private TimelineCoordinates Coordinates => new(viewport, (decimal)HorizontalScroll.Value);
     private const double MinimumClipWidth = 8;
     private const int SnapThresholdPixels = 8;
@@ -223,7 +222,7 @@ public partial class TimelineSurface : UserControl
 
         var visibleTracks = TimelineLanes.Create(sequence);
         double width = Math.Max(Math.Max(1, TimelineViewportHost.ActualWidth), ToDouble(viewport.TicksToPixels(sequence.DurationTicks)));
-        geometry = new(visibleTracks.Length);
+        geometry = new(visibleTracks);
         double height = Math.Max(1, geometry.Height);
         RulerCanvas.Width = TimelineCanvas.Width = width;
         TrackHeaders.Height = TimelineCanvas.Height = height;
@@ -298,6 +297,8 @@ public partial class TimelineSurface : UserControl
                 }
             }
         };
+        if (track.Id == Guid.Empty)
+            header.Child = new TextBlock { Text = label, Foreground = Brushes.LightGray, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = track.Name };
         Canvas.SetTop(header, geometry.Row(row).Top);
         header.Tag = track.Id == Guid.Empty ? $"new-{row}" : track.Id;
         TrackHeaders.Children.Add(header);
@@ -311,6 +312,11 @@ public partial class TimelineSurface : UserControl
         background.Tag = header.Tag;
         Canvas.SetTop(background, geometry.Row(row).Top);
         TimelineCanvas.Children.Add(background);
+        if (track.Id == Guid.Empty)
+        {
+            var hint = new TextBlock { Text = EditorText.Choose("素材をドロップしてトラックを追加", "Drop media to add a track"), Foreground = Brushes.Gray, FontSize = 11, IsHitTestVisible = false };
+            Canvas.SetTop(hint, geometry.Row(row).Top + 4); Canvas.SetLeft(hint, HorizontalScroll.Value + 8); TimelineCanvas.Children.Add(hint);
+        }
         var separator = new Rectangle { Width = width, Height = 1, Fill = header.BorderBrush, IsHitTestVisible = false };
         Canvas.SetTop(separator, geometry.Row(row).Bottom - 1);
         TimelineCanvas.Children.Add(separator);
@@ -421,8 +427,8 @@ public partial class TimelineSurface : UserControl
         candidate = SnapMove(candidate, current.Visual.Clip);
 
         var rows = TimelineLanes.Create(sequence);
-        int targetRow = Math.Clamp((int)Math.Round(current.Visual.Row + current.DeltaY / TrackHeight,
-            MidpointRounding.AwayFromZero), 0, Math.Max(0, rows.Length - 1));
+        var originRow = geometry.Row(current.Visual.Row);
+        int targetRow = geometry.HitRow(Math.Clamp(originRow.Top + originRow.Height / 2 + current.DeltaY, 0, geometry.Height - .01));
         Guid targetTrack = rows.Length == 0 ? current.Visual.TrackId : rows[targetRow].TrackId ?? Guid.Empty;
         var result = TimelineEditPlanner.Move(project, sequence.Id, current.Visual.Clip.Id, targetTrack, candidate);
         Dispatch(result);
