@@ -115,7 +115,11 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
 - Codec streams use separate eight-entry video and audio LRU pools, each stream capped at
   two seconds; video additionally caps 64 frames and timestamp entries. This covers ordinary
   multi-track contributor sets without rotating a process for every frame/block while retaining
-  a hard 16-process ceiling. Raw pipe backpressure bounds ahead-of-consumption bytes. Full
+  a hard 16-process ceiling. Pool identity is a stream instance rather than a source path: the
+  same asset may retain multiple forward windows when clips use different source-in times, and
+  each video request selects the accepting window with the shortest forward distance (then LRU
+  recency), while PCM requires the exact next sample. Raw pipe
+  backpressure bounds ahead-of-consumption bytes. Full
   identity opaque composition uses an equivalent bulk copy; alpha/transform/blend paths keep
   the shared reference equations.
 - Creation rows are compact 24 DIPs; existing clip lanes remain 72 DIPs. Both header and

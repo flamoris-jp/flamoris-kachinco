@@ -103,6 +103,86 @@ public sealed class InteractiveCodecTests
         finally { Directory.Delete(dir, true); }
     }
     [TestMethod]
+    public async Task SameVideoSourceAtThreeOffsetsKeepsIndependentForwardWindows()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-offset-video-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string path = Path.Combine(dir, "source.mov");
+            await Run(["-f", "lavfi", "-i", "testsrc2=s=64x36:r=30:d=2", "-c:v", "qtrle", path]);
+            using var forward = new FfmpegForwardDecoder();
+            long[] offsets = [0, Fixture.T / 2, Fixture.T];
+            for (int frame = 0; frame < 12; frame++)
+                foreach (long offset in offsets)
+                {
+                    var pixels = await forward.VideoAsync(path, offset + TimelineTime.FrameToTicks(frame, new(30, 1)), 64, 36, default);
+                    Assert.IsTrue(pixels.Where((_, i) => i % 4 != 3).Any(value => value > 100));
+                }
+            Assert.AreEqual(3L, forward.ProcessStarts, "One source at three clip offsets needs three reusable windows, not a process per frame.");
+            Assert.AreEqual(3, forward.ActiveVideoStreams);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
+    public async Task SameAudioSourceAtThreeOffsetsKeepsIndependentForwardWindows()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-offset-audio-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string path = Path.Combine(dir, "source.wav");
+            await Run(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2", "-c:a", "pcm_s16le", path]);
+            using var forward = new FfmpegForwardDecoder();
+            const int count = 4800; long[] offsets = [0, Fixture.T / 2, Fixture.T];
+            for (int block = 0; block < 10; block++)
+                foreach (long offset in offsets)
+                {
+                    var samples = await forward.AudioAsync(path, offset + TimelineTime.SampleToTicks(block * count, 48000), count, 48000, 2, default);
+                    Assert.IsTrue(samples.Any(value => value != 0));
+                }
+            Assert.AreEqual(3L, forward.ProcessStarts, "One source at three clip offsets needs three reusable windows, not a process per block.");
+            Assert.AreEqual(3, forward.ActiveAudioStreams);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
+    public async Task ForwardStreamPoolsKeepHardBoundsAndEvictLeastRecentlyUsed()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-lru-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string video = Path.Combine(dir, "video-0.mov"), audio = Path.Combine(dir, "audio-0.wav");
+            await Run(["-f", "lavfi", "-i", "testsrc2=s=16x16:r=30:d=2", "-c:v", "qtrle", video]);
+            await Run(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2", "-c:a", "pcm_s16le", audio]);
+            string[] videos = Enumerable.Range(0, FfmpegForwardDecoder.MaximumVideoStreams + 1).Select(i => Path.Combine(dir, $"video-{i}.mov")).ToArray();
+            string[] audios = Enumerable.Range(0, FfmpegForwardDecoder.MaximumAudioStreams + 1).Select(i => Path.Combine(dir, $"audio-{i}.wav")).ToArray();
+            for (int i = 1; i < videos.Length; i++) File.Copy(video, videos[i]);
+            for (int i = 1; i < audios.Length; i++) File.Copy(audio, audios[i]);
+            using (var forward = new FfmpegForwardDecoder())
+            {
+                foreach (string path in videos) await forward.VideoAsync(path, 0, 16, 16, default);
+                Assert.AreEqual(FfmpegForwardDecoder.MaximumVideoStreams, forward.ActiveVideoStreams);
+                long starts = forward.ProcessStarts;
+                await forward.VideoAsync(videos[^1], TimelineTime.FrameToTicks(1, new(30, 1)), 16, 16, default);
+                Assert.AreEqual(starts, forward.ProcessStarts, "The newest video stream remains resident.");
+                await forward.VideoAsync(videos[0], TimelineTime.FrameToTicks(1, new(30, 1)), 16, 16, default);
+                Assert.AreEqual(starts + 1, forward.ProcessStarts, "The least recently used video stream was evicted.");
+                Assert.AreEqual(FfmpegForwardDecoder.MaximumVideoStreams, forward.ActiveVideoStreams);
+            }
+            using (var forward = new FfmpegForwardDecoder())
+            {
+                foreach (string path in audios) await forward.AudioAsync(path, 0, 480, 48000, 2, default);
+                Assert.AreEqual(FfmpegForwardDecoder.MaximumAudioStreams, forward.ActiveAudioStreams);
+                long starts = forward.ProcessStarts;
+                await forward.AudioAsync(audios[^1], TimelineTime.SampleToTicks(480, 48000), 480, 48000, 2, default);
+                Assert.AreEqual(starts, forward.ProcessStarts, "The newest audio stream remains resident.");
+                await forward.AudioAsync(audios[0], TimelineTime.SampleToTicks(480, 48000), 480, 48000, 2, default);
+                Assert.AreEqual(starts + 1, forward.ProcessStarts, "The least recently used audio stream was evicted.");
+                Assert.AreEqual(FfmpegForwardDecoder.MaximumAudioStreams, forward.ActiveAudioStreams);
+            }
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
     public async Task PreviewFullIsExportPixelsAndQualityPreservesCanonicalTime()
     {
         var f = new Fixture(); Assert.IsTrue(f.Edit(new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false), new SetTrackEnabled(f.SequenceId, f.SubtitleTrackId, false)).Success);

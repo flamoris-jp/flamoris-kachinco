@@ -64,6 +64,10 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
 16. Some waveOut devices may return `TIME_MS` after a `TIME_SAMPLES` request. The device clock now
     converts milliseconds, samples or bytes to 48 kHz sample frames and remains monotonic if the
     returned format changes.
+17. Keying one forward stream by source path still churned when duplicated clips used different
+    source-in times. Pool entries now represent independent source-time windows, so one path can
+    retain several streams under the same eight-entry LRU bound. Real-codec interleaving tests cover
+    three offsets for MOV and WAV plus explicit least-recently-used eviction at the hard limit.
 
 ## Regression coverage
 

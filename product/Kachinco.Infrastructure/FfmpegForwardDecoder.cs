@@ -16,62 +16,60 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
 {
     public const int MaximumVideoStreams = 8;
     public const int MaximumAudioStreams = 8;
-    private readonly Dictionary<string, PoolEntry<VideoStream>> videos = [];
-    private readonly Dictionary<string, PoolEntry<AudioStream>> audios = [];
-    private long accessSequence;
+    private readonly Dictionary<long, PoolEntry<VideoStream>> videos = [];
+    private readonly Dictionary<long, PoolEntry<AudioStream>> audios = [];
+    private long accessSequence, streamSequence;
     private long processStarts;
     private long startElapsed, stopElapsed;
     public double ProcessStartMilliseconds => startElapsed * 1000d / Stopwatch.Frequency;
     public double ProcessStopMilliseconds => stopElapsed * 1000d / Stopwatch.Frequency;
+    public int ActiveVideoStreams => videos.Count;
+    public int ActiveAudioStreams => audios.Count;
     private void Close(StreamProcess stream) { long at = Stopwatch.GetTimestamp(); try { stream.Dispose(); } finally { Interlocked.Add(ref stopElapsed, Stopwatch.GetTimestamp() - at); } }
     public long ProcessStarts => Interlocked.Read(ref processStarts);
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
-        string key = Key(path) + $"|{width}|{height}";
-        VideoStream? found = null;
-        if (videos.TryGetValue(key, out var entry))
-        {
-            found = entry.Stream;
-            if (!found.Accepts(sourceTicks, token)) { Close(found); videos.Remove(key); found = null; }
-            else entry.LastUsed = NextAccess();
-        }
-        if (found is null) found = Open();
-        try { return await found.FrameAsync(sourceTicks, token); }
+        string baseKey = Key(path) + $"|{width}|{height}";
+        RemoveExpired(videos, baseKey, stream => stream.IsOwnedBy(token));
+        var entry = videos.Values.Where(candidate => candidate.BaseKey == baseKey && candidate.Stream.Accepts(sourceTicks, token))
+            .OrderBy(candidate => candidate.Stream.ForwardDistance(sourceTicks)).ThenByDescending(candidate => candidate.LastUsed).FirstOrDefault();
+        if (entry is null) entry = Open();
+        entry.LastUsed = NextAccess();
+        try { return await entry.Stream.FrameAsync(sourceTicks, token); }
         catch (EndOfStreamException)
         {
-            Close(found); videos.Remove(key); found = Open();
-            return await found.FrameAsync(sourceTicks, token);
+            Close(entry.Stream); videos.Remove(entry.Id); entry = Open();
+            return await entry.Stream.FrameAsync(sourceTicks, token);
         }
-        VideoStream Open()
+        PoolEntry<VideoStream> Open()
         {
             MakeRoom(videos, MaximumVideoStreams);
             Interlocked.Increment(ref processStarts);
             long at = Stopwatch.GetTimestamp();
             var stream = new VideoStream(executable, path, sourceTicks, width, height, token);
-            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); videos.Add(key, new(stream, NextAccess())); return stream;
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at);
+            var opened = new PoolEntry<VideoStream>(NextStream(), baseKey, stream, NextAccess()); videos.Add(opened.Id, opened); return opened;
         }
     }
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
     {
         if (rate != 48000 || channels != 2 || count is < 1 or > 48000) throw new InvalidDataException("Invalid forward PCM request.");
-        string key = Key(path);
-        AudioStream? found = null;
-        if (audios.TryGetValue(key, out var entry))
-        {
-            found = entry.Stream;
-            if (!found.Accepts(sourceTicks, count, token)) { Close(found); audios.Remove(key); found = null; }
-            else entry.LastUsed = NextAccess();
-        }
-        if (found is null)
+        string baseKey = Key(path);
+        RemoveExpired(audios, baseKey, stream => stream.IsOwnedBy(token));
+        var entry = audios.Values.Where(candidate => candidate.BaseKey == baseKey && candidate.Stream.Accepts(sourceTicks, count, token))
+            .MaxBy(candidate => candidate.LastUsed);
+        if (entry is null)
         {
             MakeRoom(audios, MaximumAudioStreams);
             Interlocked.Increment(ref processStarts);
             long at = Stopwatch.GetTimestamp();
-            found = new(executable, path, sourceTicks, token);
-            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); audios.Add(key, new(found, NextAccess()));
+            var stream = new AudioStream(executable, path, sourceTicks, token);
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at);
+            entry = new(NextStream(), baseKey, stream, NextAccess()); audios.Add(entry.Id, entry);
         }
-        return await found.BlockAsync(count, token);
+        entry.LastUsed = NextAccess();
+        return await entry.Stream.BlockAsync(count, token);
     }
     public void Dispose()
     {
@@ -79,14 +77,22 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
         foreach (var entry in audios.Values) Close(entry.Stream); audios.Clear();
     }
     private long NextAccess() => Interlocked.Increment(ref accessSequence);
-    private void MakeRoom<T>(Dictionary<string, PoolEntry<T>> pool, int maximum) where T : StreamProcess
+    private long NextStream() => Interlocked.Increment(ref streamSequence);
+    private void RemoveExpired<T>(Dictionary<long, PoolEntry<T>> pool, string baseKey, Func<T, bool> usable) where T : StreamProcess
+    {
+        foreach (var expired in pool.Values.Where(entry => entry.BaseKey == baseKey && !usable(entry.Stream)).ToArray())
+        { Close(expired.Stream); pool.Remove(expired.Id); }
+    }
+    private void MakeRoom<T>(Dictionary<long, PoolEntry<T>> pool, int maximum) where T : StreamProcess
     {
         if (pool.Count < maximum) return;
         var oldest = pool.MinBy(pair => pair.Value.LastUsed);
         Close(oldest.Value.Stream); pool.Remove(oldest.Key);
     }
-    private sealed class PoolEntry<T>(T stream, long lastUsed) where T : StreamProcess
+    private sealed class PoolEntry<T>(long id, string baseKey, T stream, long lastUsed) where T : StreamProcess
     {
+        public long Id { get; } = id;
+        public string BaseKey { get; } = baseKey;
         public T Stream { get; } = stream;
         public long LastUsed { get; set; } = lastUsed;
     }
@@ -109,6 +115,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             Process.Start(); cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
+        public bool IsOwnedBy(CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested;
         protected async Task<byte[]> ReadAsync(int size, CancellationToken token, bool padPcmTail = false)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, Lifetime);
@@ -156,8 +163,9 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
                 "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,showinfo=checksum=0",
                 "-fps_mode", "passthrough", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], token)
         { start = tick; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
-        public bool Accepts(long tick, CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested &&
+        public bool Accepts(long tick, CancellationToken token) => IsOwnedBy(token) &&
             tick >= lastRequest && tick >= start && tick - start < 2 * TimelineTime.TicksPerSecond;
+        public long ForwardDistance(long tick) => tick - lastRequest;
         public async Task<ImmutableArray<byte>> FrameAsync(long tick, CancellationToken token)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -220,7 +228,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
         { start = tick; ErrorTask = Drain(); }
         private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime));
 
-        public bool Accepts(long tick, int count, CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested &&
+        public bool Accepts(long tick, int count, CancellationToken token) => IsOwnedBy(token) &&
             tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
         {
