@@ -10,6 +10,16 @@ public interface ICaptionRasterizer
 
 public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPath = null, ICaptionRasterizer? captions = null) : IFrameRenderer
 {
+    public ValueTask<Result<RenderedVideoFrame>> RenderPreviewAsync(Project project, EvaluatedFrame frame, PreviewQuality quality, CancellationToken token)
+    {
+        int divisor = (int)quality;
+        if (divisor is not (1 or 2 or 4)) throw new ArgumentOutOfRangeException(nameof(quality));
+        var scaled = frame with { Settings = frame.Settings with { Width = frame.Settings.Width / divisor, Height = frame.Settings.Height / divisor },
+            VideoLayers = [.. frame.VideoLayers.Select(l => l with { Appearance = l.Appearance with {
+                Transform = l.Appearance.Transform with { X = l.Appearance.Transform.X / divisor, Y = l.Appearance.Transform.Y / divisor } } })] };
+        return RenderAsync(project, scaled, TimelineTime.RoundHalfUp((System.Numerics.BigInteger)frame.Tick * frame.Settings.FrameRate.Numerator,
+            (System.Numerics.BigInteger)TimelineTime.TicksPerSecond * frame.Settings.FrameRate.Denominator), token);
+    }
     public async ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long frameIndex, CancellationToken cancellationToken)
     {
         try
@@ -32,7 +42,7 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
                 var pixels = await captions.RasterizeAsync(frame.Captions, width, height, cancellationToken);
                 Composite(output, pixels, width, height, ClipAppearance.Default, cancellationToken);
             }
-            return Result<RenderedVideoFrame>.Ok(new(frameIndex, frame.Tick, width, height, ImmutableArray.CreateRange(output)));
+            return Result<RenderedVideoFrame>.Ok(new(frameIndex, frame.Tick, width, height, System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(output)));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -43,6 +53,26 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
     {
         if (output.Length != checked(width * height * 4) || source.Length != output.Length) throw new InvalidDataException("Invalid RGBA buffer dimensions.");
         var t = appearance.Transform;
+        if (t == Transform2D.Identity && appearance.Opacity == 1 && appearance.Blend == BlendMode.Normal)
+        {
+            bool opaque = true;
+            for (int i = 3; i < source.Length; i += 4)
+            {
+                if ((i & 65535) == 3) token.ThrowIfCancellationRequested();
+                if (source[i] != 255) { opaque = false; break; }
+            }
+            if (opaque) { source.AsSpan().CopyTo(output); return; }
+            for (int i = 0; i < source.Length; i += 4)
+            {
+                if (i % (width * 4) == 0) token.ThrowIfCancellationRequested();
+                if (source[i + 3] == 0) continue;
+                if (source[i + 3] == 255) { source.AsSpan(i, 4).CopyTo(output.AsSpan(i, 4)); continue; }
+                var mixed = BlendReference.Composite(new(output[i]/255d,output[i+1]/255d,output[i+2]/255d,output[i+3]/255d),
+                    new(source[i]/255d,source[i+1]/255d,source[i+2]/255d,source[i+3]/255d), appearance.Blend, 1);
+                output[i]=Byte(mixed.R); output[i+1]=Byte(mixed.G); output[i+2]=Byte(mixed.B); output[i+3]=Byte(mixed.A);
+            }
+            return;
+        }
         double radians = t.RotationDegrees * Math.PI / 180, cos = Math.Cos(radians), sin = Math.Sin(radians);
         for (int y = 0; y < height; y++)
         {

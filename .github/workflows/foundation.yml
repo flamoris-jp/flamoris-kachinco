@@ -37,9 +37,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Ensure Windows FFmpeg fixture dependency
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --no-progress -y }
+          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + $env:Path
+          $env:Path | Out-File -FilePath $env:GITHUB_PATH -Append
+          ffmpeg -version
       - run: dotnet build Kachinco.slnx -c Release
       - name: Windows worker and raster acceptance
         run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interactive-preview-evidence
+          path: artifacts/interactive-preview-metrics.json
       - name: Portable publish smoke
         shell: pwsh
         run: ./product/packaging/publish-windows.ps1

@@ -71,6 +71,9 @@
         <Button x:Name="RedoButton" Content="↷" Click="Redo_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.RedoCtrlY}" />
         <Separator />
         <Button x:Name="PrepareButton" Content="{DynamicResource Shell.Preparepreview}" Click="PreparePreview_Click" ToolTip="{DynamicResource Shell.Preparepreviewwithoutplaying}" />
+        <ComboBox x:Name="PreviewQualityBox" Width="68" SelectedIndex="1" SelectionChanged="Quality_Changed" ToolTip="{DynamicResource Shell.Previewquality}">
+          <ComboBoxItem Content="Full"/><ComboBoxItem Content="1/2"/><ComboBoxItem Content="1/4"/>
+        </ComboBox>
         <Button Content="|◀" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}" />
         <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.PlaypauseSpace}" />
         <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Stopcancelpreparation}" />

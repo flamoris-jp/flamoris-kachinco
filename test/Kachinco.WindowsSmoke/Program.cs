@@ -15,6 +15,10 @@ internal static class Program
         {
             try
             {
+                if (WindowsPreviewAudioOutput.ConvertPositionToFrames(1, 125) != 6000 ||
+                    WindowsPreviewAudioOutput.ConvertPositionToFrames(2, 6000) != 6000 ||
+                    WindowsPreviewAudioOutput.ConvertPositionToFrames(4, 24000) != 6000)
+                    throw new Exception("Windows audio position format conversion failed.");
                 var main = new MainWindow(); main.Show();
                 await TimelineLayoutChecks.Run(main);
                 var compiler = new RecipeCompiler();
@@ -28,6 +32,7 @@ internal static class Program
                 if (!a.SequenceEqual(b) || !a.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Recipe RGBA determinism/visible output failed.");
                 var caption = await new WindowsCaptionRasterizer(app.Dispatcher).RasterizeAsync([new(Guid.NewGuid(),Guid.NewGuid(),"存在薄明")],1920,1080,default);
                 if (!caption.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Caption rasterization is empty.");
+                await InteractivePreviewChecks.Run(main);
                 main.Close(); exit=0; Console.WriteLine("Windows Recipe worker limits, repeatable RGBA, captions and shell: PASS");
             }
             catch(Exception e) { Console.Error.WriteLine(e); }

@@ -3,13 +3,15 @@
 Authority: Issue #1 defines this implementation's scope. This document defines the
 implemented contracts; `project-plan.md` retains the broader product vision.
 
-## Current production implementation (Issue #5)
+## Current production implementation (Issues #5–#9)
 
 The sections below preserve the original foundation rationale. Their explicitly
 foundation-only deferrals are superseded by these current contracts:
 
 - [ADR 0002](decisions/0002-production-rendering.md): shared decode/composition/mix,
-  render-ahead playback and FFmpeg production encoding.
+  bounded interactive preview/audio and FFmpeg final encoding.
+- [Interactive preview contract](issue-9-interactive-preview.md): scrub, forward codec streams,
+  sample clock, quality, dependency cache and visible thumbnail/placement policy.
 - [ADR 0003](decisions/0003-live-mcp.md): stdio bridge to the live Windows session.
 - [ADR 0004](decisions/0004-authoring-v2.md): persistent Clappers/Recipes/provenance,
   v1 migration and bounded worker. Current output is schema v2.

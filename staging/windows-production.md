@@ -30,19 +30,18 @@
 
 ## Preview and output
 
-- Play (Space) automatically prepares a cold preview, showing preparation/render
-  progress. `プレビュー準備` explicitly prepares without autoplay. Both use the same
-  compositor/audio service as final export. This remains render-ahead playback.
-- After native media opening, play/pause, stop, frame stepping and timeline seek use the
-  actual media player. An edit invalidates the prepared preview.
-- Stop cancels pending preparation; render/decode/transport failures show a reason.
+- Play (Space) starts at the current playhead and prepares a short PCM/video window.
+  Ruler/red-playhead drag updates the viewer; `フレーム更新` requests the current frame.
+  Full / 1/2 / 1/4 is transient preview resolution. No whole-sequence preview MP4 is made.
+- The actual output-device sample position drives playback. Scrub seeks silently and pauses;
+  pause/resume retains the device queue, stop resets to zero. Affected edits locally re-prime;
+  unrelated cached video survives audio edits. Missing media/device/decode failures are visible.
 - File > export creates H.264/AAC MP4. Progress window supports cancellation.
   Existing output is replaced only after successful encoding; source paths cannot
   be used as output. Preview/export are flattened onto black. Generated MOV retains
   alpha. MOV embedded audio is not mixed; import WAV separately.
-- First implementation decodes independently per requested frame/block. Preparing
-  long sequences can be slow. Hardware decoding, proxy cache and performance
-  optimization remain unclaimed until a production workflow is profiled.
+- Follow [Issue #9 hands-on](windows-issue9.md) for current scrub/playback/thumbnail acceptance
+  and Windows measurements. Hardware decoding/proxy management are not implemented.
 
 ## Clapper / Recipe
 

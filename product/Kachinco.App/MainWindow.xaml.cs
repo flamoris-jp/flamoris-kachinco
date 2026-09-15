@@ -155,7 +155,9 @@ public partial class MainWindow : Window
         var snapshot = session.GetProject();
         if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return;
         var clipId = Guid.NewGuid();
-        var planned = TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
+        var planned = trackId == Guid.Empty ?
+            TimelineEditPlanner.PlaceOnNewTrack(snapshot.Project, sequenceId, mediaId, Guid.NewGuid(), clipId, startTicks, snapshot.Revision) :
+            TimelineEditPlanner.Place(snapshot.Project, sequenceId, mediaId, trackId, clipId, startTicks, snapshot.Revision);
         if (!planned.Success) { ShowErrors(planned.Diagnostics); return; }
         var result = session.Execute(planned.Value!);
         if (result.Success) selectedClipId = clipId;
@@ -326,13 +328,12 @@ public partial class MainWindow : Window
     }
 
     private void ShowErrors(IEnumerable<Diagnostic> diagnostics) =>
-        Refresh(string.Join("  ", diagnostics.Select(d => $"[{d.Code}] {d.Message}")));
+        Refresh(string.Join("  ", diagnostics.Select(d => d.Code == "CLIP_OVERLAP" ? EditorText.Choose("クリップが重なります。空いている位置か「+ V / + A」の追加行へ配置してください。", d.Message) : $"[{d.Code}] {d.Message}")));
 
     private void Refresh(string? message = null)
     {
         refreshing = true;
         var snapshot = session.GetProject();
-        InvalidateChangedPreview();
         var project = snapshot.Project;
         var availability = project is null ? new Dictionary<Guid, MediaAvailability>() :
             MediaReferenceResolver.Inspect(project, filename).ToDictionary(x => x.MediaAssetId);
@@ -366,7 +367,7 @@ public partial class MainWindow : Window
         if (message is not null) Status.Text = message;
         refreshing = false;
         RefreshInspector(); RefreshTimelineStatus();
-        RefreshPlaybackFeedback();
+        RefreshInteractiveContext(); RefreshPlaybackFeedback();
     }
 
     private void RefreshTimelineStatus()
