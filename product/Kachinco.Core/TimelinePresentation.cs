@@ -15,22 +15,34 @@ public sealed class TimelineTrackGeometry
     public const double RulerHeight = 30;
     public const double DefaultRowHeight = 72;
     public const double ClipInset = 4;
-    public int Count { get; }
+    public const double CreationRowHeight = 24;
+    private readonly TimelineRow[] rows;
+    public int Count => rows.Length;
     public double RowHeight { get; }
-    public double Height => Count * RowHeight;
+    public double Height => rows.Length == 0 ? 0 : rows[^1].Bottom;
 
     public TimelineTrackGeometry(int count, double rowHeight = DefaultRowHeight)
     {
         if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
         if (!double.IsFinite(rowHeight) || rowHeight < 32) throw new ArgumentOutOfRangeException(nameof(rowHeight));
-        Count = count; RowHeight = rowHeight;
+        RowHeight = rowHeight; rows = Enumerable.Range(0, count).Select(i => new TimelineRow(i * rowHeight, rowHeight, ClipInset)).ToArray();
+    }
+    public TimelineTrackGeometry(IEnumerable<TimelineLane> lanes)
+    {
+        RowHeight = DefaultRowHeight;
+        double y = 0;
+        rows = lanes.Select(lane =>
+        {
+            double height = lane.TrackId is null ? CreationRowHeight : DefaultRowHeight;
+            var row = new TimelineRow(y, height, ClipInset); y += height; return row;
+        }).ToArray();
     }
     public TimelineRow Row(int index)
     {
         if (index < 0 || index >= Count) throw new ArgumentOutOfRangeException(nameof(index));
-        return new(index * RowHeight, RowHeight, ClipInset);
+        return rows[index];
     }
-    public int HitRow(double y) => !double.IsFinite(y) || y < 0 || y >= Height ? -1 : (int)(y / RowHeight);
+    public int HitRow(double y) => !double.IsFinite(y) || y < 0 || y >= Height ? -1 : Array.FindIndex(rows, r => r.Contains(y));
 }
 
 // Content is time-zero-relative; view is lane-host-relative; surface includes headers.
@@ -57,4 +69,47 @@ public static class EditorStartup
     public static EditBatch Import(ProjectSnapshot snapshot, MediaAsset asset, Guid newProjectId, string projectName) =>
         new(snapshot.Project is null ? [new CreateProject(newProjectId, projectName), new RegisterMedia(asset)] :
             [new RegisterMedia(asset)], snapshot.Revision);
+}
+
+// Null identity is an explicit creation target, never a persistent track.
+public sealed record TimelineLane(Guid? TrackId, TrackKind Kind);
+public static class TimelineLanes
+{
+    public static TimelineLane[] Create(Sequence sequence)
+    {
+        var tracks = sequence.Tracks.Reverse().ToArray();
+        var rows = new List<TimelineLane>();
+        for (int i = 0; i < tracks.Length; i++)
+        {
+            var t = tracks[i]; rows.Add(new(t.Id, t.Kind));
+            if (t.Kind != TrackKind.Subtitle && !tracks.Skip(i + 1).Any(l => l.Kind == t.Kind)) rows.Add(new(null, t.Kind));
+        }
+        foreach (var kind in new[] { TrackKind.Video, TrackKind.Audio })
+            if (!tracks.Any(t => t.Kind == kind)) rows.Add(new(null, kind));
+        return rows.ToArray();
+    }
+}
+
+public readonly record struct ThumbnailSlot(double Left, double Width, long SourceTicks);
+public static class ThumbnailStrip
+{
+    public const int MaximumSlots = 48;
+    public const double TileWidth = 72;
+    // Only visible cells are requested; quantized source samples are reusable across zooms.
+    public static ThumbnailSlot[] Plan(Clip clip, TimelineViewport viewport, double visibleLeft, double visibleWidth)
+    {
+        double width = (double)viewport.TicksToPixels(clip.DurationTicks);
+        if (!double.IsFinite(visibleLeft) || !double.IsFinite(visibleWidth) || visibleWidth <= 0) return [];
+        double start = Math.Clamp(visibleLeft, 0, width), end = Math.Clamp(visibleLeft + visibleWidth, 0, width);
+        var slots = new List<ThumbnailSlot>();
+        for (double x = start; x < end && slots.Count < MaximumSlots; x += TileWidth)
+        {
+            long relative = Math.Min(clip.DurationTicks - 1, viewport.PixelsToTicks((decimal)x));
+            long source = checked(clip.SourceInTicks + relative);
+            long step = TimelineTime.TicksPerSecond / 2;
+            source = Math.Max(clip.SourceInTicks, source / step * step);
+            slots.Add(new(x - start, Math.Min(TileWidth, end - x), source));
+        }
+        return slots.ToArray();
+    }
 }

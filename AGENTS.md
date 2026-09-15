@@ -262,7 +262,7 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Pointer gestures may preview in pixels, but commit exactly one typed move/trim/split command from the original committed range. Never accumulate per-event pixel deltas into Project state.
 - Track labels V1/A1/S1 are presentation only. Address tracks and clips by stable ID.
 - Selection, playhead/edit cursor, scroll, zoom, snap toggle, hover and drag state remain non-persistent.
-- Playback uses a rendered snapshot and the real Windows media position. UI redraw notifications must never advance an independent clock. Editing invalidates prepared preview.
+- Playback uses the shared evaluator/compositor and bounded PCM/frame windows (Issue #9). Windows consumed audio sample frames supply the clock; UI redraws never advance time. Follow `docs/issue-9-interactive-preview.md` for latest-wins scrub, quality, dependency caches and localized invalidation. Never restore whole-sequence export as ordinary Play.
 - Run the Phase 1 headless media/relink/authoring tests, Windows build and startup smoke. Record physical Windows visual acceptance separately in `staging/windows-phase1.md`.
 
 ## 17. Production slice authority (Issue #5)

@@ -1,0 +1,212 @@
+{
+  "commit": "99a1dab127137c4fa6108d90bae5eb982d954626",
+  "run": "https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/34860671577",
+  "ffmpeg": "9.0.1-essentials_build-www.gyan.dev",
+  "phase": "Dedicated bounded stderr readers; independent fresh codec startup cases.",
+  "environment": "Microsoft Windows NT 10.0.26100.0",
+  "note": "CI runner measurements, not human audiovisual acceptance. Host CPU excludes FFmpeg. No audio-device results are inferred from decode throughput.",
+  "processors": 2,
+  "results": [
+    {
+      "audioProcesses": 1,
+      "cache": {
+        "Bytes": 99532800,
+        "Entries": 12,
+        "Evictions": 49,
+        "Hits": 1,
+        "Misses": 61
+      },
+      "cachedScrubMs": 0.9295,
+      "coldScrubMs": 290.9734,
+      "elapsedMs": 2860.7267,
+      "frames": 60,
+      "hostCpuMs": 1937.5,
+      "kind": "decode_throughput_not_device_playback",
+      "quality": "Full",
+      "sampledHostAndFfmpegPeakBytes": 629907456,
+      "videoProcesses": 1
+    },
+    {
+      "audioEntries": 2,
+      "duration": 8,
+      "frameEntries": 1,
+      "frameReadyMs": 352.5372,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 416.3712,
+      "quality": "Full",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 8,
+      "elapsedMs": 221.0974,
+      "kind": "backward_pcm_restart",
+      "quality": "Full",
+      "startMs": 59.4301,
+      "stopMs": 14.2656
+    },
+    {
+      "duration": 8,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Full"
+    },
+    {
+      "audioEntries": 2,
+      "duration": 219.6,
+      "frameEntries": 1,
+      "frameReadyMs": 414.3973,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 486.013,
+      "quality": "Full",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 219.6,
+      "elapsedMs": 387.2007,
+      "kind": "backward_pcm_restart",
+      "quality": "Full",
+      "startMs": 111.2678,
+      "stopMs": 15.1914
+    },
+    {
+      "duration": 219.6,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Full"
+    },
+    {
+      "audioProcesses": 1,
+      "cache": {
+        "Bytes": 99532800,
+        "Entries": 48,
+        "Evictions": 12,
+        "Hits": 2,
+        "Misses": 60
+      },
+      "cachedScrubMs": 0.1353,
+      "coldScrubMs": 280.7743,
+      "elapsedMs": 1720.1094,
+      "frames": 60,
+      "hostCpuMs": 968.75,
+      "kind": "decode_throughput_not_device_playback",
+      "quality": "Half",
+      "sampledHostAndFfmpegPeakBytes": 495411200,
+      "videoProcesses": 1
+    },
+    {
+      "audioEntries": 2,
+      "duration": 8,
+      "frameEntries": 1,
+      "frameReadyMs": 420.3927,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 505.1954,
+      "quality": "Half",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 8,
+      "elapsedMs": 284.8057,
+      "kind": "backward_pcm_restart",
+      "quality": "Half",
+      "startMs": 86.5912,
+      "stopMs": 11.1666
+    },
+    {
+      "duration": 8,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Half"
+    },
+    {
+      "audioEntries": 2,
+      "duration": 219.6,
+      "frameEntries": 1,
+      "frameReadyMs": 398.8561,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 457.4384,
+      "quality": "Half",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 219.6,
+      "elapsedMs": 343.6687,
+      "kind": "backward_pcm_restart",
+      "quality": "Half",
+      "startMs": 58.3611,
+      "stopMs": 10.7515
+    },
+    {
+      "duration": 219.6,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Half"
+    },
+    {
+      "audioProcesses": 1,
+      "cache": {
+        "Bytes": 31104000,
+        "Entries": 60,
+        "Evictions": 0,
+        "Hits": 2,
+        "Misses": 60
+      },
+      "cachedScrubMs": 0.1296,
+      "coldScrubMs": 325.5458,
+      "elapsedMs": 1311.6485,
+      "frames": 60,
+      "hostCpuMs": 578.125,
+      "kind": "decode_throughput_not_device_playback",
+      "quality": "Quarter",
+      "sampledHostAndFfmpegPeakBytes": 478273536,
+      "videoProcesses": 1
+    },
+    {
+      "audioEntries": 2,
+      "duration": 8,
+      "frameEntries": 1,
+      "frameReadyMs": 292.5592,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 375.8883,
+      "quality": "Quarter",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 8,
+      "elapsedMs": 261.2915,
+      "kind": "backward_pcm_restart",
+      "quality": "Quarter",
+      "startMs": 66.5455,
+      "stopMs": 10.9756
+    },
+    {
+      "duration": 8,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Quarter"
+    },
+    {
+      "audioEntries": 2,
+      "duration": 219.6,
+      "frameEntries": 1,
+      "frameReadyMs": 174.1559,
+      "kind": "forward_startup_decode_only",
+      "pcmReadyMs": 243.8404,
+      "quality": "Quarter",
+      "timelineStartSeconds": 4
+    },
+    {
+      "duration": 219.6,
+      "elapsedMs": 119.7674,
+      "kind": "backward_pcm_restart",
+      "quality": "Quarter",
+      "startMs": 28.3923,
+      "stopMs": 10.7131
+    },
+    {
+      "duration": 219.6,
+      "error": "Open audio output failed (Windows audio 2). Check the selected audio device.",
+      "kind": "native_playback_unavailable",
+      "quality": "Quarter"
+    }
+  ]
+}

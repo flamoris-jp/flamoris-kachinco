@@ -106,6 +106,7 @@ public static class TimelineEditPlanner
         try
         {
             long end = checked(startTicks + asset.DurationTicks);
+            if (Overlaps(track, startTicks, asset.DurationTicks)) return Result<EditBatch>.Fail(Overlap(track.Id));
             var commands = ImmutableArray.CreateBuilder<EditCommand>();
             if (end > sequence.DurationTicks) commands.Add(new SetSequenceDuration(sequenceId, end));
             commands.Add(new InsertClip(sequenceId, trackId,
@@ -117,6 +118,29 @@ public static class TimelineEditPlanner
             return Result<EditBatch>.Fail(Diagnostic.Error("TIME_OVERFLOW", "Placement exceeds supported time."));
         }
     }
+
+    // New lane plus placement, including duration extension, is one revision and Undo unit.
+    public static Result<EditBatch> PlaceOnNewTrack(Project project, Guid sequenceId, Guid mediaId,
+        Guid newTrackId, Guid clipId, long startTicks, long? revision = null)
+    {
+        var sequence = project.Sequences.FirstOrDefault(s => s.Id == sequenceId);
+        var asset = project.Assets.FirstOrDefault(a => a.Id == mediaId);
+        if (sequence is null || asset is null || newTrackId == Guid.Empty || ProjectValidator.ContainsId(project, newTrackId) || newTrackId == clipId)
+            return Result<EditBatch>.Fail(Diagnostic.Error("INVALID_PLACEMENT", "Choose a sequence, media and unique track identity."));
+        var kind = asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
+        int index = Array.FindIndex(sequence.Tracks.ToArray(), t => t.Kind == kind);
+        if (index < 0) index = 0;
+        string name = (kind == TrackKind.Video ? "V" : "A") + (sequence.Tracks.Count(t => t.Kind == kind) + 1);
+        var add = new AddTrack(sequenceId, newTrackId, name, kind);
+        var reorder = new ReorderTrack(sequenceId, newTrackId, index);
+        // Pure planning uses the same command semantics as the eventual atomic session transaction.
+        var projected = CommandApplier.Apply(CommandApplier.Apply(project, add), reorder);
+        var placement = Place(projected, sequenceId, mediaId, newTrackId, clipId, startTicks, revision);
+        return placement.Success ? Result<EditBatch>.Ok(new([add, reorder, .. placement.Value!.Commands], revision)) : placement;
+    }
+    public static bool Overlaps(Track track, long start, long duration, Guid? excluded = null) =>
+        track.Clips.Any(c => c.Id != excluded && (System.Numerics.BigInteger)c.StartTicks < (System.Numerics.BigInteger)start + duration && c.EndTicks > start);
+    private static Diagnostic Overlap(Guid id) => Diagnostic.Error("CLIP_OVERLAP", "This placement overlaps a clip. Choose free space or the + track row.", id);
 
     public static Result<MoveClip> Move(Project project, Guid sequenceId, Guid clipId,
         Guid targetTrackId, long startTicks)
@@ -131,6 +155,7 @@ public static class TimelineEditPlanner
             return Result<MoveClip>.Fail(Diagnostic.Error("TRACK_MEDIA_MISMATCH", "Choose a compatible video or audio track.", clipId));
         if (!TimelineTime.ValidRange(startTicks, clip.DurationTicks, sequence.DurationTicks))
             return Result<MoveClip>.Fail(Diagnostic.Error("INVALID_TIMELINE_RANGE", "Moved clip must fit inside the sequence.", clipId));
+        if (Overlaps(target, startTicks, clip.DurationTicks, clipId)) return Result<MoveClip>.Fail(Overlap(targetTrackId));
         return Result<MoveClip>.Ok(new(sequenceId, clipId, targetTrackId, startTicks));
     }
 
@@ -139,7 +164,7 @@ public static class TimelineEditPlanner
     {
         var found = Find(project, sequenceId, clipId);
         if (!found.Success) return new(null, found.Diagnostics);
-        var (sequence, _, clip) = found.Value;
+        var (sequence, track, clip) = found.Value;
         TrimClip command;
         try
         {
@@ -165,6 +190,7 @@ public static class TimelineEditPlanner
         if (!TimelineTime.ValidRange(command.StartTicks, command.DurationTicks, sequence.DurationTicks) ||
             !TimelineTime.ValidRange(command.SourceInTicks, command.DurationTicks, asset.DurationTicks))
             return Result<TrimClip>.Fail(Diagnostic.Error("INVALID_TRIM", "Trim edge is outside the available timeline/source range.", clipId));
+        if (Overlaps(track, command.StartTicks, command.DurationTicks, clipId)) return Result<TrimClip>.Fail(Overlap(track.Id));
         return Result<TrimClip>.Ok(command);
     }
 

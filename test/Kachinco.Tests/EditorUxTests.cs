@@ -47,6 +47,7 @@ public sealed class EditorUxTests
     public void ScrolledDropUsesQuantizedPointerTimeAndUndoRestoresPlacement()
     {
         var f = new Fixture();
+        Assert.IsTrue(f.Edit(new DeleteClip(f.SequenceId, f.ClipId)).Success); // Coordinate test uses an empty target lane.
         var before = ProjectJson.Serialize(f.Project).Value;
         var coordinates = new TimelineCoordinates(new(125m), 187.5m);
         long expected = TimelineTime.SecondsToTicks(4m);

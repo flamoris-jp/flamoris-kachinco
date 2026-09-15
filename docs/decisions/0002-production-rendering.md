@@ -1,6 +1,6 @@
 # Production rendering and playback slice
 
-Status: implementation proposal for Issue #5; subject to PR review.
+Status: Issue #5 accepted; Issue #9 interactive playback amendment for PR review.
 
 The canonical evaluator remains the only timeline mapping. FFmpeg decodes MOV
 frames and WAV sample blocks, but never receives a timeline filter graph. Decoded
@@ -13,15 +13,17 @@ Audio output is 48 kHz stereo float PCM. Each output sample uses the canonical
 sample-to-tick utility; contributions follow the shared evaluator. Mixing sums
 contributions before a single [-1,1] clamp. MOV embedded audio remains excluded.
 
-The first Windows playback adapter uses a rendered preview file produced by the
-same snapshot exporter as final output. Windows MediaPlayer supplies actual
-playback and media position; the adapter converts that position to canonical ticks.
-UI redraw notifications never advance time themselves. Editing invalidates the
-preview by project revision; no stale preview is presented as the current project.
-Preparing a preview is visible and cancellable. Issue #7 makes Play prepare a cold
-preview automatically; the explicit prepare-without-playing action remains.
-This is render-ahead playback,
-not a claim of interactive real-time full-resolution compositing.
+Issue #9 replaces the initial render-ahead MP4 playback adapter. Ordinary Play uses
+bounded forward decoded frames and mixed PCM, starting at the current playhead.
+Windows waveOut's consumed sample frames are the playback clock; redraw notifications
+never advance time. Scrub requests a single evaluated arbitrary-time frame, with a
+one-slot latest-request mailbox. Full / half / quarter resolution changes output
+sampling, not timeline/evaluator semantics. Device buffering is at most 500 ms;
+source decode streams are capped at two seconds/64 video frames. No full-sequence
+file is required. See [the interactive contract](../issue-9-interactive-preview.md)
+for dependencies, invalidation, memory bounds, timestamp handling and overload.
+Playback quality and caches are transient; persistent schemas remain unchanged.
+Hardware decoding/proxies and universal real-time performance remain unclaimed.
 
 The encoder accepts only rendered frames and mixed audio. It writes temporary
 media beside the output and publishes the MP4 only after successful completion.
