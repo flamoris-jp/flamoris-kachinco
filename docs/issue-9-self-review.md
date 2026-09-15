@@ -57,6 +57,13 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
     The 96-key visible plan now counts cached entries too, culls vertically offscreen lanes
     and omits unreadably narrow cells. Excess detail shows a zoom hint instead of repeatedly
     decoding a fixed oversized view.
+15. A two-entry forward-decoder pool rotated all processes when three source assets contributed
+    to every frame or PCM block. Separate eight-entry video/audio LRU pools now amortize normal
+    multi-track playback under a documented hard bound; real-codec three-source tests assert that
+    process starts stay constant across subsequent frames and blocks.
+16. Some waveOut devices may return `TIME_MS` after a `TIME_SAMPLES` request. The device clock now
+    converts milliseconds, samples or bytes to 48 kHz sample frames and remains monotonic if the
+    returned format changes.
 
 ## Regression coverage
 

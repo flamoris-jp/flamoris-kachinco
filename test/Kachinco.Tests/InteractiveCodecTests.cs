@@ -54,6 +54,55 @@ public sealed class InteractiveCodecTests
         finally { Directory.Delete(dir, true); }
     }
     [TestMethod]
+    public async Task ThreeVideoContributorsReuseProcessesAcrossFrames()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-three-video-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string source = Path.Combine(dir, "source.mov");
+            await Run(["-f", "lavfi", "-i", "testsrc2=s=64x36:r=30:d=2", "-c:v", "qtrle", source]);
+            string[] paths = [source, Path.Combine(dir, "second.mov"), Path.Combine(dir, "third.mov")];
+            File.Copy(source, paths[1]); File.Copy(source, paths[2]);
+            using var forward = new FfmpegForwardDecoder();
+            for (int frame = 0; frame < 12; frame++)
+            {
+                long tick = TimelineTime.FrameToTicks(frame, new(30, 1));
+                foreach (string path in paths)
+                {
+                    var pixels = await forward.VideoAsync(path, tick, 64, 36, default);
+                    Assert.IsTrue(pixels.Where((_, i) => i % 4 != 3).Any(value => value > 100));
+                }
+            }
+            Assert.AreEqual(3L, forward.ProcessStarts, "Three simultaneous source contributors must keep their forward streams across frames.");
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
+    public async Task ThreeAudioContributorsReuseProcessesAcrossBlocks()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-three-audio-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string source = Path.Combine(dir, "source.wav");
+            await Run(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2", "-c:a", "pcm_s16le", source]);
+            string[] paths = [source, Path.Combine(dir, "second.wav"), Path.Combine(dir, "third.wav")];
+            File.Copy(source, paths[1]); File.Copy(source, paths[2]);
+            using var forward = new FfmpegForwardDecoder();
+            const int count = 4800;
+            for (int block = 0; block < 10; block++)
+            {
+                long tick = TimelineTime.SampleToTicks(block * count, 48000);
+                foreach (string path in paths)
+                {
+                    var samples = await forward.AudioAsync(path, tick, count, 48000, 2, default);
+                    Assert.IsTrue(samples.Any(value => value != 0));
+                }
+            }
+            Assert.AreEqual(3L, forward.ProcessStarts, "Three simultaneous source contributors must keep their forward streams across PCM blocks.");
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
     public async Task PreviewFullIsExportPixelsAndQualityPreservesCanonicalTime()
     {
         var f = new Fixture(); Assert.IsTrue(f.Edit(new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false), new SetTrackEnabled(f.SequenceId, f.SubtitleTrackId, false)).Success);

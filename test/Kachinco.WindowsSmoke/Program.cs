@@ -15,6 +15,10 @@ internal static class Program
         {
             try
             {
+                if (WindowsPreviewAudioOutput.ConvertPositionToFrames(1, 125) != 6000 ||
+                    WindowsPreviewAudioOutput.ConvertPositionToFrames(2, 6000) != 6000 ||
+                    WindowsPreviewAudioOutput.ConvertPositionToFrames(4, 24000) != 6000)
+                    throw new Exception("Windows audio position format conversion failed.");
                 var main = new MainWindow(); main.Show();
                 await TimelineLayoutChecks.Run(main);
                 var compiler = new RecipeCompiler();

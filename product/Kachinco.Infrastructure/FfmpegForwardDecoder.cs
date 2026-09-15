@@ -10,11 +10,15 @@ using Kachinco.Core;
 namespace Kachinco.Infrastructure;
 
 // Codec-side forward streams only: no timeline, transforms, blending or audio mixing.
-// A caller serializes video calls and audio calls independently. Each side holds <=2 sources.
+// A caller serializes video calls and audio calls independently. Each side owns a bounded LRU
+// pool large enough for the normal multi-track contributor set without per-frame process churn.
 public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaDecoder, IDisposable
 {
-    private readonly Dictionary<string, VideoStream> videos = [];
-    private readonly Dictionary<string, AudioStream> audios = [];
+    public const int MaximumVideoStreams = 8;
+    public const int MaximumAudioStreams = 8;
+    private readonly Dictionary<string, PoolEntry<VideoStream>> videos = [];
+    private readonly Dictionary<string, PoolEntry<AudioStream>> audios = [];
+    private long accessSequence;
     private long processStarts;
     private long startElapsed, stopElapsed;
     public double ProcessStartMilliseconds => startElapsed * 1000d / Stopwatch.Frequency;
@@ -25,7 +29,13 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         string key = Key(path) + $"|{width}|{height}";
-        if (videos.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, token)) { Close(found); videos.Remove(key); found = null; }
+        VideoStream? found = null;
+        if (videos.TryGetValue(key, out var entry))
+        {
+            found = entry.Stream;
+            if (!found.Accepts(sourceTicks, token)) { Close(found); videos.Remove(key); found = null; }
+            else entry.LastUsed = NextAccess();
+        }
         if (found is null) found = Open();
         try { return await found.FrameAsync(sourceTicks, token); }
         catch (EndOfStreamException)
@@ -35,32 +45,50 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
         }
         VideoStream Open()
         {
-            if (videos.Count >= 2) { var old = videos.First(); Close(old.Value); videos.Remove(old.Key); }
+            MakeRoom(videos, MaximumVideoStreams);
             Interlocked.Increment(ref processStarts);
             long at = Stopwatch.GetTimestamp();
             var stream = new VideoStream(executable, path, sourceTicks, width, height, token);
-            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); videos.Add(key, stream); return stream;
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); videos.Add(key, new(stream, NextAccess())); return stream;
         }
     }
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
     {
         if (rate != 48000 || channels != 2 || count is < 1 or > 48000) throw new InvalidDataException("Invalid forward PCM request.");
         string key = Key(path);
-        if (audios.TryGetValue(key, out var found) && !found.Accepts(sourceTicks, count, token)) { Close(found); audios.Remove(key); found = null; }
+        AudioStream? found = null;
+        if (audios.TryGetValue(key, out var entry))
+        {
+            found = entry.Stream;
+            if (!found.Accepts(sourceTicks, count, token)) { Close(found); audios.Remove(key); found = null; }
+            else entry.LastUsed = NextAccess();
+        }
         if (found is null)
         {
-            if (audios.Count >= 2) { var old = audios.First(); Close(old.Value); audios.Remove(old.Key); }
+            MakeRoom(audios, MaximumAudioStreams);
             Interlocked.Increment(ref processStarts);
             long at = Stopwatch.GetTimestamp();
             found = new(executable, path, sourceTicks, token);
-            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); audios.Add(key, found);
+            Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at); audios.Add(key, new(found, NextAccess()));
         }
         return await found.BlockAsync(count, token);
     }
     public void Dispose()
     {
-        foreach (var stream in videos.Values) Close(stream); videos.Clear();
-        foreach (var stream in audios.Values) Close(stream); audios.Clear();
+        foreach (var entry in videos.Values) Close(entry.Stream); videos.Clear();
+        foreach (var entry in audios.Values) Close(entry.Stream); audios.Clear();
+    }
+    private long NextAccess() => Interlocked.Increment(ref accessSequence);
+    private void MakeRoom<T>(Dictionary<string, PoolEntry<T>> pool, int maximum) where T : StreamProcess
+    {
+        if (pool.Count < maximum) return;
+        var oldest = pool.MinBy(pair => pair.Value.LastUsed);
+        Close(oldest.Value.Stream); pool.Remove(oldest.Key);
+    }
+    private sealed class PoolEntry<T>(T stream, long lastUsed) where T : StreamProcess
+    {
+        public T Stream { get; } = stream;
+        public long LastUsed { get; set; } = lastUsed;
     }
 
     private abstract class StreamProcess : IDisposable

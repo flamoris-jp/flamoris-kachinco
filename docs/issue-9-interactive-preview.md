@@ -112,10 +112,12 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
   Source samples use a half-second grid clamped to the clip's source-in. The 16 MiB cache
   owns WPF thumbnail pixels or waveform peaks, with a 256-entry cap. Small bookkeeping
   overhead is included in the byte charge; runtime/decoder overhead is separate.
-- Codec streams retain at most two video sources and two audio sources, each capped at
-  two seconds; video additionally caps 64 frames and timestamp entries. Raw pipe backpressure
-  bounds ahead-of-consumption bytes. Full identity opaque composition uses an equivalent
-  bulk copy; alpha/transform/blend paths keep the shared reference equations.
+- Codec streams use separate eight-entry video and audio LRU pools, each stream capped at
+  two seconds; video additionally caps 64 frames and timestamp entries. This covers ordinary
+  multi-track contributor sets without rotating a process for every frame/block while retaining
+  a hard 16-process ceiling. Raw pipe backpressure bounds ahead-of-consumption bytes. Full
+  identity opaque composition uses an equivalent bulk copy; alpha/transform/blend paths keep
+  the shared reference equations.
 - Creation rows are compact 24 DIPs; existing clip lanes remain 72 DIPs. Both header and
   content use the same precomputed TimelineTrackGeometry row boundaries and hit testing.
   Track creation inserts below the last displayed compatible lane. Labels count in display

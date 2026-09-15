@@ -10,9 +10,9 @@ public sealed class WindowsPreviewAudioOutput : IPreviewAudioOutput
 {
     private IntPtr handle;
     private readonly Queue<(IntPtr Header, IntPtr Data)> buffers = new();
-    private long submitted, expected = -1, wrap;
-    private uint previous;
-    private const uint Samples = 2, Bytes = 4, Done = 1;
+    private long submitted, expected = -1, wrap, lastPlayed;
+    private uint previous, previousType;
+    private const uint Milliseconds = 1, Samples = 2, Bytes = 4, Done = 1;
     public WindowsPreviewAudioOutput()
     {
         var format = new WaveFormat { Format = 1, Channels = 2, Rate = 48000, BytesPerSecond = 192000, BlockAlign = 4, Bits = 16 };
@@ -26,13 +26,23 @@ public sealed class WindowsPreviewAudioOutput : IPreviewAudioOutput
         {
             EnsureOpen(); var time = new MultimediaTime { Type = Samples };
             Check(waveOutGetPosition(handle, ref time, (uint)Marshal.SizeOf<MultimediaTime>()), "Read audio clock");
-            if (time.Type is not (Samples or Bytes)) throw new InvalidOperationException("Audio device does not expose a sample/byte position.");
+            if (time.Type is not (Milliseconds or Samples or Bytes)) throw new InvalidOperationException("Audio device does not expose a millisecond/sample/byte position.");
             uint raw = time.Value;
-            if (raw < previous && previous - raw > int.MaxValue) wrap += 1L << 32;
+            if (previousType != time.Type) { previousType = time.Type; previous = raw; wrap = 0; }
+            else if (raw < previous && previous - raw > int.MaxValue) wrap += 1L << 32;
             previous = raw;
-            return Math.Min(submitted, (wrap + raw) / (time.Type == Bytes ? 4 : 1));
+            long observed = ConvertPositionToFrames(time.Type, checked((ulong)(wrap + raw)));
+            lastPlayed = Math.Max(lastPlayed, Math.Min(submitted, observed));
+            return lastPlayed;
         }
     }
+    public static long ConvertPositionToFrames(uint type, ulong value) => type switch
+    {
+        Milliseconds => checked((long)(value * 48)),
+        Samples => checked((long)value),
+        Bytes => checked((long)(value / 4)),
+        _ => throw new InvalidOperationException("Unsupported Windows audio position format.")
+    };
     public long QueuedFrames { get { Reap(); return Math.Max(0, submitted - PlayedFrames); } }
     public void Enqueue(RenderedAudioBlock block)
     {
