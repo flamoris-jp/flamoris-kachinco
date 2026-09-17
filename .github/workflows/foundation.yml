@@ -26,6 +26,7 @@ jobs:
         with:
           name: product-test-results
           path: test/Kachinco.Tests/TestResults/*.trx
+          retention-days: 3
   windows-shell:
     runs-on: windows-latest
     timeout-minutes: 10
@@ -52,6 +53,7 @@ jobs:
         with:
           name: interactive-preview-evidence
           path: artifacts/interactive-preview-metrics.json
+          retention-days: 3
       - name: Portable publish smoke
         shell: pwsh
         run: ./product/packaging/publish-windows.ps1
@@ -59,6 +61,7 @@ jobs:
         with:
           name: Kachinco-win-x64
           path: artifacts/windows/Kachinco-win-x64.zip
+          retention-days: 3
       - name: Launch shell smoke
         shell: pwsh
         run: |
