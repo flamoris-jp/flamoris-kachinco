@@ -18,3 +18,4 @@ jobs:
         with:
           name: Kachinco-win-x64
           path: artifacts/windows/Kachinco-win-x64.zip
+          retention-days: 3
