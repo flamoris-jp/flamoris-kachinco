@@ -38,7 +38,9 @@ public partial class MainWindow
                     await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
                     while (pipe.IsConnected && !lifetime.IsCancellationRequested)
                     {
-                        var frame = await reader.ReadAsync(lifetime.Token);
+                        using var readDeadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                        readDeadline.CancelAfter(TimeSpan.FromMinutes(2));
+                        var frame = await reader.ReadAsync(readDeadline.Token);
                         if (frame.Status == McpFrameStatus.EndOfStream) break;
                         if (frame.Status != McpFrameStatus.Success)
                         {
@@ -52,23 +54,15 @@ public partial class MainWindow
                             break;
                         }
                         string line = frame.Line!;
-                        // This continuation executes on the WPF dispatcher, sharing the exact UI session.
-                        if (busy)
-                        {
-                            try
-                            {
-                                using var request=JsonDocument.Parse(line);
-                                if(request.RootElement.TryGetProperty("id",out var requestId))
-                                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc="2.0",id=requestId,error=new {code=-32000,message="Editor is busy"} }));
-                            }
-                            catch(JsonException) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Invalid JSON\"}}"); }
-                            continue;
-                        }
-                        var result = await adapter.HandleAsync(line);
-                        if (result is not null) await writer.WriteLineAsync(result.AsMemory(), lifetime.Token);
+                        // Continuation stays on WPF's dispatcher and the exact UI session.
+                        using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                        requestDeadline.CancelAfter(TimeSpan.FromSeconds(15));
+                        var result = await adapter.HandleAsync(line, requestDeadline.Token, busy);
+                        if (result is not null) await writer.WriteLineAsync(result.AsMemory(), requestDeadline.Token);
                     }
                 }
-                catch (Exception ex) when (ex is IOException or InvalidDataException or DecoderFallbackException)
+                catch (OperationCanceledException) when (!lifetime.IsCancellationRequested) { }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or DecoderFallbackException or InvalidOperationException or ArgumentException)
                 { Status.Text = "MCPクライアント接続を閉じました: " + ex.Message; }
             }
         }

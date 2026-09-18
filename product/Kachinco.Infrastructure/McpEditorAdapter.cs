@@ -28,19 +28,17 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         RespectRequiredConstructorParameters = true, MaxDepth = 64,
         Converters = { new IntegerStringConverter(), new JsonStringEnumConverter(allowIntegerValues: false) }
     };
-    public async Task<string?> HandleAsync(string line)
+    public async Task<string?> HandleAsync(string line, CancellationToken cancellationToken = default, bool busy = false)
     {
         JsonElement? id = null;
         try
         {
-            if (System.Text.Encoding.UTF8.GetByteCount(line) > 4 * 1024 * 1024) return Error(null, -32600, "Message too large.");
-            using var document = JsonDocument.Parse(line, new() { MaxDepth = 64 });
-            var root = document.RootElement;
-            RejectDuplicates(root);
-            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("jsonrpc", out var version) || version.GetString() != "2.0") return Error(null, -32600, "Invalid JSON-RPC request.");
-            if (root.TryGetProperty("id", out var requestId)) id = requestId.Clone();
+            cancellationToken.ThrowIfCancellationRequested();
+            var root = McpEnvelope.Parse(line);
+            if (root.TryGetProperty("id", out var requestId)) id = requestId;
             string? method = root.GetProperty("method").GetString();
             if (id is null) return null;
+            if (busy) return Error(id, -32000, "Editor is busy.");
             object result;
             if (method == "initialize")
             {
@@ -83,7 +81,7 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                         var project = session.GetProject().Project ?? throw new JsonException("Project required.");
                         value = ClapperQueries.Resolve(project,args.GetProperty("sequenceId").GetGuid(),args.GetProperty("name").GetString()!); break;
                     case "recipe_validate":
-                        value = await new RecipeCompiler().CompileAsync(args.GetProperty("source").GetString()!); break;
+                        value = await new RecipeCompiler().CompileAsync(args.GetProperty("source").GetString()!, cancellationToken); break;
                     case "recipe_generate": case "export_start": case "job_status": case "job_cancel":
                         if (jobs is null) throw new JsonException("Jobs are not available on this host.");
                         value = await jobs(name, args); break;
@@ -97,18 +95,11 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
             else return Error(id, -32601, "Method not found.");
             return JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result });
         }
-        catch (JsonException e) { return Error(id, -32602, e.Message); }
+        catch (McpRequestException e) { return Error(null, e.Code, e.Message); }
+        catch (OperationCanceledException) { return Error(id, -32000, "Request cancelled."); }
+        catch (JsonException) { return Error(id, -32602, "Invalid tool arguments."); }
         catch (Exception e) when (e is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
         { return Error(id, -32602, "Invalid tool arguments."); }
-    }
-    private static void RejectDuplicates(JsonElement value)
-    {
-        if(value.ValueKind == JsonValueKind.Object)
-        {
-            var names=new HashSet<string>(StringComparer.Ordinal);
-            foreach(var p in value.EnumerateObject()) { if(!names.Add(p.Name)) throw new JsonException("Duplicate JSON property."); RejectDuplicates(p.Value); }
-        }
-        else if(value.ValueKind == JsonValueKind.Array) foreach(var item in value.EnumerateArray()) RejectDuplicates(item);
     }
     private static void ValidateArguments(string? name,JsonElement args)
     {
