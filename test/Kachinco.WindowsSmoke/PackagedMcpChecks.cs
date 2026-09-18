@@ -32,8 +32,9 @@ internal static class PackagedMcpChecks
             await Menu(main, "FileMenu", "NewLandscapeMenu");
             await Menu(main, "McpMenu", "McpEditMenu");
             string pipe = await Connection(process.Id);
-            await using (var client = await Connect(bridge, pipe))
+            await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
+                var client = connection.Client;
                 Check(client.NegotiatedProtocolVersion == "2025-03-26", "Unexpected negotiated protocol.");
                 var tools = await client.ListToolsAsync(cancellationToken: Deadline());
                 Check(tools.Any(t => t.Name == "edit_batch") && !tools.Any(t => t.Name == "export_start"), "Discovery permissions.");
@@ -64,14 +65,17 @@ internal static class PackagedMcpChecks
                 await Call(client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
                 state = await Query(client);
                 await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
+                Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(main, "McpMenu", "McpReadOnlyMenu");
-                await ExpectDisconnected(client);
+                await ExpectDisconnected(connection);
             }
+            Console.WriteLine("Permission downgrade closed existing client: PASS");
             await OldPipeRejected(pipe);
             string readPipe = await Connection(process.Id);
             Check(pipe != readPipe, "Permission change reused address.");
-            await using (var client = await Connect(bridge, readPipe))
+            await using (var connection = new RevokedClient(await Connect(bridge, readPipe)))
             {
+                var client = connection.Client;
                 var tools = await client.ListToolsAsync(cancellationToken: Deadline());
                 Check(!tools.Any(t => t.Name == "undo" || t.Name == "edit_batch"), "Read-only discovery exposed edits.");
                 bool denied = false;
@@ -82,16 +86,18 @@ internal static class PackagedMcpChecks
                 var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
                 await ConfirmDiscard(process.Id);
                 await replacing;
-                await ExpectDisconnected(client);
+                await ExpectDisconnected(connection);
             }
+            Console.WriteLine("Read-only direct-call rejection and New revocation: PASS");
             await OldPipeRejected(readPipe);
             await Menu(main, "McpMenu", "McpEditMenu");
             string stoppedPipe = await Connection(process.Id);
-            await using (var client = await Connect(bridge, stoppedPipe))
+            await using (var connection = new RevokedClient(await Connect(bridge, stoppedPipe)))
             {
+                var client = connection.Client;
                 await Query(client);
                 await Menu(main, "McpMenu", "McpStopMenu");
-                await ExpectDisconnected(client);
+                await ExpectDisconnected(connection);
             }
             await OldPipeRejected(stoppedPipe);
             await Menu(main, "McpMenu", "McpEditMenu");
@@ -106,7 +112,8 @@ internal static class PackagedMcpChecks
     private static async Task<McpClient> Connect(string bridge, string pipe) => await McpClient.CreateAsync(new StdioClientTransport(new()
     {
         Command = bridge, Arguments = ["--pipe", pipe], Name = "Packaged Kachinco",
-        EnvironmentVariables = new Dictionary<string, string?> { ["PATH"] = CleanPath }
+        EnvironmentVariables = new Dictionary<string, string?> { ["PATH"] = CleanPath },
+        StandardErrorLines = line => Console.WriteLine("Bridge: " + line)
     }), cancellationToken: Deadline());
     private static async Task<JsonElement> Call(McpClient client, string name, Dictionary<string, object?> args)
     {
@@ -153,11 +160,23 @@ internal static class PackagedMcpChecks
             new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "6")))) is not null);
         await Invoke(yes!);
     }
-    private static async Task ExpectDisconnected(McpClient client)
+    private static async Task ExpectDisconnected(RevokedClient connection)
     {
         bool failed = false;
-        try { await Query(client); } catch (Exception) { failed = true; }
+        try { await Query(connection.Client); } catch (IOException) { failed = true; }
+        catch (ModelContextProtocol.McpException) { failed = true; }
         Check(failed, "Revoked client retained access.");
+        connection.Revoked = true;
+    }
+    private sealed class RevokedClient(McpClient client) : IAsyncDisposable
+    {
+        public McpClient Client { get; } = client;
+        public bool Revoked { get; set; }
+        public async ValueTask DisposeAsync()
+        {
+            try { await Client.DisposeAsync(); }
+            catch (IOException) when (Revoked) { } // SDK reports the already-verified intentional transport loss again.
+        }
     }
     private static async Task OldPipeRejected(string name)
     {
