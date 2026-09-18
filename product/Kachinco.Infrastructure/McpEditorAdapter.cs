@@ -115,8 +115,12 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
     }
     public static IReadOnlyDictionary<string, bool> CommandDispositions => Commands.ToDictionary(p => p.Key, p => AllowedCommand(p.Value), StringComparer.Ordinal);
 
-    private static bool AllowedCommand(Type type) => type != typeof(CreateProject) && type != typeof(RegisterMedia) &&
-        type != typeof(RelinkMedia) && type != typeof(SetGeneratedProvenance);
+    private static bool AllowedCommand(Type type) => type.Name is
+        nameof(AddClapper) or nameof(UpdateClapper) or nameof(DeleteClapper) or
+        nameof(AddRecipe) or nameof(UpdateRecipe) or nameof(CreateSequence) or nameof(SetSequenceDuration) or
+        nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(TrimClip) or nameof(SplitClip) or
+        nameof(DeleteClip) or nameof(SetClipProperties) or nameof(SetTrackEnabled) or nameof(ReorderTrack) or
+        nameof(AddCaption) or nameof(UpdateCaption) or nameof(DeleteCaption);
 
     private static void ValidateArguments(string? name,JsonElement args)
     {

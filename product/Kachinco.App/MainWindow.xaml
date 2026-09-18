@@ -24,8 +24,8 @@
   </Window.Resources>
   <DockPanel>
     <Menu DockPanel.Dock="Top">
-      <MenuItem Header="{DynamicResource Shell.FileF}">
-        <MenuItem Header="{DynamicResource Shell.NewlandscapeL}" Click="NewLandscape_Click" />
+      <MenuItem x:Name="FileMenu" Header="{DynamicResource Shell.FileF}">
+        <MenuItem x:Name="NewLandscapeMenu" Header="{DynamicResource Shell.NewlandscapeL}" Click="NewLandscape_Click" />
         <MenuItem Header="{DynamicResource Shell.NewportraitP}" Click="NewPortrait_Click" />
         <Separator />
         <MenuItem Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
@@ -39,7 +39,7 @@
         <MenuItem Header="{DynamicResource Shell.ImportSRT}" Click="ImportSrt_Click" />
         <MenuItem Header="{DynamicResource Shell.ExportSRT}" Click="ExportSrt_Click" />
       </MenuItem>
-      <MenuItem Header="{DynamicResource Shell.EditE}">
+      <MenuItem x:Name="EditMenu" Header="{DynamicResource Shell.EditE}">
         <MenuItem x:Name="UndoMenuItem" Header="{DynamicResource Shell.UndoU}" Click="Undo_Click" InputGestureText="Ctrl+Z" />
         <MenuItem x:Name="RedoMenuItem" Header="{DynamicResource Shell.RedoR}" Click="Redo_Click" InputGestureText="Ctrl+Y" />
       </MenuItem>
@@ -48,14 +48,14 @@
         <MenuItem Header="{DynamicResource Shell.Duplicateselectedclip}" Click="Duplicate_Click" />
         <MenuItem Header="{DynamicResource Shell.DeleteselectedclipD}" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
-      <MenuItem Header="{DynamicResource Shell.SequenceS}"><MenuItem Header="{DynamicResource Shell.Addvideotrack}" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Addaudiotrack}" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Changeduration}" Click="SequenceDuration_Click" /></MenuItem>
+      <MenuItem x:Name="SequenceMenu" Header="{DynamicResource Shell.SequenceS}"><MenuItem x:Name="AddVideoTrackMenu" Header="{DynamicResource Shell.Addvideotrack}" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Addaudiotrack}" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Changeduration}" Click="SequenceDuration_Click" /></MenuItem>
       <MenuItem Header="{DynamicResource Shell.ViewV}">
         <MenuItem x:Name="SnappingMenuItem" Header="{DynamicResource Shell.SnappingN}" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
         <MenuItem Header="{DynamicResource Shell.ZoominI}" Click="ZoomIn_Click" />
         <MenuItem Header="{DynamicResource Shell.ZoomoutO}" Click="ZoomOut_Click" />
       </MenuItem>
       <MenuItem Header="Clapper / Recipe"><MenuItem Header="{DynamicResource Shell.EditnamedrangesandRecipes}" Click="Authoring_Click" /></MenuItem>
-      <MenuItem Header="{DynamicResource Shell.AIconnection}">
+      <MenuItem x:Name="McpMenu" Header="{DynamicResource Shell.AIconnection}">
         <MenuItem x:Name="McpReadOnlyMenu" Header="{DynamicResource Mcp.ReadOnly}" Click="McpReadOnly_Click" />
         <MenuItem x:Name="McpEditMenu" Header="{DynamicResource Mcp.Edit}" Click="McpEdit_Click" />
         <Separator />
