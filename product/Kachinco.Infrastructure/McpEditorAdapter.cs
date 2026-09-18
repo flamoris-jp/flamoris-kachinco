@@ -6,8 +6,7 @@ using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
 
-public sealed class McpEditorAdapter(EditorSession session, Func<object> editorContext, Action changed,
-    Func<string, JsonElement, Task<object>>? jobs = null)
+public sealed class McpEditorAdapter(EditorSession session, Func<object> editorContext, Action changed, McpAccessLease lease)
 {
     private bool initialized;
     private static readonly Dictionary<string, Type> Commands = new(StringComparer.Ordinal)
@@ -30,10 +29,12 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
     };
     public async Task<string?> HandleAsync(string line, CancellationToken cancellationToken = default, bool busy = false)
     {
+        using var requestLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.Token);
+        cancellationToken = requestLifetime.Token;
         JsonElement? id = null;
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            lease.Demand(cancellationToken: cancellationToken);
             var root = McpEnvelope.Parse(line);
             if (root.TryGetProperty("id", out var requestId)) id = requestId;
             string? method = root.GetProperty("method").GetString();
@@ -42,18 +43,27 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
             object result;
             if (method == "initialize")
             {
+                var initialization = root.GetProperty("params");
+                if (initialization.GetProperty("protocolVersion").ValueKind != JsonValueKind.String ||
+                    initialization.GetProperty("capabilities").ValueKind != JsonValueKind.Object ||
+                    initialization.GetProperty("clientInfo").GetProperty("name").ValueKind != JsonValueKind.String ||
+                    initialization.GetProperty("clientInfo").GetProperty("version").ValueKind != JsonValueKind.String)
+                    throw new JsonException();
                 initialized = true;
                 result = new { protocolVersion = "2025-03-26", capabilities = new { tools = new { listChanged = false } }, serverInfo = new { name = "Kachinco", version = "0.2.0" } };
             }
             else if (method == "ping") result = new { };
             else if (!initialized) return Error(id, -32002, "Initialize first.");
-            else if (method == "tools/list") result = new { tools = ToolDefinitions() };
+            else if (method == "tools/list") result = new { tools = ToolDefinitions().Where(VisibleTool) };
             else if (method == "tools/call")
             {
                 var parameters = root.GetProperty("params");
                 var name = parameters.GetProperty("name").GetString();
                 var args = parameters.TryGetProperty("arguments", out var arguments) ? arguments : JsonSerializer.SerializeToElement(new { });
                 ValidateArguments(name,args);
+                if (name is "edit_batch" or "undo" or "redo") lease.Demand(true, cancellationToken);
+                if (name is "recipe_generate" or "export_start" or "job_status" or "job_cancel")
+                    throw new UnauthorizedAccessException("File/job access is not granted by this attachment.");
                 object value;
                 switch (name)
                 {
@@ -68,23 +78,21 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                             if (commands.Count >= 10000) throw new JsonException("Too many commands.");
                             string type = item.GetProperty("type").GetString() ?? "";
                             if (!Commands.TryGetValue(type, out var commandType)) throw new JsonException("Unknown command type.");
+                            if (!AllowedCommand(commandType)) throw new UnauthorizedAccessException("Command requires a separate lifecycle/file grant.");
                             var payload = JsonNode.Parse(item.GetRawText())!.AsObject(); payload.Remove("type");
                             commands.Add((EditCommand)(payload.Deserialize(commandType, Wire) ?? throw new JsonException("Command required.")));
                         }
-                        var edit = session.Execute(new([.. commands], Revision(args), args.TryGetProperty("dryRun", out var dry) && dry.GetBoolean()));
+                        var edit = lease.Commit(session, new([.. commands], Revision(args), args.TryGetProperty("dryRun", out var dry) && dry.GetBoolean()), cancellationToken);
                         if (edit.Success && !(args.TryGetProperty("dryRun", out dry) && dry.GetBoolean())) changed();
                         value = edit; break;
                     case "undo": case "redo":
-                        var history = name == "undo" ? session.Undo(Revision(args)) : session.Redo(Revision(args));
+                        var history = lease.Run(() => name == "undo" ? session.Undo(Revision(args), cancellationToken) : session.Redo(Revision(args), cancellationToken), true, cancellationToken);
                         if (history.Success) changed(); value = history; break;
                     case "clapper_resolve":
                         var project = session.GetProject().Project ?? throw new JsonException("Project required.");
                         value = ClapperQueries.Resolve(project,args.GetProperty("sequenceId").GetGuid(),args.GetProperty("name").GetString()!); break;
                     case "recipe_validate":
                         value = await new RecipeCompiler().CompileAsync(args.GetProperty("source").GetString()!, cancellationToken); break;
-                    case "recipe_generate": case "export_start": case "job_status": case "job_cancel":
-                        if (jobs is null) throw new JsonException("Jobs are not available on this host.");
-                        value = await jobs(name, args); break;
                     default: return Error(id, -32602, "Unknown tool.");
                 }
                 var payloadResult = JsonSerializer.SerializeToElement(value,Wire);
@@ -93,14 +101,19 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                 result = new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, Wire) } }, isError = failed };
             }
             else return Error(id, -32601, "Method not found.");
+            lease.Demand(cancellationToken: cancellationToken);
             return JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result });
         }
+        catch (UnauthorizedAccessException) { return Error(id, -32001, "Permission denied."); }
         catch (McpRequestException e) { return Error(null, e.Code, e.Message); }
         catch (OperationCanceledException) { return Error(id, -32000, "Request cancelled."); }
         catch (JsonException) { return Error(id, -32602, "Invalid tool arguments."); }
         catch (Exception e) when (e is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
         { return Error(id, -32602, "Invalid tool arguments."); }
     }
+    private static bool AllowedCommand(Type type) => type != typeof(CreateProject) && type != typeof(RegisterMedia) &&
+        type != typeof(RelinkMedia) && type != typeof(SetGeneratedProvenance);
+
     private static void ValidateArguments(string? name,JsonElement args)
     {
         string[] allowed = name switch
@@ -118,6 +131,12 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
 
     private static long Revision(JsonElement args) => long.Parse(args.GetProperty("expectedRevision").GetString()!, NumberStyles.None, CultureInfo.InvariantCulture);
     private static string Error(JsonElement? id, int code, string message) => JsonSerializer.Serialize(new { jsonrpc = "2.0", id, error = new { code, message } });
+    private bool VisibleTool(object tool)
+    {
+        string name = JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString()!;
+        return name is "get_project" or "clapper_resolve" or "recipe_validate" ||
+            lease.Permission == McpPermission.Edit && name is "edit_batch" or "undo" or "redo";
+    }
     private IEnumerable<object> ToolDefinitions()
     {
         object schema(string json) => JsonSerializer.Deserialize<JsonElement>(json);
@@ -126,10 +145,6 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         foreach (var name in new[] { "undo", "redo" }) yield return new { name, description = "Travel the shared editor history.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\"],\"additionalProperties\":false}") };
         yield return new { name = "clapper_resolve", description = "Resolve a sequence-local Clapper name to stable identity and coordinates.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"sequenceId\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}},\"required\":[\"sequenceId\",\"name\"]}") };
         yield return new { name = "recipe_validate", description = "Compile bounded literal-only Python text/particles calls without executing user code.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"maxLength\":65536}},\"required\":[\"source\"]}") };
-        if (jobs is null) yield break;
-        yield return new { name = "recipe_generate", description = "Render and commit a normal MOV clip. Recipe fields: id, clapperId, source, revision (int), seed (int), apiVersion='1', rendererVersion='1'. Optional replaceMediaId regenerates the same asset lineage and preserves clip edits.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"sequenceId\":{\"type\":\"string\"},\"recipe\":{\"type\":\"object\"},\"outputPath\":{\"type\":\"string\"},\"replaceMediaId\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\",\"sequenceId\",\"recipe\",\"outputPath\"]}") };
-        yield return new { name = "export_start", description = "Export the visible snapshot to MP4; return a job ID.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"sequenceId\":{\"type\":\"string\"},\"outputPath\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\",\"sequenceId\",\"outputPath\"],\"additionalProperties\":false}") };
-        foreach (var name in new[] { "job_status", "job_cancel" }) yield return new { name, description = "Inspect or cancel an editor export job.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"jobId\":{\"type\":\"string\"}},\"required\":[\"jobId\"],\"additionalProperties\":false}") };
     }
     private sealed class IntegerStringConverter : JsonConverter<long>
     {

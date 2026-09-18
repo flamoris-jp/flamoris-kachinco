@@ -77,4 +77,8 @@
   <system:String x:Key="Shell.Track">Track</system:String>
   <system:String x:Key="Shell.Language">Language</system:String>
   <system:String x:Key="Shell.Previewquality">Preview quality (export is unchanged)</system:String>
+  <system:String x:Key="Mcp.ReadOnly">Connect read only</system:String>
+  <system:String x:Key="Mcp.Edit">Connect with edit permission</system:String>
+  <system:String x:Key="Mcp.Copy">Copy connection command</system:String>
+  <system:String x:Key="Mcp.Stop">Disable connection</system:String>
 </ResourceDictionary>

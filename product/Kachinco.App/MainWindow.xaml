@@ -55,7 +55,13 @@
         <MenuItem Header="{DynamicResource Shell.ZoomoutO}" Click="ZoomOut_Click" />
       </MenuItem>
       <MenuItem Header="Clapper / Recipe"><MenuItem Header="{DynamicResource Shell.EditnamedrangesandRecipes}" Click="Authoring_Click" /></MenuItem>
-      <MenuItem Header="{DynamicResource Shell.AIconnection}"><MenuItem Header="{DynamicResource Shell.StartstopMCP}" Click="Mcp_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.AIconnection}">
+        <MenuItem x:Name="McpReadOnlyMenu" Header="{DynamicResource Mcp.ReadOnly}" Click="McpReadOnly_Click" />
+        <MenuItem x:Name="McpEditMenu" Header="{DynamicResource Mcp.Edit}" Click="McpEdit_Click" />
+        <Separator />
+        <MenuItem x:Name="McpCopyMenu" Header="{DynamicResource Mcp.Copy}" IsEnabled="False" Click="McpCopy_Click" />
+        <MenuItem x:Name="McpStopMenu" Header="{DynamicResource Mcp.Stop}" IsEnabled="False" Click="McpStop_Click" />
+      </MenuItem>
       <MenuItem Header="{DynamicResource Shell.Language}">
         <MenuItem x:Name="JapaneseMenu" Header="日本語" IsCheckable="True" IsChecked="True" Tag="ja" Click="Language_Click"/>
         <MenuItem x:Name="EnglishMenu" Header="English" IsCheckable="True" Tag="en" Click="Language_Click"/>

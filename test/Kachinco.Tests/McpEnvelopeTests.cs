@@ -18,7 +18,7 @@ public sealed class McpEnvelopeTests
             "{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1,\"id\":2}",
             "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"id\":1,\"params\":null}"];
         var f = new Fixture(); var before = f.Session.GetProject();
-        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => Assert.Fail());
+        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => Assert.Fail(), new(McpPermission.ReadOnly));
         foreach (bool busy in new[] { false, true })
             foreach (string input in inputs)
             {
