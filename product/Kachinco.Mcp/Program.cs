@@ -1,6 +1,6 @@
 using System.IO.Pipes;
 
-if (args.Length != 2 || args[0] != "--pipe" || !args[1].StartsWith("kachinco-", StringComparison.Ordinal))
+if (args.Length != 2 || args[0] != "--pipe" || !(args[1].StartsWith("kachinco-", StringComparison.Ordinal) && Guid.TryParseExact(args[1][9..], "N", out _)))
 {
     Console.Error.WriteLine("Usage: Kachinco.Mcp --pipe <name displayed by the running editor>");
     return 2;
@@ -15,10 +15,14 @@ try
     var output = pipe.CopyToAsync(Console.OpenStandardOutput(), lifetime.Token);
     await Task.WhenAny(input, output);
     lifetime.Cancel();
-    try { await Task.WhenAll(input, output); } catch (OperationCanceledException) { }
+    pipe.Dispose();
+    // Windows console stdin may not honor cancellation. A losing pump must not
+    // hold the bridge alive after editor EOF or stdin closure.
+    try { await Task.WhenAll(input, output).WaitAsync(TimeSpan.FromSeconds(2)); }
+    catch (Exception e) when (e is OperationCanceledException or TimeoutException or IOException or ObjectDisposedException) { }
     return 0;
 }
 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException)
 {
-    Console.Error.WriteLine(e.Message); return 1;
+    Console.Error.WriteLine("MCP bridge connection closed or unavailable."); return 1;
 }

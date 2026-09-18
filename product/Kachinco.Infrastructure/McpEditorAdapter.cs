@@ -75,11 +75,12 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                         var commands = new List<EditCommand>();
                         foreach (var item in args.GetProperty("commands").EnumerateArray())
                         {
-                            if (commands.Count >= 10000) throw new JsonException("Too many commands.");
+                            if (commands.Count >= 64) throw new JsonException("Too many commands.");
                             string type = item.GetProperty("type").GetString() ?? "";
                             if (!Commands.TryGetValue(type, out var commandType)) throw new JsonException("Unknown command type.");
                             if (!AllowedCommand(commandType)) throw new UnauthorizedAccessException("Command requires a separate lifecycle/file grant.");
                             var payload = JsonNode.Parse(item.GetRawText())!.AsObject(); payload.Remove("type");
+                            McpTypedSchema.Validate(commandType, JsonSerializer.SerializeToElement(payload));
                             commands.Add((EditCommand)(payload.Deserialize(commandType, Wire) ?? throw new JsonException("Command required.")));
                         }
                         var edit = lease.Commit(session, new([.. commands], Revision(args), args.TryGetProperty("dryRun", out var dry) && dry.GetBoolean()), cancellationToken);
@@ -102,7 +103,8 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
             }
             else return Error(id, -32601, "Method not found.");
             lease.Demand(cancellationToken: cancellationToken);
-            return JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result });
+            var response = JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result });
+            return System.Text.Encoding.UTF8.GetByteCount(response) <= 4 * 1024 * 1024 ? response : Error(id, -32000, "Response exceeds the 4 MiB limit.");
         }
         catch (UnauthorizedAccessException) { return Error(id, -32001, "Permission denied."); }
         catch (McpRequestException e) { return Error(null, e.Code, e.Message); }
@@ -111,6 +113,8 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         catch (Exception e) when (e is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
         { return Error(id, -32602, "Invalid tool arguments."); }
     }
+    public static IReadOnlyDictionary<string, bool> CommandDispositions => Commands.ToDictionary(p => p.Key, p => AllowedCommand(p.Value), StringComparer.Ordinal);
+
     private static bool AllowedCommand(Type type) => type != typeof(CreateProject) && type != typeof(RegisterMedia) &&
         type != typeof(RelinkMedia) && type != typeof(SetGeneratedProvenance);
 
@@ -141,10 +145,21 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
     {
         object schema(string json) => JsonSerializer.Deserialize<JsonElement>(json);
         yield return new { name = "get_project", description = "Read the same visible Project, revision and transient editor context.", inputSchema = schema("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}") };
-        yield return new { name = "edit_batch", description = "Atomic typed commands. Each command has a type discriminator and camelCase constructor fields. All Int64 values, including ticks, are decimal strings. Allowed types: " + string.Join(", ", Commands.Keys), inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"},\"dryRun\":{\"type\":\"boolean\"},\"commands\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10000,\"items\":{\"type\":\"object\",\"required\":[\"type\"],\"properties\":{\"type\":{\"type\":\"string\"}}}}},\"required\":[\"expectedRevision\",\"commands\"],\"additionalProperties\":false}") };
+        yield return new { name = "edit_batch", description = "Atomic ordinary typed edits; Int64 fields use decimal strings. File/lifecycle commands are not authorized.", inputSchema = new JsonObject
+        {
+            ["type"] = "object", ["additionalProperties"] = false,
+            ["required"] = new JsonArray("expectedRevision", "commands"),
+            ["properties"] = new JsonObject
+            {
+                ["expectedRevision"] = new JsonObject { ["type"] = "string", ["pattern"] = "^[0-9]+$" },
+                ["dryRun"] = new JsonObject { ["type"] = "boolean" },
+                ["commands"] = new JsonObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 64,
+                    ["items"] = new JsonObject { ["oneOf"] = new JsonArray(Commands.Values.Where(AllowedCommand).OrderBy(t => t.Name, StringComparer.Ordinal).Select(t => (JsonNode?)McpTypedSchema.Command(t)).ToArray()) } }
+            }
+        } };
         foreach (var name in new[] { "undo", "redo" }) yield return new { name, description = "Travel the shared editor history.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"expectedRevision\":{\"type\":\"string\"}},\"required\":[\"expectedRevision\"],\"additionalProperties\":false}") };
-        yield return new { name = "clapper_resolve", description = "Resolve a sequence-local Clapper name to stable identity and coordinates.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"sequenceId\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}},\"required\":[\"sequenceId\",\"name\"]}") };
-        yield return new { name = "recipe_validate", description = "Compile bounded literal-only Python text/particles calls without executing user code.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"maxLength\":65536}},\"required\":[\"source\"]}") };
+        yield return new { name = "clapper_resolve", description = "Resolve a sequence-local Clapper name to stable identity and coordinates.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"sequenceId\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}},\"required\":[\"sequenceId\",\"name\"],\"additionalProperties\":false}") };
+        yield return new { name = "recipe_validate", description = "Compile bounded literal-only Python text/particles calls without executing user code.", inputSchema = schema("{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"maxLength\":65536}},\"required\":[\"source\"],\"additionalProperties\":false}") };
     }
     private sealed class IntegerStringConverter : JsonConverter<long>
     {
