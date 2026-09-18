@@ -20,7 +20,9 @@ public partial class MainWindow
     private void McpCopy_Click(object sender, RoutedEventArgs e)
     {
         if (mcpLease?.IsActive != true || mcpPipeName is null) return;
-        Clipboard.SetText(McpConnectionCommand());
+        try { Clipboard.SetText(McpConnectionCommand()); }
+        catch (System.Runtime.InteropServices.ExternalException)
+        { Status.Text = EditorText.Choose("クリップボードを使用中です。もう一度コピーしてください。", "Clipboard is busy. Try copying again."); }
     }
     private string McpConnectionCommand() => "\"" + Path.Combine(AppContext.BaseDirectory, "mcp", "Kachinco.Mcp.exe") + "\" --pipe " + mcpPipeName;
     private void UpdateMcpStatus()
@@ -74,6 +76,9 @@ public partial class MainWindow
                         readDeadline.CancelAfter(TimeSpan.FromMinutes(2));
                         var frame = await reader.ReadAsync(readDeadline.Token);
                         if (frame.Status == McpFrameStatus.EndOfStream) break;
+                        // Buffered clients must not starve Stop/New/permission input on WPF.
+                        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                        lease.Demand();
                         using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(lease.Token);
                         requestDeadline.CancelAfter(TimeSpan.FromSeconds(15));
                         string? result = frame.Status == McpFrameStatus.Success
