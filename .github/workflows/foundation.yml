@@ -63,6 +63,8 @@ jobs:
           name: Kachinco-win-x64
           path: artifacts/windows/Kachinco-win-x64.zip
           retention-days: 3
+      - name: Published editor and bridge external MCP acceptance
+        run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/windows/Kachinco-win-x64
       - name: Launch shell smoke
         shell: pwsh
         run: |

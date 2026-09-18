@@ -1,3 +1,4 @@
+using System.IO;
 using System.Collections.Immutable;
 using System.Windows;
 using System.Windows.Threading;
@@ -8,13 +9,18 @@ using Kachinco.Infrastructure;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         var app = new Application(); int exit = 1;
         app.Dispatcher.BeginInvoke(async () =>
         {
             try
             {
+                if (args is ["--packaged", var bundle])
+                {
+                    await PackagedMcpChecks.Run(Path.GetFullPath(bundle));
+                    exit = 0; return;
+                }
                 if (WindowsPreviewAudioOutput.ConvertPositionToFrames(1, 125) != 6000 ||
                     WindowsPreviewAudioOutput.ConvertPositionToFrames(2, 6000) != 6000 ||
                     WindowsPreviewAudioOutput.ConvertPositionToFrames(4, 24000) != 6000)

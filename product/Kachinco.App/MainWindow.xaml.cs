@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     private void NewProject(SequenceSettings settings)
     {
         if (!ConfirmDiscard()) return;
+        RevokeMcp();
         session.ReplaceProject(null);
         filename = savedJson = null;
         selectedSequenceId = Guid.NewGuid(); selectedMediaId = selectedClipId = null;
@@ -90,6 +91,7 @@ public partial class MainWindow : Window
         {
             var result = await files.LoadAsync(dialog.FileName);
             if (!result.Success) { ShowErrors(result.Diagnostics); return; }
+            RevokeMcp();
             var opened = session.ReplaceProject(result.Value!, revision);
             if (!opened.Success) { ShowErrors(opened.Diagnostics); return; }
             filename = dialog.FileName; savedJson = ProjectJson.Serialize(result.Value!).Value;
@@ -332,6 +334,9 @@ public partial class MainWindow : Window
 
     private void Refresh(string? message = null)
     {
+        // All UI and MCP edits/history refresh synchronously on this dispatcher.
+        // Invalidate at document loss, before AddSequence/import or human Redo.
+        if (mcpLease is { IsActive: false }) RevokeMcp();
         refreshing = true;
         var snapshot = session.GetProject();
         var project = snapshot.Project;

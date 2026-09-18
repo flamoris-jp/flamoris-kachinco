@@ -26,8 +26,7 @@ public partial class MainWindow
         CompositionTarget.Rendering += PlaybackRendering;
         Closed += async (_, _) =>
         {
-            mcpLifetime?.Cancel();
-            foreach (var job in exportJobs.Values) job.Cancellation.Cancel();
+            RevokeMcp();
             CompositionTarget.Rendering -= PlaybackRendering;
             Timeline.DisposeVisualizations();
             playback.Dispose();

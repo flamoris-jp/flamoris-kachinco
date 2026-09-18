@@ -230,12 +230,14 @@ the milestone that actually bundles FFmpeg; none is bundled here.
 
 ## AI/MCP surface and extensions
 
-MCP transport will bind the existing typed commands and snapshots, preserving
-batch order, stable IDs, expectedRevision, diagnostics and dry-run. No natural
-language parsing in Core. `api-contract.md` documents the C# callable surface and
-future wire conventions. A client queries a revision, creates explicit operations,
-dry-runs if useful, executes against that revision and inspects the result.
-Selection/playhead queries will be an explicitly transient editor-context surface.
+The live stdio bridge attaches to the same WPF EditorSession through a local-only
+Windows named pipe. ADR 0003 and `api-contract.md` own the current scoped lease,
+permission/discovery and version contracts. Stop, permission changes, Open/New
+and shutdown revoke before further access. Ordinary edits/history remain typed
+and revision-qualified; there is no second Project, timebase or MCP editor.
+File-capable external tools fail closed until separately authorized; UI import,
+Recipe generation and export remain the production file workflow. Read-only
+Recipe validation is a cancellable bounded compiler, not arbitrary execution.
 
 Clappers will be sequence-owned persistent anchors with domain geometry and
 referential validation. Recipes require versioned provenance, input IDs and seeds;
