@@ -34,6 +34,7 @@ internal static class PackagedMcpChecks
             string pipe = await Connection(process.Id);
             await using (var client = await Connect(bridge, pipe))
             {
+                Check(client.NegotiatedProtocolVersion == "2025-03-26", "Unexpected negotiated protocol.");
                 var tools = await client.ListToolsAsync(cancellationToken: Deadline());
                 Check(tools.Any(t => t.Name == "edit_batch") && !tools.Any(t => t.Name == "export_start"), "Discovery permissions.");
                 var state = await Query(client);
@@ -95,6 +96,7 @@ internal static class PackagedMcpChecks
             await OldPipeRejected(stoppedPipe);
             await Menu(main, "McpMenu", "McpEditMenu");
             string eofPipe = await Connection(process.Id);
+            await BridgeInputEof(bridge, eofPipe);
             await BridgeEof(bridge, eofPipe, process);
             Console.WriteLine("Published MCP: official C# SDK 1.0.0 / 2025-03-26 fallback; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
         }
@@ -163,6 +165,20 @@ internal static class PackagedMcpChecks
         bool rejected = false;
         try { await pipe.ConnectAsync(300); } catch (TimeoutException) { rejected = true; }
         Check(rejected, "Old address accepted a connection.");
+    }
+    private static async Task BridgeInputEof(string bridge, string pipe)
+    {
+        var start = new ProcessStartInfo(bridge) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("--pipe"); start.ArgumentList.Add(pipe); start.Environment["PATH"] = CleanPath;
+        using var child = Process.Start(start)!;
+        try
+        {
+            await child.StandardInput.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}");
+            Check(await child.StandardOutput.ReadLineAsync().WaitAsync(Limit) is not null, "Bridge stdin-EOF fixture did not attach.");
+            child.StandardInput.Close();
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { if (!child.HasExited) child.Kill(true); }
     }
     private static async Task BridgeEof(string bridge, string pipe, Process editor)
     {
