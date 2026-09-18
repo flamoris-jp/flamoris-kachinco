@@ -66,6 +66,7 @@ Official SDK interoperability, exact SDK version and packaged Windows results
 must be recorded as evidence, separately from human visual/DPI acceptance.
 
 Primary references checked for this change:
+- https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio
 - https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle
 - https://github.com/modelcontextprotocol/csharp-sdk
 - https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createnamedpipea
@@ -87,3 +88,8 @@ Package smoke proves the real native handle accepts the local official client.
 A separate-machine SMB/elevation matrix remains a manual check; the product's
 remote rejection relies on the documented kernel flag, not firewall defaults.
 https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.IO.Pipes/src/System/IO/Pipes/NamedPipeServerStream.Windows.cs
+
+
+The current 2026-07-28 stdio specification still documents newline-delimited
+stdio and fallback to legacy initialize. This does not make this implementation
+modern: the tested declaration stays 2025-03-26, with SDK 1.0.0 negotiation.

@@ -94,7 +94,7 @@ reserving IDs. It does not guarantee a later commit if another caller edits.
 There is no durable request deduplication yet. After an uncertain response, query
 the explicit IDs/revision before retrying.
 
-MCP export operations will use `IExportService` and transient job IDs/status. The
+A future separately authorized MCP export route would use `IExportService` and transient job IDs/status. The
 FFmpeg encoding boundary receives already rendered/mixed media; no effect, clip,
 caption or time semantics may be recreated in an MCP tool or FFmpeg command string.
 
