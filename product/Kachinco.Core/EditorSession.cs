@@ -22,7 +22,7 @@ public sealed class EditorSession
         lock (gate) return new(revision, current, undo.Count > 0, redo.Count > 0);
     }
 
-    public EditResult Execute(EditBatch batch)
+    public EditResult Execute(EditBatch batch, CancellationToken cancellationToken = default)
     {
         lock (gate)
         {
@@ -45,6 +45,7 @@ public sealed class EditorSession
             if (!batch.DryRun)
             {
                 if (revision == long.MaxValue) return Fail("REVISION_OVERFLOW", "Start a new session.");
+                cancellationToken.ThrowIfCancellationRequested();
                 Push(undo, current);
                 current = candidate;
                 redo.Clear();
@@ -54,8 +55,8 @@ public sealed class EditorSession
         }
     }
 
-    public EditResult Undo(long? expectedRevision = null) => Travel(undo, redo, expectedRevision);
-    public EditResult Redo(long? expectedRevision = null) => Travel(redo, undo, expectedRevision);
+    public EditResult Undo(long? expectedRevision = null, CancellationToken cancellationToken = default) => Travel(undo, redo, expectedRevision, cancellationToken);
+    public EditResult Redo(long? expectedRevision = null, CancellationToken cancellationToken = default) => Travel(redo, undo, expectedRevision, cancellationToken);
 
     // Open/New are explicit session lifecycle actions; a failed load never calls this.
     public EditResult ReplaceProject(Project? project, long? expectedRevision = null)
@@ -81,13 +82,14 @@ public sealed class EditorSession
         }
     }
 
-    private EditResult Travel(List<Project?> from, List<Project?> to, long? expectedRevision)
+    private EditResult Travel(List<Project?> from, List<Project?> to, long? expectedRevision, CancellationToken cancellationToken)
     {
         lock (gate)
         {
             if (expectedRevision is { } expected && expected != revision) return Fail("REVISION_CONFLICT", "Query the latest project before changing history.");
             if (from.Count == 0) return Fail("HISTORY_EMPTY", "No history entry available.");
             if (revision == long.MaxValue) return Fail("REVISION_OVERFLOW", "Start a new session.");
+            cancellationToken.ThrowIfCancellationRequested();
             Push(to, current); current = from[^1]; from.RemoveAt(from.Count - 1); revision++;
             return new(true, revision, []);
         }

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.IO;
-using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -11,134 +10,95 @@ namespace Kachinco.App;
 
 public partial class MainWindow
 {
-    private CancellationTokenSource? mcpLifetime;
-    private readonly Dictionary<Guid, EditorExportJob> exportJobs = [];
-    private async void Mcp_Click(object sender, RoutedEventArgs e)
+    private McpAccessLease? mcpLease;
+    private string? mcpPipeName;
+    private Window? mcpInformation;
+
+    private void McpReadOnly_Click(object sender, RoutedEventArgs e) => EnableMcp(McpPermission.ReadOnly);
+    private void McpEdit_Click(object sender, RoutedEventArgs e) => EnableMcp(McpPermission.Edit);
+    private void McpStop_Click(object sender, RoutedEventArgs e) => RevokeMcp();
+    private void McpCopy_Click(object sender, RoutedEventArgs e)
     {
-        if (mcpLifetime is not null) { mcpLifetime.Cancel(); mcpLifetime = null; Status.Text = "MCP接続を停止しました。"; return; }
-        var lifetime = new CancellationTokenSource(); mcpLifetime = lifetime;
-        string pipeName = "kachinco-" + Guid.NewGuid().ToString("N");
-        var information = new System.Windows.Controls.TextBox { Text = "\"" + Path.Combine(AppContext.BaseDirectory,"mcp","Kachinco.Mcp.exe") + "\" --pipe " + pipeName, IsReadOnly = true, Margin = new Thickness(16) };
-        new Window { Owner = this, Title = "MCPクライアントの起動コマンド", Width = 700, SizeToContent = SizeToContent.Height,
-            Content = information, WindowStartupLocation = WindowStartupLocation.CenterOwner }.Show();
-        Status.Text = "MCP接続を待っています。";
+        if (mcpLease?.IsActive != true || mcpPipeName is null) return;
+        try { Clipboard.SetText(McpConnectionCommand()); }
+        catch (System.Runtime.InteropServices.ExternalException)
+        { Status.Text = EditorText.Choose("クリップボードを使用中です。もう一度コピーしてください。", "Clipboard is busy. Try copying again."); }
+    }
+    private string McpConnectionCommand() => "\"" + Path.Combine(AppContext.BaseDirectory, "mcp", "Kachinco.Mcp.exe") + "\" --pipe " + mcpPipeName;
+    private void UpdateMcpStatus()
+    {
+        McpReadOnlyMenu.IsChecked = mcpLease?.Permission == McpPermission.ReadOnly;
+        McpEditMenu.IsChecked = mcpLease?.Permission == McpPermission.Edit;
+        McpCopyMenu.IsEnabled = McpStopMenu.IsEnabled = mcpLease?.IsActive == true;
+    }
+    private void RevokeMcp()
+    {
+        var previous = mcpLease; mcpLease = null; mcpPipeName = null;
+        previous?.Revoke();
+        mcpInformation?.Close(); mcpInformation = null;
+        UpdateMcpStatus();
+        Status.Text = EditorText.Choose("MCP接続は無効です。", "MCP is disabled.");
+    }
+    private void EnableMcp(McpPermission permission)
+    {
+        RevokeMcp();
+        if (session.GetProject().Project is null) { Status.Text = EditorText.Choose("先にプロジェクトを開いてください。", "Open a project first."); return; }
+        var lease = new McpAccessLease(session, permission); mcpLease = lease;
+        string pipeName = "kachinco-" + Guid.NewGuid().ToString("N"); mcpPipeName = pipeName;
+        UpdateMcpStatus();
+        var information = new System.Windows.Controls.TextBox { Text = McpConnectionCommand(), IsReadOnly = true, Margin = new Thickness(16) };
+        mcpInformation = new Window { Owner = this, Title = EditorText.Choose("MCP接続・同時接続は1つ", "MCP connection · one client at a time"), Width = 700,
+            SizeToContent = SizeToContent.Height, Content = information, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        mcpInformation.Closed += (_, _) => information.Clear();
+        mcpInformation.Show();
+        Status.Text = EditorText.Choose("MCP接続を待っています。ファイル操作は許可されていません。", "Waiting for MCP. File operations are not authorized.");
+        _ = ServeMcpAsync(pipeName, lease);
+    }
+    private async Task ServeMcpAsync(string pipeName, McpAccessLease lease)
+    {
         try
         {
-            while (!lifetime.IsCancellationRequested)
+            while (lease.IsActive)
             {
-                await using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await using var pipe = WindowsLocalPipe.Create(pipeName);
+                using var closeOnRevoke = lease.Token.Register(() => pipe.Dispose());
                 try
                 {
-                    await pipe.WaitForConnectionAsync(lifetime.Token);
+                    await pipe.WaitForConnectionAsync(lease.Token);
                     var adapter = new McpEditorAdapter(session,
                         () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-                        () => Refresh("MCPから編集しました。"), McpJobAsync);
+                        () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP.")), lease);
                     var reader = new McpBoundedLineReader(pipe);
                     await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                    while (pipe.IsConnected && !lifetime.IsCancellationRequested)
+                    while (pipe.IsConnected && lease.IsActive)
                     {
-                        var frame = await reader.ReadAsync(lifetime.Token);
+                        using var readDeadline = CancellationTokenSource.CreateLinkedTokenSource(lease.Token);
+                        readDeadline.CancelAfter(TimeSpan.FromMinutes(2));
+                        var frame = await reader.ReadAsync(readDeadline.Token);
                         if (frame.Status == McpFrameStatus.EndOfStream) break;
-                        if (frame.Status != McpFrameStatus.Success)
+                        // Buffered clients must not starve Stop/New/permission input on WPF.
+                        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                        lease.Demand();
+                        using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(lease.Token);
+                        requestDeadline.CancelAfter(TimeSpan.FromSeconds(15));
+                        string? result = frame.Status == McpFrameStatus.Success
+                            ? await adapter.HandleAsync(frame.Line!, requestDeadline.Token, busy)
+                            : McpEnvelope.Error(null, -32700, "Invalid or oversized UTF-8 frame.");
+                        lease.Demand(cancellationToken: requestDeadline.Token);
+                        if (result is not null)
                         {
-                            string message = frame.Status switch
-                            {
-                                McpFrameStatus.Oversized => "MCP message is too large.",
-                                McpFrameStatus.InvalidUtf8 => "MCP message is not valid UTF-8.",
-                                _ => "MCP message is not newline terminated."
-                            };
-                            await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = (object?)null, error = new { code = -32700, message } }));
-                            break;
+                            using var writeDeadline = CancellationTokenSource.CreateLinkedTokenSource(requestDeadline.Token);
+                            writeDeadline.CancelAfter(TimeSpan.FromSeconds(5));
+                            await writer.WriteLineAsync(result.AsMemory(), writeDeadline.Token);
                         }
-                        string line = frame.Line!;
-                        // This continuation executes on the WPF dispatcher, sharing the exact UI session.
-                        if (busy)
-                        {
-                            try
-                            {
-                                using var request=JsonDocument.Parse(line);
-                                if(request.RootElement.TryGetProperty("id",out var requestId))
-                                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc="2.0",id=requestId,error=new {code=-32000,message="Editor is busy"} }));
-                            }
-                            catch(JsonException) { await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Invalid JSON\"}}"); }
-                            continue;
-                        }
-                        var result = await adapter.HandleAsync(line);
-                        if (result is not null) await writer.WriteLineAsync(result.AsMemory(), lifetime.Token);
+                        if (frame.Status != McpFrameStatus.Success) break;
                     }
                 }
-                catch (Exception ex) when (ex is IOException or InvalidDataException or DecoderFallbackException)
-                { Status.Text = "MCPクライアント接続を閉じました: " + ex.Message; }
+                // The request boundary must never fault the WPF dispatcher. Do not log payloads.
+                catch (Exception) { if (lease.IsActive) Status.Text = EditorText.Choose("MCP接続を閉じました。再接続できます。", "MCP connection closed. Reconnection is available."); }
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "MCP接続を終了しました: " + ex.Message; }
-        finally { if (ReferenceEquals(mcpLifetime, lifetime)) mcpLifetime = null; lifetime.Dispose(); }
-    }
-    private Task<object> McpJobAsync(string method, JsonElement args)
-    {
-        if (method is "recipe_generate" or "export_start")
-            foreach(var old in exportJobs.Where(x=>x.Value.Result is not null).Take(Math.Max(0,exportJobs.Count-31)).Select(x=>x.Key).ToArray())
-            { exportJobs[old].Cancellation.Dispose();exportJobs.Remove(old); }
-        if (method == "recipe_generate")
-        {
-            var snapshot = session.GetProject();
-            if (long.Parse(args.GetProperty("expectedRevision").GetString()!,CultureInfo.InvariantCulture) != snapshot.Revision || snapshot.Project is null)
-                return Task.FromResult<object>(new { error = "REVISION_CONFLICT" });
-            if (exportJobs.Values.Any(x => x.Result is null)) return Task.FromResult<object>(new { error = "EXPORT_BUSY" });
-            var recipe = args.GetProperty("recipe").Deserialize<Recipe>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true }) ?? throw new JsonException("Recipe required.");
-            var id = Guid.NewGuid(); var job = new EditorExportJob(); exportJobs.Add(id,job);
-            var service = new RecipeGenerationService(new RecipeCompiler(),new WindowsRecipeRasterizer(Dispatcher));
-            _ = RunRecipeJob(id,job,service,snapshot,args.GetProperty("sequenceId").GetGuid(),recipe,args.GetProperty("outputPath").GetString()!,
-                args.TryGetProperty("replaceMediaId",out var replace) ? replace.GetGuid() : null);
-            return Task.FromResult<object>(new { jobId = id });
-        }
-        if (method == "export_start")
-        {
-            var snapshot = session.GetProject();
-            var revision = long.Parse(args.GetProperty("expectedRevision").GetString()!, CultureInfo.InvariantCulture);
-            if (revision != snapshot.Revision || snapshot.Project is null) return Task.FromResult<object>(new { error = "REVISION_CONFLICT" });
-            if (exportJobs.Values.Any(x => x.Result is null)) return Task.FromResult<object>(new { error = "EXPORT_BUSY" });
-            foreach (var old in exportJobs.Where(x => x.Value.Result is not null).Select(x => x.Key).ToArray()) { exportJobs[old].Cancellation.Dispose(); exportJobs.Remove(old); }
-            var id = Guid.NewGuid(); var job = new EditorExportJob(); exportJobs.Add(id, job);
-            var decoder = new FfmpegMediaDecoder();
-            var service = new SnapshotExportService(new SharedFrameRenderer(decoder, filename, new WindowsCaptionRasterizer(Dispatcher)),
-                new SharedAudioRenderer(decoder, filename), new FfmpegEncodingBackend(), new(null), filename);
-            var request = new ExportRequest(id, args.GetProperty("sequenceId").GetGuid(), args.GetProperty("outputPath").GetString()!, ExportPreset.YoutubeH264AacMp4, revision);
-            _ = RunEditorJob(job, service, snapshot, request);
-            return Task.FromResult<object>(new { jobId = id, revision = revision.ToString(CultureInfo.InvariantCulture) });
-        }
-        var jobId = args.GetProperty("jobId").GetGuid();
-        if (!exportJobs.TryGetValue(jobId, out var found)) return Task.FromResult<object>(new { error = "JOB_NOT_FOUND" });
-        if (method == "job_cancel") found.Cancellation.Cancel();
-        return Task.FromResult<object>(new { jobId, progress = found.Progress, result = found.Result });
-    }
-    private async Task RunRecipeJob(Guid id,EditorExportJob job,RecipeGenerationService service,ProjectSnapshot snapshot,Guid sequenceId,Recipe recipe,string path,Guid? replace)
-    {
-        try
-        {
-            var result = await Task.Run(() => service.PrepareAsync(snapshot,sequenceId,recipe,path,replace,job.Cancellation.Token));
-            if (!result.Success) { job.Result = new(id,ExportStage.Failed,null,result.Diagnostics); return; }
-            var prepared = result.Value!;
-            if(job.Cancellation.IsCancellationRequested) { File.Delete(prepared.OutputPath);job.Result=new(id,ExportStage.Cancelled,null,[]);return; }
-            var committed = session.Execute(prepared.Batch);
-            if (!committed.Success) { File.Delete(prepared.OutputPath); job.Result = new(id,ExportStage.Failed,null,committed.Diagnostics); return; }
-            job.Result = new(id,ExportStage.Completed,prepared.OutputPath,[]); Refresh("Recipeクリップを生成しました。");
-        }
-        catch(Exception ex) { job.Result = new(id,ExportStage.Failed,null,[Diagnostic.Error("RECIPE_GENERATION_FAILED",ex.Message)]); }
-    }
-    private async Task RunEditorJob(EditorExportJob job, IExportService service, ProjectSnapshot snapshot, ExportRequest request)
-    {
-        var progress = new Progress<ExportProgress>(p => job.Progress = p);
-        try { job.Result = await Task.Run(() => service.ExportAsync(snapshot, request, progress, job.Cancellation.Token)); }
-        catch (Exception ex) { job.Result = new(request.JobId, ExportStage.Failed, null, [Diagnostic.Error("EXPORT_FAILED", ex.Message)]); }
-    }
-    private sealed class EditorExportJob
-    {
-        public CancellationTokenSource Cancellation { get; } = new();
-        public ExportProgress? Progress { get; set; }
-        public ExportResult? Result { get; set; }
+        catch (Exception) { if (ReferenceEquals(mcpLease, lease)) Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable."); }
+        finally { if (ReferenceEquals(mcpLease, lease)) RevokeMcp(); else lease.Revoke(); }
     }
 }
