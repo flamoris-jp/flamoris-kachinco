@@ -15,7 +15,7 @@ public sealed class McpLeaseTests
     public async Task RevokedPreparedWorkCannotCommitUnderNewLease()
     {
         var f = new Fixture(); var before = f.Session.GetProject();
-        using var oldLease = new McpAccessLease(McpPermission.Edit);
+        using var oldLease = new McpAccessLease(f.Session, McpPermission.Edit);
         var prepared = new TaskCompletionSource<PreparedGeneration>(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var worker = Task.Run(async () =>
@@ -27,7 +27,7 @@ public sealed class McpLeaseTests
         });
         await prepared.Task;
         oldLease.Revoke();
-        using var freshLease = new McpAccessLease(McpPermission.Edit);
+        using var freshLease = new McpAccessLease(f.Session, McpPermission.Edit);
         resume.SetResult();
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await worker);
         Assert.AreEqual(before, f.Session.GetProject());
@@ -41,7 +41,7 @@ public sealed class McpLeaseTests
         var f = new Fixture(); var before = f.Session.GetProject();
         foreach (var permission in new[] { McpPermission.ReadOnly, McpPermission.Edit })
         {
-            using var lease = new McpAccessLease(permission);
+            using var lease = new McpAccessLease(f.Session, permission);
             var adapter = new McpEditorAdapter(f.Session, () => new { }, () => Assert.Fail(), lease);
             await adapter.HandleAsync(Initialize);
             string[] denied = [Call("export_start", new { expectedRevision = "1", sequenceId = f.SequenceId, outputPath = "denied.mp4" }),
@@ -66,9 +66,76 @@ public sealed class McpLeaseTests
     }
 
     [TestMethod]
+    [DataRow(McpPermission.Edit, false)]
+    [DataRow(McpPermission.Edit, true)]
+    [DataRow(McpPermission.ReadOnly, false)]
+    public async Task DocumentLossRevokesBeforeImplicitCreationAndHumanRedoCannotRevive(McpPermission permission, bool mcpUndo)
+    {
+        var f = new Fixture();
+        using var lease = new McpAccessLease(f.Session, permission);
+        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => { _ = lease.IsActive; }, lease);
+        await adapter.HandleAsync(Initialize);
+        if (mcpUndo)
+            await adapter.HandleAsync(Call("undo", new { expectedRevision = f.Session.GetProject().Revision.ToString() }));
+        else
+            Assert.IsTrue(f.Session.Undo().Success);
+        Assert.IsNull(f.Session.GetProject().Project);
+        // The shared WPF Refresh performs this check synchronously after UI history.
+        Assert.IsFalse(lease.IsActive);
+        Assert.IsTrue(lease.Token.IsCancellationRequested);
+        Assert.IsTrue(f.Session.Redo().Success);
+        Assert.AreEqual(f.ProjectId, f.Project.Id);
+        Assert.IsFalse(lease.IsActive);
+        Assert.IsTrue(f.Session.Undo().Success);
+        var newId = Guid.NewGuid();
+        Assert.IsTrue(f.Session.Execute(new([new CreateProject(newId, "Implicit new document"),
+            new CreateSequence(Guid.NewGuid(), "Sequence", SequenceSettings.Landscape, Fixture.T)])).Success);
+        var before = f.Session.GetProject();
+        foreach (var request in new[] { Call("get_project", new { }), Call("undo", new { expectedRevision = before.Revision.ToString() }) })
+        {
+            using var response = JsonDocument.Parse((await adapter.HandleAsync(request))!);
+            Assert.IsTrue(response.RootElement.TryGetProperty("error", out _));
+        }
+        Assert.AreEqual(before, f.Session.GetProject());
+        using var fresh = new McpAccessLease(f.Session, permission);
+        Assert.IsTrue(fresh.IsActive);
+        fresh.Demand();
+    }
+
+    [TestMethod]
+    public void FirstImportAfterDocumentLossDoesNotInheritTheGrant()
+    {
+        var f = new Fixture(); var asset = f.Project.Assets[0];
+        using var lease = new McpAccessLease(f.Session, McpPermission.ReadOnly);
+        Assert.IsTrue(f.Session.Undo().Success);
+        Assert.IsFalse(lease.IsActive); // UI Refresh at document loss.
+        Assert.IsTrue(f.Session.Execute(EditorStartup.Import(f.Session.GetProject(), asset, Guid.NewGuid(), "Imported document")).Success);
+        Assert.AreNotEqual(f.ProjectId, f.Project.Id);
+        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Demand());
+    }
+
+    [TestMethod]
+    public void SameDocumentSnapshotsRemainAuthorizedButDifferentIdentityCannotBeReadOrCommitted()
+    {
+        var f = new Fixture(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
+        var original = f.Project;
+        Assert.IsTrue(lease.Commit(f.Session, new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)])).Success);
+        Assert.AreNotSame(original, f.Project);
+        Assert.IsTrue(lease.IsActive);
+        Assert.IsTrue(lease.Run(() => f.Session.Undo(), true).Success);
+        Assert.IsTrue(lease.Run(() => f.Session.Redo(), true).Success);
+        Assert.IsTrue(lease.IsActive);
+        // Also fail closed if a caller missed the UI observation at an identity transition.
+        Assert.IsTrue(f.Session.ReplaceProject(original with { Id = Guid.NewGuid() }).Success);
+        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Demand());
+        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Commit(f.Session,
+            new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, true)])));
+    }
+
+    [TestMethod]
     public void CancelledCommitAndHistoryNeverChangeTheSession()
     {
-        var f = new Fixture(); var before = f.Session.GetProject(); using var lease = new McpAccessLease(McpPermission.Edit);
+        var f = new Fixture(); var before = f.Session.GetProject(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
         using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
         Assert.ThrowsExactly<OperationCanceledException>(() => lease.Commit(f.Session,
             new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)], before.Revision), cancellation.Token));

@@ -334,6 +334,9 @@ public partial class MainWindow : Window
 
     private void Refresh(string? message = null)
     {
+        // All UI and MCP edits/history refresh synchronously on this dispatcher.
+        // Invalidate at document loss, before AddSequence/import or human Redo.
+        if (mcpLease is { IsActive: false }) RevokeMcp();
         refreshing = true;
         var snapshot = session.GetProject();
         var project = snapshot.Project;

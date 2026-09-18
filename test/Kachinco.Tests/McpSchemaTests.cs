@@ -12,7 +12,7 @@ public sealed class McpSchemaTests
     {
         var commands = typeof(EditCommand).Assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(EditCommand))).Select(t => t.Name).Order().ToArray();
         CollectionAssert.AreEqual(commands, McpEditorAdapter.CommandDispositions.Keys.Order().ToArray());
-        var f = new Fixture(); using var lease = new McpAccessLease(McpPermission.Edit);
+        var f = new Fixture(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
         var adapter = new McpEditorAdapter(f.Session, () => new { }, () => { }, lease);
         await adapter.HandleAsync(McpLeaseTests.Initialize);
         const string list = """{"jsonrpc":"2.0","id":3,"method":"tools/list"}""";

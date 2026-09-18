@@ -42,7 +42,13 @@ Stop, permission change, document replacement and shutdown revoke before further
 admission; active streams close and in-flight compilation/jobs are cancelled.
 Open cancellation/load failure preserves the attachment; once a valid load is
 ready to replace the document, revoke even if the final revision check fails.
-New uses the same rule after the discard confirmation. Even reopening the same
+New uses the same rule after the discard confirmation. The lease binds to the
+existing session and granted Project ID, never to an immutable snapshot reference.
+The WPF dispatcher observes that binding on every Refresh (including UI Undo/Redo
+and first import); lease operations also check it before access and after shared
+history changes. Loss of the Project revokes immediately, before another UI action
+can implicitly create a Project. Human Redo remains available, but cannot revive a
+revoked grant even when it restores the original ID. Even reopening the same
 persistent ID requires a fresh enable. Disconnect is detected on the next pipe IO;
 inline bounded compilation may finish without producing persistent state or files.
 No external background jobs are admitted in this release. A future file grant must

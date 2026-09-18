@@ -43,7 +43,7 @@ public partial class MainWindow
     {
         RevokeMcp();
         if (session.GetProject().Project is null) { Status.Text = EditorText.Choose("先にプロジェクトを開いてください。", "Open a project first."); return; }
-        var lease = new McpAccessLease(permission); mcpLease = lease;
+        var lease = new McpAccessLease(session, permission); mcpLease = lease;
         string pipeName = "kachinco-" + Guid.NewGuid().ToString("N"); mcpPipeName = pipeName;
         UpdateMcpStatus();
         var information = new System.Windows.Controls.TextBox { Text = McpConnectionCommand(), IsReadOnly = true, Margin = new Thickness(16) };
