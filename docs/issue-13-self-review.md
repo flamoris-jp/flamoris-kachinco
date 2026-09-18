@@ -22,6 +22,15 @@ validator was neither added nor repurposed as MCP authority.
   A future source/output grant is not implicitly authorized by this change.
 - Revoke precedes both UI ReplaceProject call sites, regardless of persistent ID.
   Failed/cancelled loading is intentionally distinct from replacement admission.
+- PR #14's P1 found a missed lifecycle: Undo of the initial CreateProject batch
+  restores null; UI AddSequence/first import can then implicitly create a different
+  Project. The lease now binds to the existing session and stable Project ID.
+  Every shared WPF Refresh observes document loss before the next dispatcher action;
+  lease admission and post-operation checks also revoke on null/different identity.
+  UI Undo/Redo and first import use Show/Refresh; MCP history uses lease.Run then
+  Refresh. Same-document immutable snapshot changes preserve access. Human Redo
+  still works after revocation and cannot reactivate the old lease. Explicit Open
+  still revokes for the same persistent ID. No Core history or revision was added.
   Stop/rotation/Closed cancel inline compilation and close the native handle.
 - Buffered requests yield to WPF input, preventing a fast client from starving
   Stop/New/permission changes. A connection failure never escapes onto async-void UI.
@@ -44,7 +53,13 @@ package acceptance are separate gates. The package driver asserts negotiated
 2025-03-26, full discovery/calls, track+caption atomic edit, automatic UI text
 projection, UI Undo/Redo, UI edit seen by MCP, MCP history, rollback, stale revision,
 read-only direct rejection, New/permission/Stop revocation, stdin/editor EOF and
-package test-dependency exclusion. Editor and bridge run with System32-only PATH;
+package test-dependency exclusion. P1 regression coverage adds Edit UI/MCP Undo
+of Project creation, Read only UI Undo, human Redo without grant resurrection,
+implicit AddSequence creating B, denial of old query/edit/pipe access, explicit
+re-enable and editing B, plus native Open-dialog same-file reopen revocation.
+Headless cases additionally cover first-import implicit creation and same-ID
+immutable edits/history preserving access. Results/commit/run links are in the PR.
+Editor and bridge run with System32-only PATH;
 the external test driver retains its own .NET/official SDK dependencies.
 
 The deterministic prepared-generation barrier test prepares ordinary commands,
@@ -60,7 +75,8 @@ No successful local WPF execution is claimed.
 ## Human acceptance still required
 
 - Real artwork/audio, Ctrl+Z/Ctrl+Y keyboard focus, Japanese/English usability and DPI.
-- Open/reopen the same real file and inspect connection copy/window invalidation.
+- Open/reopen a real user file and inspect connection copy/window usability.
+  Synthetic native-dialog same-file revocation is automated separately.
 - Different-user/elevation and actual second-machine SMB client matrix. Kernel flag
   enforcement is the implementation guarantee; no remote exploit reproduction or
   live multi-machine security test is claimed.
