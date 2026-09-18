@@ -139,7 +139,7 @@ internal static class PackagedMcpChecks
             catch (ModelContextProtocol.McpException) { }
         }
         else await Invoke(Find(main, "UndoButton"));
-        await Until(() => !Find(main, "UndoButton").Current.IsEnabled && Find(main, "RedoButton").Current.IsEnabled);
+        await Until(() => HistoryIs(main, undo: false, redo: true));
         await ExpectDisconnected(connection);
         await OldPipeRejected(pipe);
         var mcpMenu = (ExpandCollapsePattern)Find(main, "McpMenu").GetCurrentPattern(ExpandCollapsePattern.Pattern);
@@ -148,12 +148,12 @@ internal static class PackagedMcpChecks
         mcpMenu.Collapse();
         // Human Redo is preserved, without resurrecting the revoked client or address.
         await Invoke(Find(main, "RedoButton"));
-        await Until(() => Find(main, "UndoButton").Current.IsEnabled);
+        await Until(() => HistoryIs(main, undo: true, redo: false));
         await ExpectDisconnected(connection); await OldPipeRejected(pipe);
         await Invoke(Find(main, "UndoButton"));
-        await Until(() => !Find(main, "UndoButton").Current.IsEnabled);
+        await Until(() => HistoryIs(main, undo: false, redo: true));
         await Invoke(Find(main, "AddLandscapeSequenceButton"));
-        await Until(() => Find(main, "UndoButton").Current.IsEnabled);
+        await Until(() => HistoryIs(main, undo: true, redo: false));
         await ExpectDisconnected(connection); await OldPipeRejected(pipe);
         await Menu(main, "McpMenu", "McpEditMenu");
         string freshPipe = await Connection(processId);
@@ -174,6 +174,19 @@ internal static class PackagedMcpChecks
             await Menu(main, "McpMenu", "McpStopMenu"); await ExpectDisconnected(fresh);
         }
         Console.WriteLine($"Project creation Undo ({(readOnly ? "Read only" : "Edit")}, {(mcpUndo ? "MCP" : "UI")}) -> null -> human Redo -> implicit B; old query/edit/address denied; fresh grant edits B: PASS");
+    }
+    private static bool HistoryIs(AutomationElement main, bool undo, bool redo)
+    {
+        // Closing the revoked connection window can temporarily rebuild the UIA tree.
+        // Absence is not success: wait for both controls and their exact history state.
+        try
+        {
+            var undoButton = main.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "UndoButton"));
+            var redoButton = main.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "RedoButton"));
+            return undoButton is not null && redoButton is not null &&
+                undoButton.Current.IsEnabled == undo && redoButton.Current.IsEnabled == redo;
+        }
+        catch (ElementNotAvailableException) { return false; }
     }
     private static async Task SameFileReopen(AutomationElement main, int processId, string bridge)
     {
