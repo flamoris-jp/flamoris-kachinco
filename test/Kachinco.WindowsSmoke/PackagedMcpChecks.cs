@@ -110,6 +110,10 @@ internal static class PackagedMcpChecks
                 await ExpectDisconnected(connection);
             }
             await OldPipeRejected(stoppedPipe);
+            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: false);
+            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: true);
+            await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
+            await SameFileReopen(main, process.Id, bridge);
             await Menu(main, "McpMenu", "McpEditMenu");
             string eofPipe = await Connection(process.Id);
             await BridgeInputEof(bridge, eofPipe);
@@ -117,6 +121,105 @@ internal static class PackagedMcpChecks
             Console.WriteLine("Published MCP: official C# SDK 1.0.0 / 2025-03-26 fallback; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
+    }
+    private static Guid ProjectId(JsonElement state) => state.GetProperty("project").GetProperty("project").GetProperty("id").GetGuid();
+    private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
+    {
+        var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
+        await ConfirmDiscard(processId); await replacing;
+        await Menu(main, "McpMenu", readOnly ? "McpReadOnlyMenu" : "McpEditMenu");
+        string pipe = await Connection(processId);
+        await using var connection = new RevokedClient(await Connect(bridge, pipe));
+        var state = await Query(connection.Client); var originalId = ProjectId(state);
+        if (mcpUndo)
+        {
+            // The commit succeeds, then revocation closes the pipe before its response.
+            try { await Call(connection.Client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() }); }
+            catch (IOException) { }
+            catch (ModelContextProtocol.McpException) { }
+        }
+        else await Invoke(Find(main, "UndoButton"));
+        await Until(() => !Find(main, "UndoButton").Current.IsEnabled && Find(main, "RedoButton").Current.IsEnabled);
+        await ExpectDisconnected(connection);
+        await OldPipeRejected(pipe);
+        var mcpMenu = (ExpandCollapsePattern)Find(main, "McpMenu").GetCurrentPattern(ExpandCollapsePattern.Pattern);
+        mcpMenu.Expand();
+        Check(!Find(main, "McpCopyMenu").Current.IsEnabled, "Document loss retained connection information.");
+        mcpMenu.Collapse();
+        // Human Redo is preserved, without resurrecting the revoked client or address.
+        await Invoke(Find(main, "RedoButton"));
+        await Until(() => Find(main, "UndoButton").Current.IsEnabled);
+        await ExpectDisconnected(connection); await OldPipeRejected(pipe);
+        await Invoke(Find(main, "UndoButton"));
+        await Until(() => !Find(main, "UndoButton").Current.IsEnabled);
+        await Invoke(Find(main, "AddLandscapeSequenceButton"));
+        await Until(() => Find(main, "UndoButton").Current.IsEnabled);
+        await ExpectDisconnected(connection); await OldPipeRejected(pipe);
+        await Menu(main, "McpMenu", "McpEditMenu");
+        string freshPipe = await Connection(processId);
+        Check(freshPipe != pipe, "New document reused old grant address.");
+        await using (var fresh = new RevokedClient(await Connect(bridge, freshPipe)))
+        {
+            state = await Query(fresh.Client);
+            Check(ProjectId(state) != originalId, "AddSequence did not implicitly create a new Project.");
+            var sequenceId = state.GetProperty("project").GetProperty("project").GetProperty("sequences")[0].GetProperty("id").GetGuid();
+            var args = new Dictionary<string, object?> { ["expectedRevision"] = state.GetProperty("revision").GetString(),
+                ["commands"] = new object[] { new { type = "AddTrack", sequenceId, trackId = Guid.NewGuid(), name = "Reauthorized", kind = "Video" } } };
+            bool denied = false;
+            try { await Call(connection.Client, "edit_batch", args); }
+            catch (IOException) { denied = true; }
+            catch (ModelContextProtocol.McpException) { denied = true; }
+            Check(denied, "Old client edited the new document with its current revision.");
+            Check((await Call(fresh.Client, "edit_batch", args)).GetProperty("success").GetBoolean(), "Explicit re-enable did not allow B editing.");
+            await Menu(main, "McpMenu", "McpStopMenu"); await ExpectDisconnected(fresh);
+        }
+        Console.WriteLine($"Project creation Undo ({(readOnly ? "Read only" : "Edit")}, {(mcpUndo ? "MCP" : "UI")}) -> null -> human Redo -> implicit B; old query/edit/address denied; fresh grant edits B: PASS");
+    }
+    private static async Task SameFileReopen(AutomationElement main, int processId, string bridge)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "kachinco-reopen-" + Guid.NewGuid().ToString("N") + ".fkproj");
+        try
+        {
+            await Menu(main, "McpMenu", "McpReadOnlyMenu");
+            string pipe = await Connection(processId);
+            Guid id;
+            await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
+            {
+                var state = await Query(connection.Client); id = ProjectId(state);
+                await File.WriteAllTextAsync(path, state.GetProperty("project").GetRawText());
+                var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+                await ConfirmDiscard(processId); await ChooseProjectFile(processId, path); await opening;
+                await ExpectDisconnected(connection);
+            }
+            await OldPipeRejected(pipe);
+            // The file is now clean; opening the exact same file has no discard prompt.
+            await Menu(main, "McpMenu", "McpReadOnlyMenu");
+            pipe = await Connection(processId);
+            await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
+            {
+                Check(ProjectId(await Query(connection.Client)) == id, "Open changed persistent identity.");
+                var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+                await ChooseProjectFile(processId, path); await opening;
+                await ExpectDisconnected(connection);
+            }
+            await OldPipeRejected(pipe);
+            Console.WriteLine("Open and same-file reopen with the same persistent ID revoke the old client and address: PASS");
+        }
+        finally { File.Delete(path); }
+    }
+    private static async Task ChooseProjectFile(int processId, string path)
+    {
+        AutomationElement? filename = null;
+        await Until(() => (filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")))) is not null);
+        var edit = filename!.TryGetCurrentPattern(ValuePattern.Pattern, out var value) ? filename :
+            filename.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit));
+        Check(edit is not null, "Open dialog filename control missing.");
+        ((ValuePattern)edit!.GetCurrentPattern(ValuePattern.Pattern)).SetValue(path);
+        AutomationElement? dialog = edit;
+        while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
+        Check(dialog is not null, "Open dialog missing.");
+        await Invoke(Find(dialog!, "1"));
     }
     private static CancellationToken Deadline() => new CancellationTokenSource(Limit).Token;
     private static async Task<McpClient> Connect(string bridge, string pipe) => await McpClient.CreateAsync(new StdioClientTransport(new()

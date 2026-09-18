@@ -28,7 +28,7 @@
         <MenuItem x:Name="NewLandscapeMenu" Header="{DynamicResource Shell.NewlandscapeL}" Click="NewLandscape_Click" />
         <MenuItem Header="{DynamicResource Shell.NewportraitP}" Click="NewPortrait_Click" />
         <Separator />
-        <MenuItem Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
+        <MenuItem x:Name="OpenProjectMenu" Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
         <MenuItem Header="{DynamicResource Shell.SaveasA}" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
         <Separator />
         <MenuItem Header="{DynamicResource Shell.ImportmediaI}" Click="Register_Click" />
@@ -199,7 +199,7 @@
             <WrapPanel>
               <TextBlock Text="{DynamicResource Shell.Timeline}" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
               <ComboBox x:Name="SequenceList" Width="170" DisplayMemberPath="Name" SelectionChanged="Sequence_Changed" />
-              <Button Content="{DynamicResource Shell.Landscape}" Click="AddLandscapeSequence_Click" ToolTip="{DynamicResource Shell.Addlandscapesequence}"/>
+              <Button x:Name="AddLandscapeSequenceButton" Content="{DynamicResource Shell.Landscape}" Click="AddLandscapeSequence_Click" ToolTip="{DynamicResource Shell.Addlandscapesequence}"/>
               <Button Content="{DynamicResource Shell.Portrait}" Click="AddPortraitSequence_Click" ToolTip="{DynamicResource Shell.Addportraitsequence}"/>
         <ToggleButton x:Name="SnappingButton" Content="{DynamicResource Shell.Snap}" IsChecked="True" Click="Snapping_Click" />
         <Button Content="−" Click="ZoomOut_Click" ToolTip="{DynamicResource Shell.Zoomtimelineout}" />
