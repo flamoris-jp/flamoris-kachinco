@@ -110,7 +110,8 @@ caption or time semantics may be recreated in an MCP tool or FFmpeg command stri
 - `ClapperQueries.Resolve(project, sequenceId, name)` uses sequence-local unique ordinal names.
 
 MCP tools: `get_project`, `edit_batch`, `undo`, `redo`, `clapper_resolve`,
-`recipe_validate`, `recipe_generate`, `export_start`, `job_status`, `job_cancel`.
+`recipe_validate`. Read only exposes inspection, Clapper resolution and bounded Recipe
+validation; Edit additionally exposes batch and shared history.
 Tool schemas describe arguments; batch command fields match camelCase C# constructor
 names. Int64 values are decimal strings, IDs are UUIDs, enums are exact names.
 `get_project` includes the v2 envelope and transient visible sequence/clip/playhead.
@@ -121,7 +122,50 @@ Example command within `edit_batch.commands`:
 {"type":"SetSequenceDuration","sequenceId":"00000000-0000-0000-0000-000000000002","durationTicks":"352800000"}
 ```
 
-A Recipe job first compiles/renders outside the session and commits only if the
+UI Recipe generation first compiles/renders outside the session and commits only if the
 captured revision is still current. `replaceMediaId` explicitly preserves existing
 clip placement; incompatible source ranges fail. Old MOV generations remain on disk
 for Undo. Paths refer to the machine running Kachinco, not the MCP client's host.
+
+
+## Scoped live access (Issue #13)
+
+Each explicit enable creates a fresh, document-bound `McpAccessLease`. This is only
+transient authorization. No second Project, editing session, history or timebase
+is created. WPF and the one admitted client serialize on the same dispatcher;
+Core still serializes state/history with its gate. Revisions remain monotonic.
+
+`edit_batch.commands.items.oneOf` describes every exposed constructor, nested
+record, enum, nullable field, UUID and decimal-string Int64. Unknown fields,
+computed properties, null nonnullable fields and unknown commands are rejected
+before Core. A separate explicit permission disposition must approve each command.
+Batches are limited to 64 commands (the internal Core limit is unchanged).
+`CreateProject`, `RegisterMedia`, `RelinkMedia`, `SetGeneratedProvenance` are denied.
+Use already imported asset IDs for ordinary clip editing. The UI owns Open/New,
+import/probe/relink and output selection. No generic filesystem/process tool exists.
+
+External `recipe_generate`, `export_start`, `job_status`, `job_cancel` are intentionally
+unavailable until source IDs and exact output targets have a separate reviewed UI
+grant. Direct invocation fails closed, including in Edit. Their unsafe background
+job admission path is removed; no externally accepted Recipe can later publish or
+commit after Stop. UI Recipe/export services and generated-file Undo retention are
+unchanged. The lease commit guard is barrier-tested against prepared generation.
+
+Stop, permission rotation, successful-load replacement admission, New and shutdown
+revoke first, cancel in-flight compilation and close active/waiting pipes. A failed
+load or cancelled chooser preserves access; a revision failure after a valid load
+is ready leaves MCP disabled. Reopening the same project ID requires re-enable.
+Normal bridge disconnect is observed at the next pipe IO; an inline compiler may
+finish within its five-second limit, but produces no Project/file output. No MCP
+background jobs survive disconnect in this release. Stop cancels immediately.
+
+Requests and responses are bounded to 4 MiB; strict UTF-8/depth 64 are retained.
+Read idle/partial-frame deadline: 2 minutes; request: 15 seconds; write: 5 seconds.
+Malformed envelopes use -32700 (invalid JSON) or -32600 (invalid envelope), tool
+arguments -32602, unknown methods -32601, permission -32001. Domain diagnostics stay
+inside tool results with `isError`. No hidden retry/rebase or request deduplication.
+A lost response after commit is ambiguous; query IDs/revision before retrying.
+
+Protocol target: 2025-03-26. The test-only official C# SDK package is pinned to
+`ModelContextProtocol.Core` 1.0.0. Modern-only per-request metadata/server discovery
+is not implemented or claimed. No Product SDK dependency was introduced.

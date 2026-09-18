@@ -65,14 +65,42 @@ particles(count=24, x=100, y=200, vx=80, vy=-20, size=5)
 
 ## MCP
 
-- AI connection > start/stop opens a read-only command string with a unique pipe ID.
-- Configure a local stdio client to run `mcp/Kachinco.Mcp.exe --pipe <displayed-id>`.
-  Keep this editor open. The endpoint is restricted to the same Windows user.
-- Target protocol is MCP 2025-03-26. Tools query the visible project/context,
-  apply typed batches with expectedRevision/dryRun, undo/redo, resolve Clappers,
-  validate/generate Recipes and start/query/cancel export jobs.
-- All Int64 command fields and revisions are decimal strings. Timebase is
-  35,280,000 ticks/second. Query after any revision conflict.
+- 起動時のMCPは無効です。プロジェクトを開いてから「AI接続」で
+  「読み取り専用で接続」または「編集を許可して接続」を選びます。
+- 接続コマンドをローカルのstdio対応クライアントへ設定します。
+  `mcp/Kachinco.Mcp.exe --pipe <表示されたID>`。同時接続は1つです。
+  「接続コマンドをコピー」も使えます。接続待ちのまま2分たつと再接続が必要です。
+- 読み取り専用は照会・Clapper解決・制限付きRecipe検証、編集許可は通常の
+  型付き編集と共有Undo/Redoを追加します。ファイル操作は別の許可が必要です。
+  今回は外部MCPによる素材登録・再リンク・Recipe生成・書き出しを無効にしています。
+  素材の取り込み、生成、書き出しは通常のUIから利用できます。
+- 停止・権限変更・Open/New・終了で古い接続は失効します。同じファイルを開き直す
+  場合も再有効化が必要です。古い接続情報ウィンドウは閉じます。クリップボードや
+  クライアント設定に残る古いコマンドは無効なので、新しいコマンドに差し替えてください。
+- 読み込み失敗やファイル選択のキャンセルでは接続を維持します。読み込んだ文書を
+  適用する直前に失効するため、その時点でrevision競合しても接続は無効になります。
+- 接続先はWindowsの同一ユーザー／昇格境界に制限し、サーバーのWindows APIに
+  remote-client rejectionを指定します。LANやクラウドから直接接続する機能ではありません。
+- Target: MCP 2025-03-26. Official C# client SDK 1.0.0 is test-only; newer-protocol-only
+  clients are not claimed. Int64 fields are decimal strings, UUIDs stable, enums exact;
+  35,280,000 ticks/second. Query after revision conflict or ambiguous response.
+
+### Automated package acceptance
+
+From a fresh Windows checkout with the test driver's .NET SDK available:
+
+```powershell
+dotnet build Kachinco.slnx -c Release
+dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
+./product/packaging/publish-windows.ps1 -OutputDirectory artifacts/mcp-acceptance
+dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/mcp-acceptance/Kachinco-win-x64
+```
+
+The driver uses Windows UI Automation and the official SDK. The **separate published
+editor and bridge** receive System32-only PATH, so ordinary attachment/edit/history
+needs no developer .NET, Node, Python or FFmpeg. Existing worker/media tests run
+separately with their declared dependencies. Package tests must never ship in the
+bundle; normal CI continues to upload ZIPs only on manual runs, retaining 3 days.
 
 ## Human acceptance — not performed by CI
 
@@ -83,7 +111,10 @@ particles(count=24, x=100, y=200, vx=80, vy=-20, size=5)
 - [ ] Caption edit/import/export and save/reopen retain timing and text.
 - [ ] A-1 + グエー generates; regenerate after moving/trimming the generated clip.
 - [ ] Undo/Redo and reopen preserve authoring/provenance; old source files still exist.
-- [ ] MCP client edit appears in the same visible timeline and shares Undo.
+- [ ] MCPで字幕／トラックを編集し、画面で確認してCtrl+Z／Ctrl+Yを押す。
+- [ ] 日本語／英語の許可表示、接続コピー、100/125/150/200% DPIを確認する。
+- [ ] 停止・権限降格・同じ文書の再Open後に古いクライアントから照会／編集できない。
+- [ ] 別Windowsユーザー・昇格差・別マシンからのnamed-pipe接続が拒否される。
 - [ ] Cancel preview/export/Recipe and close/reopen without stale dialogs or media.
 
 Automated evidence is recorded in the PR; startup checks are not visual acceptance.
