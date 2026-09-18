@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Windows.Automation;
 using ModelContextProtocol.Client;
@@ -19,6 +20,12 @@ internal static class PackagedMcpChecks
             Path.GetFileName(p).StartsWith("ModelContextProtocol", StringComparison.Ordinal) ||
             Path.GetFileName(p).Contains("Tests", StringComparison.Ordinal) ||
             Path.GetFileName(p).Contains("WindowsSmoke", StringComparison.Ordinal)), "Test SDK/runtime entered package.");
+        using (var archive = ZipFile.OpenRead(bundle + ".zip"))
+        {
+            var files = Directory.GetFiles(bundle, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(bundle, p).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+            var packaged = archive.Entries.Where(e => !e.FullName.EndsWith('/')).Select(e => e.FullName.Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+            Check(files.SequenceEqual(packaged), "ZIP differs from reviewed publish directory.");
+        }
         var start = new ProcessStartInfo(editor) { UseShellExecute = false, WorkingDirectory = bundle };
         start.Environment["PATH"] = CleanPath;
         using var process = Process.Start(start)!;
@@ -62,9 +69,12 @@ internal static class PackagedMcpChecks
                 Check(!rollback.GetProperty("success").GetBoolean() && (await Query(client)).GetProperty("revision").GetString() == revision, "Atomic rollback failed.");
                 await Menu(main, "SequenceMenu", "AddVideoTrackMenu");
                 state = await Query(client); Check(state.GetProperty("revision").GetString() != revision, "UI edit not visible to MCP.");
-                await Call(client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
+                int uiTrackCount = TrackCount(state);
+                var undone = await Call(client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
                 state = await Query(client);
-                await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
+                Check(undone.GetProperty("success").GetBoolean() && TrackCount(state) == uiTrackCount - 1, "MCP Undo did not reverse the UI edit.");
+                var redone = await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
+                Check(redone.GetProperty("success").GetBoolean() && TrackCount(await Query(client)) == uiTrackCount, "MCP Redo did not restore the UI edit.");
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(main, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);
@@ -122,6 +132,8 @@ internal static class PackagedMcpChecks
         return json.RootElement.Clone();
     }
     private static Task<JsonElement> Query(McpClient client) => Call(client, "get_project", []);
+    private static int TrackCount(JsonElement state) => state.GetProperty("project").GetProperty("project").GetProperty("sequences").EnumerateArray()
+        .Sum(s => s.GetProperty("tracks").GetArrayLength());
     private static bool HasTrack(JsonElement state, Guid id) => state.GetProperty("project").GetProperty("project").GetProperty("sequences").EnumerateArray()
         .SelectMany(s => s.GetProperty("tracks").EnumerateArray()).Any(t => t.GetProperty("id").GetGuid() == id);
     private static AutomationElement Find(AutomationElement root, string id) => root.FindFirst(TreeScope.Descendants,
