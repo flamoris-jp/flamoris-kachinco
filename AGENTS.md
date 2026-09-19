@@ -280,3 +280,13 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
   portable bundle. Physical Windows interaction remains `staging/windows-production.md`.
 - Phase 9 external integrations and performance work remain needs-driven; do not mark
   them delivered merely because portable packaging exists.
+
+
+## Shared FLAMORIS repository policy
+
+Organization-wide repository, licensing, security, contribution, and public-release principles are defined in:
+
+- `flamoris-jp/flamoris-commons/docs/repository-policy.md`
+- `flamoris-jp/flamoris-commons/AGENTS.md`
+
+This repository-specific `AGENTS.md` remains authoritative for product/domain rules. Where the shared policy and repository-specific rules differ, preserve the more specific product rule unless an explicit FLAMORIS-wide policy change says otherwise.
