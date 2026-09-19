@@ -17,8 +17,8 @@ public partial class MainWindow : Window
 {
     private readonly FlamorisLogger logger;
     private readonly EditorSession session = new();
-    private readonly ProjectFileStore files = new();
-    private readonly IMediaProbe mediaProbe = new FfprobeMediaProbe();
+    private readonly ProjectFileStore files;
+    private readonly IMediaProbe mediaProbe;
     private readonly MediaRelinkService relink;
     private string? savedJson;
     private string? filename;
@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     public MainWindow(FlamorisLogger logger)
     {
         this.logger = logger;
+        files = new(logger);
+        mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
         InitializeProduction();

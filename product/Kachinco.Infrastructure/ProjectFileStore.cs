@@ -1,9 +1,10 @@
 using System.Text;
+using Flamoris.Logging;
 using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
 
-public sealed class ProjectFileStore
+public sealed class ProjectFileStore(FlamorisLogger? logger = null)
 {
     public async Task<Result<Project>> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -24,16 +25,34 @@ public sealed class ProjectFileStore
             // Accept the conventional UTF-8 BOM, without changing the saved contract.
             return ProjectJson.Deserialize(json.TrimStart('\uFEFF'));
         }
-        catch (OperationCanceledException) { return Result<Project>.Fail(Diagnostic.Error("CANCELLED", "Project load cancelled.")); }
-        catch (DecoderFallbackException) { return Result<Project>.Fail(Diagnostic.Error("INVALID_PROJECT_FILE", "Project is not valid UTF-8.")); }
+        catch (OperationCanceledException exception)
+        {
+            logger?.Log(LogLevel.Warn, "document.open", "Project load cancelled",
+                new Dictionary<string, object?> { ["diagnosticCode"] = "CANCELLED" }, exception);
+            return Result<Project>.Fail(Diagnostic.Error("CANCELLED", "Project load cancelled."));
+        }
+        catch (DecoderFallbackException exception)
+        {
+            logger?.Error("document.open", "Project decoding failed", exception,
+                new Dictionary<string, object?> { ["diagnosticCode"] = "INVALID_PROJECT_FILE" });
+            return Result<Project>.Fail(Diagnostic.Error("INVALID_PROJECT_FILE", "Project is not valid UTF-8."));
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        { return Result<Project>.Fail(Diagnostic.Error("PROJECT_READ_FAILED", "Could not read the project file.")); }
+        {
+            logger?.Error("document.open", "Project load failed", e,
+                new Dictionary<string, object?> { ["diagnosticCode"] = "PROJECT_READ_FAILED" });
+            return Result<Project>.Fail(Diagnostic.Error("PROJECT_READ_FAILED", "Could not read the project file."));
+        }
     }
 
     public async Task<Result<string>> SaveAsync(string path, Project project, CancellationToken cancellationToken = default)
     {
         var serialized = ProjectJson.Serialize(project);
-        if (!serialized.Success) return serialized;
+        if (!serialized.Success)
+        {
+            LogDiagnostics("document.save", "Project serialization failed", serialized.Diagnostics);
+            return serialized;
+        }
         string? temp = null;
         try
         {
@@ -51,14 +70,34 @@ public sealed class ProjectFileStore
             temp = null;
             return Result<string>.Ok(target);
         }
-        catch (OperationCanceledException) { return Result<string>.Fail(Diagnostic.Error("CANCELLED", "Project save cancelled.")); }
+        catch (OperationCanceledException exception)
+        {
+            logger?.Log(LogLevel.Warn, "document.save", "Project save cancelled",
+                new Dictionary<string, object?> { ["diagnosticCode"] = "CANCELLED" }, exception);
+            return Result<string>.Fail(Diagnostic.Error("CANCELLED", "Project save cancelled."));
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        { return Result<string>.Fail(Diagnostic.Error("PROJECT_WRITE_FAILED", "Could not save the project file.")); }
+        {
+            logger?.Error("document.save", "Project save failed", e,
+                new Dictionary<string, object?> { ["diagnosticCode"] = "PROJECT_WRITE_FAILED" });
+            return Result<string>.Fail(Diagnostic.Error("PROJECT_WRITE_FAILED", "Could not save the project file."));
+        }
         finally
         {
             if (temp is not null)
                 try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
-    private static Result<Project> TooLarge() => Result<Project>.Fail(Diagnostic.Error("PROJECT_TOO_LARGE", "Project exceeds the 16 MiB foundation file limit."));
+    private Result<Project> TooLarge()
+    {
+        logger?.Error("document.open", "Project load failed",
+            properties: new Dictionary<string, object?> { ["diagnosticCode"] = "PROJECT_TOO_LARGE" });
+        return Result<Project>.Fail(Diagnostic.Error("PROJECT_TOO_LARGE", "Project exceeds the 16 MiB foundation file limit."));
+    }
+
+    private void LogDiagnostics(string category, string message, IEnumerable<Diagnostic> diagnostics) =>
+        logger?.Error(category, message, properties: new Dictionary<string, object?>
+        {
+            ["diagnosticCodes"] = string.Join(",", diagnostics.Select(diagnostic => diagnostic.Code).Distinct(StringComparer.Ordinal)),
+        });
 }

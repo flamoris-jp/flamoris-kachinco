@@ -65,8 +65,8 @@ public partial class MainWindow
     }
     private async Task ServeMcpAsync(string pipeName, McpAccessLease lease)
     {
-        logger.Info("mcp.transport", "MCP endpoint started",
-            new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" });
+        var diagnostics = new McpTransportDiagnostics(logger, "same-user-named-pipe");
+        diagnostics.EndpointStarted();
         try
         {
             while (lease.IsActive)
@@ -78,8 +78,7 @@ public partial class MainWindow
                 {
                     await pipe.WaitForConnectionAsync(lease.Token);
                     attached = true;
-                    logger.Info("mcp.transport", "MCP client attached",
-                        new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" });
+                    diagnostics.ClientAttached();
                     var adapter = new McpEditorAdapter(session,
                         () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
                         () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP.")), lease, logger);
@@ -114,29 +113,25 @@ public partial class MainWindow
                 {
                     if (lease.IsActive)
                     {
-                        logger.Log(Flamoris.Logging.LogLevel.Warn, "mcp.transport", "MCP connection closed",
-                            new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" }, exception);
+                        diagnostics.ConnectionFailed(exception);
                         Status.Text = EditorText.Choose("MCP接続を閉じました。再接続できます。", "MCP connection closed. Reconnection is available.");
                     }
                 }
                 finally
                 {
                     if (attached)
-                        logger.Info("mcp.transport", "MCP client detached",
-                            new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" });
+                        diagnostics.ClientDetached();
                 }
             }
         }
         catch (Exception exception)
         {
-            logger.Error("mcp.transport", "MCP endpoint failed", exception,
-                new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" });
+            diagnostics.ConnectionFailed(exception);
             if (ReferenceEquals(mcpLease, lease)) Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable.");
         }
         finally
         {
-            logger.Info("mcp.transport", "MCP endpoint stopped",
-                new Dictionary<string, object?> { ["transport"] = "same-user-named-pipe" });
+            diagnostics.EndpointStopped();
             if (ReferenceEquals(mcpLease, lease)) RevokeMcp(); else lease.Revoke();
         }
     }
