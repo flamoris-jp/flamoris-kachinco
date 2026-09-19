@@ -1,0 +1,70 @@
+# Logging integration
+
+Kachinco consumes `Flamoris.Logging` 1.0.0 from the FLAMORIS GitHub Packages feed.
+The package is referenced normally; its DLL is not copied into this repository.
+Logging observes the existing `EditorSession`, Project, preview/render and MCP
+boundaries and owns no editor state.
+
+## Configuration and location
+
+`appsettings.json` contains the ordinary application-owned `logging` section.
+The default level is `debug`, with console output and a rotating text file:
+
+```json
+{
+  "logging": {
+    "level": "debug",
+    "categories": {
+      "mcp": "info",
+      "mcp.transport": "debug",
+      "mcp.auth": "warn"
+    },
+    "outputs": [
+      { "type": "console" },
+      {
+        "type": "file",
+        "path": "logs/kachinco.log",
+        "format": "text",
+        "rotation": {
+          "enabled": true,
+          "maxFileSizeMb": 20,
+          "maxFiles": 10
+        }
+      }
+    ]
+  }
+}
+```
+
+Relative paths resolve below the explicit per-user base path
+`%LOCALAPPDATA%\FLAMORIS\Kachinco`, never the installation directory or process
+working directory.
+
+The stdio MCP bridge removes console logging because stdout is the MCP protocol
+channel. Its file output is separated as `logs/kachinco-mcp.log` so the editor
+and bridge never write the same file concurrently.
+
+## Categories
+
+- `app`, `app.startup`, `app.shutdown`
+- `project`, `document`, `document.open`, `document.save`
+- `command.failure`
+- `media`, `preview`, `render`
+- `mcp.transport`, `mcp.protocol`, `mcp.auth`, `mcp.session`,
+  `mcp.command`, `mcp.query`
+
+Routine command/query detail stays at `debug`. Major lifecycle events use
+`info`; recoverable transport, permission and revision conflicts use `warn`;
+failed operations and unexpected exceptions use `error`.
+
+## Privacy and failure isolation
+
+Call sites log stable IDs, revisions, operation names, levels, categories and
+diagnostic codes. They do not pass credentials, tokens, API keys, authorization
+headers, MCP payloads, project/media contents, or source/output paths.
+Exceptions use the logging exception argument instead of being concatenated into
+messages.
+
+`Flamoris.Logging` isolates sink failures. Kachinco's configuration bootstrap
+also falls back safely, so a logging output failure cannot fail startup, save,
+preview, command execution, or MCP transport.
