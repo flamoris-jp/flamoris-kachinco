@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using Flamoris.Logging;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Microsoft.Win32;
@@ -14,6 +15,7 @@ namespace Kachinco.App;
 
 public partial class MainWindow : Window
 {
+    private readonly FlamorisLogger logger;
     private readonly EditorSession session = new();
     private readonly ProjectFileStore files = new();
     private readonly IMediaProbe mediaProbe = new FfprobeMediaProbe();
@@ -28,8 +30,11 @@ public partial class MainWindow : Window
     private Point mediaDragStart;
     private Guid? draggedMediaId;
 
-    public MainWindow()
+    public MainWindow() : this(KachincoLogging.Create().Logger) { }
+
+    public MainWindow(FlamorisLogger logger)
     {
+        this.logger = logger;
         InitializeComponent();
         relink = new(mediaProbe);
         InitializeProduction();
@@ -55,12 +60,13 @@ public partial class MainWindow : Window
         session.ReplaceProject(null);
         filename = savedJson = null;
         selectedSequenceId = Guid.NewGuid(); selectedMediaId = selectedClipId = null;
-        Apply("新しいプロジェクトを作成しました。",
+        if (Apply("新しいプロジェクトを作成しました。",
             new CreateProject(Guid.NewGuid(), "新しいプロジェクト"),
             new CreateSequence(selectedSequenceId.Value, "シーケンス 1", settings, 8 * TimelineTime.TicksPerSecond),
             new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "音声 1", TrackKind.Audio),
             new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "映像 1", TrackKind.Video),
-            new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "字幕 1", TrackKind.Subtitle));
+            new AddTrack(selectedSequenceId.Value, Guid.NewGuid(), "字幕 1", TrackKind.Subtitle)))
+            logger.Info("project", "Project created", ProjectContext());
     }
 
     private void AddLandscapeSequence_Click(object sender, RoutedEventArgs e) => AddSequence(SequenceSettings.Landscape);
@@ -90,13 +96,15 @@ public partial class MainWindow : Window
         try
         {
             var result = await files.LoadAsync(dialog.FileName);
-            if (!result.Success) { ShowErrors(result.Diagnostics); return; }
+            if (!result.Success) { LogFailure("document.open", "Project open failed", result.Diagnostics); ShowErrors(result.Diagnostics); return; }
             RevokeMcp();
             var opened = session.ReplaceProject(result.Value!, revision);
-            if (!opened.Success) { ShowErrors(opened.Diagnostics); return; }
+            if (!opened.Success) { LogFailure("document.open", "Project switch failed", opened.Diagnostics); ShowErrors(opened.Diagnostics); return; }
             filename = dialog.FileName; savedJson = ProjectJson.Serialize(result.Value!).Value;
             selectedSequenceId = selectedMediaId = selectedClipId = null;
             int missing = MediaReferenceResolver.Inspect(result.Value!, filename).Count(x => !x.IsAvailable);
+            logger.Info("document.open", "Project opened",
+                ProjectContext(new Dictionary<string, object?> { ["missingMediaCount"] = missing }));
             Refresh(missing == 0 ? "プロジェクトを開きました。" : $"プロジェクトを開きました。見つからない素材: {missing} 件");
         }
         finally { SetBusy(false); }
@@ -116,8 +124,9 @@ public partial class MainWindow : Window
         try
         {
             var result = await files.SaveAsync(dialog.FileName, snapshot.Project);
-            if (!result.Success) { ShowErrors(result.Diagnostics); return; }
+            if (!result.Success) { LogFailure("document.save", "Project save failed", result.Diagnostics); ShowErrors(result.Diagnostics); return; }
             filename = result.Value; savedJson = ProjectJson.Serialize(snapshot.Project).Value;
+            logger.Info("document.save", "Project saved", ProjectContext());
             Refresh("プロジェクトを保存しました。");
         }
         finally { SetBusy(false); }
@@ -131,11 +140,18 @@ public partial class MainWindow : Window
         try
         {
             var probed = await mediaProbe.ProbeAsync(picker.FileName);
-            if (!probed.Success) { ShowErrors(probed.Diagnostics); return; }
+            if (!probed.Success) { LogFailure("media", "Media probe failed", probed.Diagnostics); ShowErrors(probed.Diagnostics); return; }
             var asset = probed.Value!.ToMediaAsset(Guid.NewGuid());
             selectedMediaId = asset.Id; selectedClipId = null;
             var snapshot = session.GetProject();
-            Show(session.Execute(EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト")), $"{asset.Name} を読み込みました。");
+            var imported = session.Execute(EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト"));
+            Show(imported, $"{asset.Name} を読み込みました。");
+            if (imported.Success) logger.Info("document", "Media imported", ProjectContext(new Dictionary<string, object?>
+            {
+                ["mediaAssetId"] = asset.Id,
+                ["mediaKind"] = asset.Kind.ToString(),
+                ["durationTicks"] = asset.DurationTicks,
+            }));
         }
         finally { SetBusy(false); }
     }
@@ -209,8 +225,11 @@ public partial class MainWindow : Window
         try
         {
             var prepared = await relink.PrepareAsync(project, asset.Id, picker.FileName);
-            if (!prepared.Success) { ShowErrors(prepared.Diagnostics); return; }
-            Apply("素材を再リンクしました。", prepared.Value!);
+            if (!prepared.Success) { LogFailure("media", "Media relink preparation failed", prepared.Diagnostics,
+                new Dictionary<string, object?> { ["mediaAssetId"] = asset.Id }); ShowErrors(prepared.Diagnostics); return; }
+            if (Apply("素材を再リンクしました。", prepared.Value!))
+                logger.Info("document", "Media relinked",
+                    ProjectContext(new Dictionary<string, object?> { ["mediaAssetId"] = asset.Id }));
         }
         finally { SetBusy(false); }
     }
@@ -325,8 +344,35 @@ public partial class MainWindow : Window
 
     private void Show(EditResult result, string successMessage)
     {
-        if (!result.Success) ShowErrors(result.Diagnostics);
+        if (!result.Success)
+        {
+            LogFailure("command.failure", "Command failed", result.Diagnostics,
+                new Dictionary<string, object?> { ["resultRevision"] = result.Revision });
+            ShowErrors(result.Diagnostics);
+        }
         else Refresh(successMessage);
+    }
+
+    private void LogFailure(string category, string message, IEnumerable<Diagnostic> diagnostics,
+        IReadOnlyDictionary<string, object?>? properties = null)
+    {
+        var items = diagnostics.ToArray();
+        var context = ProjectContext(properties);
+        context["diagnosticCodes"] = string.Join(",", items.Select(item => item.Code).Distinct(StringComparer.Ordinal));
+        logger.Error(category, message, properties: context);
+    }
+
+    private Dictionary<string, object?> ProjectContext(IReadOnlyDictionary<string, object?>? additional = null)
+    {
+        var snapshot = session.GetProject();
+        var properties = new Dictionary<string, object?>
+        {
+            ["projectId"] = snapshot.Project?.Id,
+            ["revision"] = snapshot.Revision,
+        };
+        if (additional is not null)
+            foreach (var pair in additional) properties[pair.Key] = pair.Value;
+        return properties;
     }
 
     private void ShowErrors(IEnumerable<Diagnostic> diagnostics) =>
