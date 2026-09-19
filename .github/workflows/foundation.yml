@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  packages: read
 concurrency:
   group: foundation-${{ github.ref }}
   cancel-in-progress: true
@@ -18,6 +19,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          source-url: https://nuget.pkg.github.com/flamoris-jp/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Ensure ffprobe test dependency
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=product.trx"
@@ -35,6 +39,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          source-url: https://nuget.pkg.github.com/flamoris-jp/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

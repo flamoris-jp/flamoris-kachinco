@@ -2,5 +2,6 @@
   <ItemGroup>
     <ProjectReference Include="../Kachinco.Core/Kachinco.Core.csproj" />
   </ItemGroup>
+  <ItemGroup><PackageReference Include="Flamoris.Logging" Version="1.0.0" /></ItemGroup>
   <ItemGroup><None Update="recipe-worker.py" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>
