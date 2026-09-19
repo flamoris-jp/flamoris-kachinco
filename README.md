@@ -271,11 +271,13 @@ Current documentation:
 - [Production Windows acceptance](staging/windows-production.md)
 - [Original product vision](docs/project-plan.md)
 
-## Working name
+## About the name
 
 **FLAMORIS Kachinco** 🎬
 
-“Kachinco” comes from the Japanese name for a film clapperboard. The name reflects the central idea that a human can mark and name a place in time/space, then let an AI act on that named editing context.
+In Japanese film production, **カチンコ (kachinko)** is the clapperboard used to mark and identify a take. The name comes from the sharp *kachin!* sound made when the board snaps shut.
+
+FLAMORIS spells the product name **Kachinco**. The name reflects the core idea of the editor: a human marks and names a point in time and space, then AI can act on that clearly identified editing context.
 
 
 ## License, support, and philosophy
