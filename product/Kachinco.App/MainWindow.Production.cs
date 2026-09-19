@@ -17,6 +17,7 @@ public partial class MainWindow
     private RenderedVideoFrame? displayedFrame;
     private System.Windows.Media.Imaging.WriteableBitmap? previewBitmap;
     private bool clockUpdate;
+    private string? previewFailureSignature;
 
     private void InitializeProduction()
     {
@@ -41,7 +42,12 @@ public partial class MainWindow
         { previewContext = null; playback.SetContext(null); return; }
         if (previewContext?.Snapshot.Revision == snapshot.Revision && previewContext.Sequence.Id == id && previewContext.ProjectPath == filename) return;
         var created = PreviewContext.Create(snapshot, id, filename);
-        if (!created.Success) { playback.SetContext(null); Status.Text = string.Join(" / ", created.Diagnostics.Select(d => d.Message)); return; }
+        if (!created.Success)
+        {
+            LogFailure("preview", "Preview context creation failed", created.Diagnostics,
+                new Dictionary<string, object?> { ["sequenceId"] = id });
+            playback.SetContext(null); Status.Text = string.Join(" / ", created.Diagnostics.Select(d => d.Message)); return;
+        }
         previewContext = created.Value; playback.SetContext(previewContext);
     }
     private void PlaybackRendering(object? sender, EventArgs e)
@@ -88,6 +94,22 @@ public partial class MainWindow
     private void RefreshPlaybackFeedback()
     {
         if (playback is null || PlaybackStatus is null) return;
+        if (playback.State == InteractivePreviewState.Failed)
+        {
+            var signature = $"{selectedSequenceId}:{session.GetProject().Revision}:{Timeline.PlayheadTicks}:{playback.Error}";
+            if (!string.Equals(signature, previewFailureSignature, StringComparison.Ordinal))
+            {
+                previewFailureSignature = signature;
+                logger.Error("preview", "Interactive preview failed", properties: ProjectContext(new Dictionary<string, object?>
+                {
+                    ["sequenceId"] = selectedSequenceId,
+                    ["playheadTicks"] = Timeline.PlayheadTicks,
+                    ["quality"] = playback.Quality.ToString(),
+                    ["reason"] = playback.Error,
+                }));
+            }
+        }
+        else previewFailureSignature = null;
         string label = playback.State switch
         {
             InteractivePreviewState.Scrubbing => EditorText.Choose("フレームを取得中", "Scrubbing"),
@@ -154,9 +176,27 @@ public partial class MainWindow
         {
             var result = await Task.Run(() => service.ExportAsync(snapshot,
                 new(Guid.NewGuid(), sequenceId, path, ExportPreset.YoutubeH264AacMp4, snapshot.Revision), progress, token.Token));
+            if (result.Stage == ExportStage.Failed)
+                LogFailure("render", "Video export failed", result.Diagnostics,
+                    new Dictionary<string, object?> { ["sequenceId"] = sequenceId, ["stage"] = result.Stage.ToString() });
+            else if (result.Stage == ExportStage.Completed)
+                logger.Info("render", "Video export completed", ProjectContext(new Dictionary<string, object?>
+                {
+                    ["sequenceId"] = sequenceId,
+                    ["stage"] = result.Stage.ToString(),
+                }));
             Status.Text = result.Stage == ExportStage.Completed ? "書き出しが完了しました。" : result.Stage == ExportStage.Cancelled ? "キャンセルしました。" :
                 string.Join(" / ", result.Diagnostics.Select(x => x.Message));
             return result;
+        }
+        catch (Exception exception)
+        {
+            logger.Error("render", "Video export failed unexpectedly", exception, ProjectContext(new Dictionary<string, object?>
+            {
+                ["sequenceId"] = sequenceId,
+            }));
+            Status.Text = EditorText.Choose("書き出しに失敗しました。ログを確認してください。", "Export failed. Check the log.");
+            return null;
         }
         finally { done = true; progressWindow.Close(); busy = false; IsEnabled = true; }
     }
@@ -209,7 +249,16 @@ public partial class MainWindow
             commands.AddRange(parsed.Value.Select(c => new AddCaption(sequence.Id, trackId, c)));
             Show(session.Execute(new([.. commands], snapshot.Revision)), "SRTを読み込みました。");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = ex.Message; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.Error("document", "SRT import failed", properties: ProjectContext(new Dictionary<string, object?>
+            {
+                ["sequenceId"] = sequence.Id,
+                ["diagnosticCode"] = "SRT_READ_FAILED",
+                ["errorType"] = ex.GetType().Name,
+            }));
+            Status.Text = ex.Message;
+        }
     }
     private async void ExportSrt_Click(object sender, RoutedEventArgs e)
     {
@@ -220,7 +269,16 @@ public partial class MainWindow
         var picker = new SaveFileDialog { Filter = "SRT (*.srt)|*.srt", DefaultExt = ".srt", FileName = "captions.srt" };
         if (picker.ShowDialog(this) != true) return;
         try { await File.WriteAllTextAsync(picker.FileName, result.Value); Status.Text = "SRTを書き出しました。"; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = ex.Message; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.Error("document", "SRT export failed", properties: ProjectContext(new Dictionary<string, object?>
+            {
+                ["sequenceId"] = sequence.Id,
+                ["diagnosticCode"] = "SRT_WRITE_FAILED",
+                ["errorType"] = ex.GetType().Name,
+            }));
+            Status.Text = ex.Message;
+        }
     }
     private void EditCaptions_Click(object sender, RoutedEventArgs e)
     {

@@ -9,4 +9,7 @@
     <ProjectReference Include="../Kachinco.Core/Kachinco.Core.csproj" />
     <ProjectReference Include="../Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
