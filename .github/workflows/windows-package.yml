@@ -7,14 +7,13 @@ jobs:
   package:
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          source-url: https://nuget.pkg.github.com/flamoris-jp/index.json
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish self-contained editor and bridge
         shell: pwsh
         run: ./product/packaging/publish-windows.ps1

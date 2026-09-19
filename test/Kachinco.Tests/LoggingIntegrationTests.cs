@@ -145,7 +145,7 @@ public sealed class LoggingIntegrationTests
 
         Assert.IsFalse(host.Options.Outputs.Any(output =>
             string.Equals(output.Type, "console", StringComparison.OrdinalIgnoreCase)));
-        Assert.AreEqual("logs/kachinco-mcp.log", host.Options.Outputs.Single().Path);
+        Assert.AreEqual(Path.Combine("logs", "kachinco-mcp.log"), host.Options.Outputs.Single().Path);
     }
 
     private static string WriteFileConfiguration(string directory, string fileName, bool includeConsole = false)

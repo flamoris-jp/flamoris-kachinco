@@ -15,11 +15,23 @@ public static class KachincoLogging
         string? basePath = null,
         Action<string>? diagnostic = null)
     {
-        var options = LoadOptions(configurationPath, diagnostic);
-        if (string.Equals(component, "mcp-bridge", StringComparison.Ordinal))
-            options = ForBridge(options);
-        var resolvedBasePath = basePath ?? DefaultBasePath();
-        return new(FlamorisLogger.Create(options, resolvedBasePath, diagnostic), options, resolvedBasePath);
+        try
+        {
+            var options = LoadOptions(configurationPath, diagnostic);
+            if (string.Equals(component, "mcp-bridge", StringComparison.Ordinal))
+                options = ForBridge(options);
+            var resolvedBasePath = basePath ?? DefaultBasePath();
+            return new(FlamorisLogger.Create(options, resolvedBasePath, diagnostic), options, resolvedBasePath);
+        }
+        catch (Exception exception)
+        {
+            TryDiagnostic(diagnostic, $"Logging bootstrap failed; safe defaults are active: {exception.Message}");
+            var options = string.Equals(component, "mcp-bridge", StringComparison.Ordinal)
+                ? ForBridge(Defaults())
+                : Defaults();
+            var resolvedBasePath = DefaultBasePath();
+            return new(FlamorisLogger.Create(options, resolvedBasePath, diagnostic), options, resolvedBasePath);
+        }
     }
 
     public static LoggingOptions LoadOptions(string? configurationPath = null, Action<string>? diagnostic = null)
@@ -39,8 +51,12 @@ public static class KachincoLogging
         }
     }
 
-    public static string DefaultBasePath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FLAMORIS", "Kachinco");
+    public static string DefaultBasePath()
+    {
+        var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localData)) localData = Path.GetTempPath();
+        return Path.Combine(localData, "FLAMORIS", "Kachinco");
+    }
 
     private static LoggingOptions Defaults() => new()
     {
@@ -54,7 +70,7 @@ public static class KachincoLogging
 
     private static LoggingOptions ForBridge(LoggingOptions source)
     {
-        var outputs = source.Outputs
+        var outputs = (source.Outputs ?? [])
             .Where(output => !string.Equals(output.Type, "console", StringComparison.OrdinalIgnoreCase))
             .Select(output => new LogOutputOptions
             {
@@ -63,28 +79,37 @@ public static class KachincoLogging
                 Path = BridgePath(output.Path),
                 Rotation = new()
                 {
-                    Enabled = output.Rotation.Enabled,
-                    MaxFileSizeMb = output.Rotation.MaxFileSizeMb,
-                    MaxFiles = output.Rotation.MaxFiles,
+                    Enabled = output.Rotation?.Enabled ?? true,
+                    MaxFileSizeMb = output.Rotation?.MaxFileSizeMb ?? 20,
+                    MaxFiles = output.Rotation?.MaxFiles ?? 10,
                 },
             }).ToList();
         if (outputs.Count == 0) outputs.Add(new() { Type = "file", Path = "logs/kachinco-mcp.log" });
         return new()
         {
             Level = source.Level,
-            Categories = new Dictionary<string, string?>(source.Categories, StringComparer.OrdinalIgnoreCase),
+            Categories = source.Categories is null
+                ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string?>(source.Categories, StringComparer.OrdinalIgnoreCase),
             Outputs = outputs,
             UseLocalTime = source.UseLocalTime,
-            RedactedPropertyNames = [.. source.RedactedPropertyNames],
+            RedactedPropertyNames = source.RedactedPropertyNames is null ? [] : [.. source.RedactedPropertyNames],
         };
     }
 
     private static string BridgePath(string? configuredPath)
     {
         if (string.IsNullOrWhiteSpace(configuredPath)) return "logs/kachinco-mcp.log";
-        var extension = Path.GetExtension(configuredPath);
-        return Path.Combine(Path.GetDirectoryName(configuredPath) ?? string.Empty,
-            Path.GetFileNameWithoutExtension(configuredPath) + "-mcp" + extension);
+        try
+        {
+            var extension = Path.GetExtension(configuredPath);
+            return Path.Combine(Path.GetDirectoryName(configuredPath) ?? string.Empty,
+                Path.GetFileNameWithoutExtension(configuredPath) + "-mcp" + extension);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return "logs/kachinco-mcp.log";
+        }
     }
 
     private static bool TryProperty(JsonElement value, string name, out JsonElement property)

@@ -9,6 +9,7 @@ if (args.Length != 2 || args[0] != "--pipe" || !(args[1].StartsWith("kachinco-",
 {
     logger.Warn("mcp.protocol", "MCP bridge arguments rejected",
         new Dictionary<string, object?> { ["argumentsCount"] = args.Length });
+    transportDiagnostics.EndpointStopped();
     Console.Error.WriteLine("Usage: Kachinco.Mcp --pipe <name displayed by the running editor>");
     return 2;
 }
@@ -37,4 +38,11 @@ catch (Exception e) when (e is IOException or TimeoutException or OperationCance
     transportDiagnostics.ConnectionFailed(e);
     transportDiagnostics.EndpointStopped();
     Console.Error.WriteLine("MCP bridge connection closed or unavailable."); return 1;
+}
+catch (Exception exception)
+{
+    logger.Error("mcp.transport", "MCP bridge failed unexpectedly", exception,
+        new Dictionary<string, object?> { ["transport"] = "stdio-to-same-user-named-pipe" });
+    transportDiagnostics.EndpointStopped();
+    Console.Error.WriteLine("MCP bridge failed."); return 1;
 }

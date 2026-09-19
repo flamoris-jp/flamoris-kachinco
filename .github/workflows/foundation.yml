@@ -2,7 +2,7 @@ name: Product
 on:
   push:
     branches-ignore: [main]
-    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', '.github/workflows/foundation.yml']
+    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', '.github/workflows/foundation.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,14 +14,13 @@ jobs:
   headless-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          source-url: https://nuget.pkg.github.com/flamoris-jp/index.json
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Ensure ffprobe test dependency
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=product.trx"
@@ -34,14 +33,13 @@ jobs:
   windows-shell:
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          source-url: https://nuget.pkg.github.com/flamoris-jp/index.json
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
