@@ -39,8 +39,15 @@ public sealed class ProjectFileStore(FlamorisLogger? logger = null)
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            logger?.Error("document.open", "Project load failed", e,
-                new Dictionary<string, object?> { ["diagnosticCode"] = "PROJECT_READ_FAILED" });
+            // Expected filesystem exceptions commonly embed the absolute path in
+            // their message. Keep the failure observable without handing that
+            // message to the logger.
+            logger?.Error("document.open", "Project load failed", properties:
+                new Dictionary<string, object?>
+                {
+                    ["diagnosticCode"] = "PROJECT_READ_FAILED",
+                    ["errorType"] = e.GetType().Name,
+                });
             return Result<Project>.Fail(Diagnostic.Error("PROJECT_READ_FAILED", "Could not read the project file."));
         }
     }
@@ -78,8 +85,12 @@ public sealed class ProjectFileStore(FlamorisLogger? logger = null)
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            logger?.Error("document.save", "Project save failed", e,
-                new Dictionary<string, object?> { ["diagnosticCode"] = "PROJECT_WRITE_FAILED" });
+            logger?.Error("document.save", "Project save failed", properties:
+                new Dictionary<string, object?>
+                {
+                    ["diagnosticCode"] = "PROJECT_WRITE_FAILED",
+                    ["errorType"] = e.GetType().Name,
+                });
             return Result<string>.Fail(Diagnostic.Error("PROJECT_WRITE_FAILED", "Could not save the project file."));
         }
         finally

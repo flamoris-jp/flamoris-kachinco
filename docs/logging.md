@@ -61,9 +61,13 @@ failed operations and unexpected exceptions use `error`.
 
 Call sites log stable IDs, revisions, operation names, levels, categories and
 diagnostic codes. They do not pass credentials, tokens, API keys, authorization
-headers, MCP payloads, project/media contents, or source/output paths.
-Exceptions use the logging exception argument instead of being concatenated into
-messages.
+headers, MCP payloads, project/media contents, or source/output paths as
+structured properties. Expected file-operation failures omit the raw exception
+because operating-system exception messages commonly contain absolute paths;
+their diagnostic code and exception type are logged instead. Unexpected and
+fatal exceptions use the logging exception argument instead of being
+concatenated into messages, and may therefore contain operating-system or
+third-party diagnostic text.
 
 `Flamoris.Logging` isolates sink failures. Kachinco's configuration bootstrap
 also falls back safely, so a logging output failure cannot fail startup, save,

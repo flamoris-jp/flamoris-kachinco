@@ -251,7 +251,12 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.Error("document", "SRT import failed", ex, ProjectContext(new Dictionary<string, object?> { ["sequenceId"] = sequence.Id }));
+            logger.Error("document", "SRT import failed", properties: ProjectContext(new Dictionary<string, object?>
+            {
+                ["sequenceId"] = sequence.Id,
+                ["diagnosticCode"] = "SRT_READ_FAILED",
+                ["errorType"] = ex.GetType().Name,
+            }));
             Status.Text = ex.Message;
         }
     }
@@ -266,7 +271,12 @@ public partial class MainWindow
         try { await File.WriteAllTextAsync(picker.FileName, result.Value); Status.Text = "SRTを書き出しました。"; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.Error("document", "SRT export failed", ex, ProjectContext(new Dictionary<string, object?> { ["sequenceId"] = sequence.Id }));
+            logger.Error("document", "SRT export failed", properties: ProjectContext(new Dictionary<string, object?>
+            {
+                ["sequenceId"] = sequence.Id,
+                ["diagnosticCode"] = "SRT_WRITE_FAILED",
+                ["errorType"] = ex.GetType().Name,
+            }));
             Status.Text = ex.Message;
         }
     }

@@ -75,7 +75,8 @@ public sealed class LoggingIntegrationTests
         var logger = KachincoLogging.Create(configurationPath: configuration, basePath: temp.Path).Logger;
         var store = new ProjectFileStore(logger);
 
-        var result = await store.LoadAsync(Path.Combine(temp.Path, "missing.fkproj"));
+        const string sentinel = "PRIVATE-PROJECT-PATH-SENTINEL";
+        var result = await store.LoadAsync(Path.Combine(temp.Path, sentinel, "missing.fkproj"));
         logger.Error("preview", "Preview generation failed", new InvalidOperationException("decoder failed"),
             new Dictionary<string, object?> { ["sequenceId"] = Guid.Empty });
 
@@ -83,6 +84,8 @@ public sealed class LoggingIntegrationTests
         var text = File.ReadAllText(Path.Combine(temp.Path, "logs", "diagnostics.log"));
         StringAssert.Contains(text, "[ERROR] [document.open]");
         StringAssert.Contains(text, "diagnosticCode=PROJECT_READ_FAILED");
+        StringAssert.Contains(text, "errorType=DirectoryNotFoundException");
+        Assert.IsFalse(text.Contains(sentinel, StringComparison.Ordinal));
         StringAssert.Contains(text, "[ERROR] [preview]");
         StringAssert.Contains(text, "System.InvalidOperationException");
     }
