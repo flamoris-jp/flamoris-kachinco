@@ -2,11 +2,13 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Flamoris.Logging;
 using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
 
-public sealed class McpEditorAdapter(EditorSession session, Func<object> editorContext, Action changed, McpAccessLease lease)
+public sealed class McpEditorAdapter(EditorSession session, Func<object> editorContext, Action changed,
+    McpAccessLease lease, FlamorisLogger? logger = null)
 {
     private bool initialized;
     private static readonly Dictionary<string, Type> Commands = new(StringComparer.Ordinal)
@@ -50,6 +52,11 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                     initialization.GetProperty("clientInfo").GetProperty("version").ValueKind != JsonValueKind.String)
                     throw new JsonException();
                 initialized = true;
+                logger?.Info("mcp.session", "MCP session initialized", new Dictionary<string, object?>
+                {
+                    ["protocolVersion"] = initialization.GetProperty("protocolVersion").GetString(),
+                    ["permission"] = lease.Permission.ToString(),
+                });
                 result = new { protocolVersion = "2025-03-26", capabilities = new { tools = new { listChanged = false } }, serverInfo = new { name = "Kachinco", version = "0.2.0" } };
             }
             else if (method == "ping") result = new { };
@@ -84,10 +91,12 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                             commands.Add((EditCommand)(payload.Deserialize(commandType, Wire) ?? throw new JsonException("Command required.")));
                         }
                         var edit = lease.Commit(session, new([.. commands], Revision(args), args.TryGetProperty("dryRun", out var dry) && dry.GetBoolean()), cancellationToken);
+                        LogEditResult("edit_batch", edit);
                         if (edit.Success && !(args.TryGetProperty("dryRun", out dry) && dry.GetBoolean())) changed();
                         value = edit; break;
                     case "undo": case "redo":
                         var history = lease.Run(() => name == "undo" ? session.Undo(Revision(args), cancellationToken) : session.Redo(Revision(args), cancellationToken), true, cancellationToken);
+                        LogEditResult(name, history);
                         if (history.Success) changed(); value = history; break;
                     case "clapper_resolve":
                         var project = session.GetProject().Project ?? throw new JsonException("Project required.");
@@ -99,6 +108,14 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
                 var payloadResult = JsonSerializer.SerializeToElement(value,Wire);
                 bool failed = payloadResult.TryGetProperty("error",out _) ||
                     payloadResult.TryGetProperty("success",out var success) && success.ValueKind == JsonValueKind.False;
+                if (name is not ("edit_batch" or "undo" or "redo"))
+                {
+                    if (failed)
+                        logger?.Error(name == "get_project" ? "mcp.query" : "mcp.command", "MCP tool failed",
+                            properties: RequestProperties(name));
+                    else logger?.Debug(name == "get_project" ? "mcp.query" : "mcp.command", "MCP tool completed",
+                        RequestProperties(name));
+                }
                 result = new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, Wire) } }, isError = failed };
             }
             else return Error(id, -32601, "Method not found.");
@@ -106,12 +123,37 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
             var response = JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result });
             return System.Text.Encoding.UTF8.GetByteCount(response) <= 4 * 1024 * 1024 ? response : Error(id, -32000, "Response exceeds the 4 MiB limit.");
         }
-        catch (UnauthorizedAccessException) { return Error(id, -32001, "Permission denied."); }
-        catch (McpRequestException e) { return Error(null, e.Code, e.Message); }
-        catch (OperationCanceledException) { return Error(id, -32000, "Request cancelled."); }
-        catch (JsonException) { return Error(id, -32602, "Invalid tool arguments."); }
+        catch (UnauthorizedAccessException exception)
+        {
+            logger?.Log(LogLevel.Warn, "mcp.auth", "MCP permission denied", RequestProperties(), exception);
+            return Error(id, -32001, "Permission denied.");
+        }
+        catch (McpRequestException exception)
+        {
+            logger?.Log(LogLevel.Warn, "mcp.protocol", "Invalid MCP envelope",
+                new Dictionary<string, object?> { ["errorCode"] = exception.Code }, exception);
+            return Error(null, exception.Code, exception.Message);
+        }
+        catch (OperationCanceledException exception)
+        {
+            logger?.Log(LogLevel.Warn, "mcp.session", "MCP request cancelled", RequestProperties(), exception);
+            return Error(id, -32000, "Request cancelled.");
+        }
+        catch (JsonException exception)
+        {
+            logger?.Log(LogLevel.Warn, "mcp.protocol", "Invalid MCP tool arguments", RequestProperties(), exception);
+            return Error(id, -32602, "Invalid tool arguments.");
+        }
         catch (Exception e) when (e is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
-        { return Error(id, -32602, "Invalid tool arguments."); }
+        {
+            logger?.Log(LogLevel.Warn, "mcp.protocol", "Invalid MCP tool arguments", RequestProperties(), e);
+            return Error(id, -32602, "Invalid tool arguments.");
+        }
+        catch (Exception exception)
+        {
+            logger?.Error("mcp.protocol", "MCP request failed unexpectedly", exception, RequestProperties());
+            return Error(id, -32603, "Internal error.");
+        }
     }
     public static IReadOnlyDictionary<string, bool> CommandDispositions => Commands.ToDictionary(p => p.Key, p => AllowedCommand(p.Value), StringComparer.Ordinal);
 
@@ -144,6 +186,41 @@ public sealed class McpEditorAdapter(EditorSession session, Func<object> editorC
         string name = JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString()!;
         return name is "get_project" or "clapper_resolve" or "recipe_validate" ||
             lease.Permission == McpPermission.Edit && name is "edit_batch" or "undo" or "redo";
+    }
+
+    private void LogEditResult(string operation, EditResult result)
+    {
+        if (result.Success)
+        {
+            logger?.Debug("mcp.command", "MCP command completed", RequestProperties(operation,
+                new Dictionary<string, object?> { ["revision"] = result.Revision }));
+            return;
+        }
+        var codes = result.Diagnostics.Select(diagnostic => diagnostic.Code).Distinct(StringComparer.Ordinal).ToArray();
+        var properties = RequestProperties(operation, new Dictionary<string, object?>
+        {
+            ["revision"] = result.Revision,
+            ["diagnosticCodes"] = string.Join(",", codes),
+        });
+        if (codes.Contains("REVISION_CONFLICT", StringComparer.Ordinal))
+            logger?.Warn("mcp.command", "MCP revision conflict", properties);
+        else logger?.Error("mcp.command", "MCP command failed", properties: properties);
+    }
+
+    private Dictionary<string, object?> RequestProperties(string? operation = null,
+        IReadOnlyDictionary<string, object?>? additional = null)
+    {
+        var snapshot = session.GetProject();
+        var properties = new Dictionary<string, object?>
+        {
+            ["operation"] = operation,
+            ["permission"] = lease.Permission.ToString(),
+            ["projectId"] = snapshot.Project?.Id,
+            ["currentRevision"] = snapshot.Revision,
+        };
+        if (additional is not null)
+            foreach (var pair in additional) properties[pair.Key] = pair.Value;
+        return properties;
     }
     private IEnumerable<object> ToolDefinitions()
     {

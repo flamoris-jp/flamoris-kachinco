@@ -2,17 +2,20 @@ name: Product
 on:
   push:
     branches-ignore: [main]
-    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', '.github/workflows/foundation.yml']
+    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', '.github/workflows/foundation.yml']
   workflow_dispatch:
 permissions:
   contents: read
+  packages: read
 concurrency:
-  group: foundation-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   headless-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -30,6 +33,8 @@ jobs:
   windows-shell:
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

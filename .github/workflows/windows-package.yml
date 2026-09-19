@@ -2,10 +2,13 @@ name: Windows portable package
 on: workflow_dispatch
 permissions:
   contents: read
+  packages: read
 jobs:
   package:
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      NuGetPackageSourceCredentials_flamoris: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

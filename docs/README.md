@@ -3,6 +3,7 @@
 - [Production architecture](production-architecture.md): implemented decisions and boundaries.
 - [Roadmap](roadmap.md): active phased delivery order.
 - [Editing API](api-contract.md): headless commands/queries and live MCP mapping.
+- [Logging integration](logging.md): configuration, categories, privacy and failure isolation.
 - [Project format v1](project-format-v1.md): frozen input `.fkproj` contract.
 - [Project plan](project-plan.md): original long-term Clapper/Recipe vision.
 - [Windows acceptance](../staging/windows-foundation.md): manual shell checks.

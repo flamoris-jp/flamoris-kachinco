@@ -35,6 +35,11 @@ public partial class MainWindow
     {
         var previous = mcpLease; mcpLease = null; mcpPipeName = null;
         previous?.Revoke();
+        if (previous is not null)
+            logger.Info("mcp.session", "MCP access revoked", ProjectContext(new Dictionary<string, object?>
+            {
+                ["permission"] = previous.Permission.ToString(),
+            }));
         mcpInformation?.Close(); mcpInformation = null;
         UpdateMcpStatus();
         Status.Text = EditorText.Choose("MCP接続は無効です。", "MCP is disabled.");
@@ -44,6 +49,10 @@ public partial class MainWindow
         RevokeMcp();
         if (session.GetProject().Project is null) { Status.Text = EditorText.Choose("先にプロジェクトを開いてください。", "Open a project first."); return; }
         var lease = new McpAccessLease(session, permission); mcpLease = lease;
+        logger.Info("mcp.auth", "MCP access granted", ProjectContext(new Dictionary<string, object?>
+        {
+            ["permission"] = permission.ToString(),
+        }));
         string pipeName = "kachinco-" + Guid.NewGuid().ToString("N"); mcpPipeName = pipeName;
         UpdateMcpStatus();
         var information = new System.Windows.Controls.TextBox { Text = McpConnectionCommand(), IsReadOnly = true, Margin = new Thickness(16) };
@@ -56,18 +65,23 @@ public partial class MainWindow
     }
     private async Task ServeMcpAsync(string pipeName, McpAccessLease lease)
     {
+        var diagnostics = new McpTransportDiagnostics(logger, "same-user-named-pipe");
+        diagnostics.EndpointStarted();
         try
         {
             while (lease.IsActive)
             {
                 await using var pipe = WindowsLocalPipe.Create(pipeName);
                 using var closeOnRevoke = lease.Token.Register(() => pipe.Dispose());
+                bool attached = false;
                 try
                 {
                     await pipe.WaitForConnectionAsync(lease.Token);
+                    attached = true;
+                    diagnostics.ClientAttached();
                     var adapter = new McpEditorAdapter(session,
                         () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-                        () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP.")), lease);
+                        () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP.")), lease, logger);
                     var reader = new McpBoundedLineReader(pipe);
                     await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
                     while (pipe.IsConnected && lease.IsActive)
@@ -95,10 +109,30 @@ public partial class MainWindow
                     }
                 }
                 // The request boundary must never fault the WPF dispatcher. Do not log payloads.
-                catch (Exception) { if (lease.IsActive) Status.Text = EditorText.Choose("MCP接続を閉じました。再接続できます。", "MCP connection closed. Reconnection is available."); }
+                catch (Exception exception)
+                {
+                    if (lease.IsActive)
+                    {
+                        diagnostics.ConnectionFailed(exception);
+                        Status.Text = EditorText.Choose("MCP接続を閉じました。再接続できます。", "MCP connection closed. Reconnection is available.");
+                    }
+                }
+                finally
+                {
+                    if (attached)
+                        diagnostics.ClientDetached();
+                }
             }
         }
-        catch (Exception) { if (ReferenceEquals(mcpLease, lease)) Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable."); }
-        finally { if (ReferenceEquals(mcpLease, lease)) RevokeMcp(); else lease.Revoke(); }
+        catch (Exception exception)
+        {
+            diagnostics.ConnectionFailed(exception);
+            if (ReferenceEquals(mcpLease, lease)) Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable.");
+        }
+        finally
+        {
+            diagnostics.EndpointStopped();
+            if (ReferenceEquals(mcpLease, lease)) RevokeMcp(); else lease.Revoke();
+        }
     }
 }
