@@ -35,19 +35,66 @@ public sealed class InteractiveCodecTests
     [TestMethod]
     public async Task RendererHoldsTheLastDecodableFrameAcrossAShortContainerTail()
     {
-        var fixture = new Fixture();
-        var decoder = new TailDecoder(6 * Fixture.T);
-        var renderer = new SharedFrameRenderer(decoder);
-        var evaluated = TimelineEvaluator.Create(fixture.Project, fixture.SequenceId).Value!
-            .Evaluate(5 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1))).Value!;
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mov"); File.WriteAllText(path, "decoder fixture");
+        try
+        {
+            var fixture = new Fixture(); Assert.IsTrue(fixture.Edit(new RelinkMedia(fixture.MovId, path, 10 * Fixture.T)).Success);
+            var decoder = new TailDecoder(6 * Fixture.T);
+            var renderer = new SharedFrameRenderer(decoder);
+            var evaluated = TimelineEvaluator.Create(fixture.Project, fixture.SequenceId).Value!
+                .Evaluate(5 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1))).Value!;
 
-        var result = await renderer.RenderPreviewAsync(fixture.Project, evaluated, PreviewQuality.Full, default);
+            var result = await renderer.RenderPreviewAsync(fixture.Project, evaluated, PreviewQuality.Full, default);
 
-        Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
-        Assert.AreEqual(evaluated.Tick, result.Value!.Tick, "The canonical timeline tick must not move when the source image is held.");
-        Assert.AreEqual(2, decoder.Requests.Count);
-        Assert.AreEqual(6 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1)), decoder.Requests[0]);
-        Assert.AreEqual(6 * Fixture.T, decoder.Requests[1]);
+            Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+            Assert.AreEqual(evaluated.Tick, result.Value!.Tick, "The canonical timeline tick must not move when the source image is held.");
+            Assert.AreEqual(2, decoder.Requests.Count);
+            Assert.AreEqual(6 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1)), decoder.Requests[0]);
+            Assert.AreEqual(6 * Fixture.T, decoder.Requests[1]);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public async Task PreviewSourceCrossesAdjacentDifferentMovsAtTheExactHalfOpenBoundaryAndReusesCache()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-boundary-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string first = Path.Combine(dir, "first.mov"), second = Path.Combine(dir, "second.mov");
+            await Run(["-f", "lavfi", "-i", "color=c=red:s=64x36:r=30:d=1", "-c:v", "qtrle", first]);
+            await Run(["-f", "lavfi", "-i", "color=c=blue:s=64x36:r=30:d=1", "-c:v", "qtrle", second]);
+            var session = new EditorSession(); var project = Guid.NewGuid(); var sequence = Guid.NewGuid();
+            var track = Guid.NewGuid(); var firstAsset = Guid.NewGuid(); var secondAsset = Guid.NewGuid();
+            var firstClip = Guid.NewGuid(); var secondClip = Guid.NewGuid();
+            long boundary = Fixture.T;
+            Assert.IsTrue(session.Execute(new([
+                new CreateProject(project, "Boundary fixture"),
+                new CreateSequence(sequence, "Sequence", new(64, 36, new(30, 1)), 2 * Fixture.T),
+                new RegisterMedia(new(firstAsset, "first", first, MediaKind.Mov, Fixture.T)),
+                new RegisterMedia(new(secondAsset, "second", second, MediaKind.Mov, Fixture.T)),
+                new AddTrack(sequence, track, "V1", TrackKind.Video),
+                new InsertClip(sequence, track, Fixture.Clip(firstClip, firstAsset, 0, 0, boundary)),
+                new InsertClip(sequence, track, Fixture.Clip(secondClip, secondAsset, boundary, 0, boundary)),
+            ])).Success);
+            var context = PreviewContext.Create(session.GetProject(), sequence).Value!;
+            using var forward = new FfmpegForwardDecoder();
+            using var source = new InteractivePreviewSource(forwardVideo: forward);
+
+            var before = await source.FrameAsync(context, boundary - TimelineTime.FrameToTicks(1, new(30, 1)), PreviewQuality.Full, true, default);
+            var at = await source.FrameAsync(context, boundary, PreviewQuality.Full, true, default);
+            var warm = await source.FrameAsync(context, boundary, PreviewQuality.Full, true, default);
+
+            Assert.IsTrue(before.Success, string.Join(";", before.Diagnostics));
+            Assert.IsTrue(at.Success, string.Join(";", at.Diagnostics));
+            Assert.AreEqual(boundary, at.Value!.Tick);
+            Assert.IsFalse(before.Value!.Rgba8.SequenceEqual(at.Value.Rgba8), "The exact boundary must evaluate the destination clip.");
+            Assert.AreSame(at.Value, warm.Value, "The composed destination frame should use the cache on a repeated request.");
+            Assert.AreEqual(1L, source.Frames.Statistics.Hits);
+            Assert.AreEqual(2L, source.Frames.Statistics.Misses);
+            Assert.AreEqual(2L, forward.ProcessStarts, "Changing media opens one independent forward decoder per clip.");
+        }
+        finally { Directory.Delete(dir, true); }
     }
     [TestMethod]
     public async Task ForwardPcmMatchesRandomAccessAndHandlesFinalPartialSource()

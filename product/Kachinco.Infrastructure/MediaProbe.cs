@@ -166,7 +166,8 @@ public static class MediaProbeParser
             bool hasVideo = false, hasAudio = false;
             int? sampleRate = null, channels = null, width = null, height = null;
             FrameRate? frameRate = null;
-            decimal? durationSeconds = ReadDuration(root.TryGetProperty("format", out var format) ? format : default);
+            decimal? formatDuration = ReadDuration(root.TryGetProperty("format", out var format) ? format : default);
+            decimal? videoDuration = null, audioDuration = null;
             var codecs = ImmutableArray.CreateBuilder<string>();
             foreach (var stream in streams.EnumerateArray())
             {
@@ -174,10 +175,10 @@ public static class MediaProbeParser
                 var codec = Text(stream, "codec_name");
                 if (!string.IsNullOrWhiteSpace(codec)) codecs.Add(codec);
                 var streamDuration = ReadDuration(stream);
-                if (streamDuration is > 0 && (durationSeconds is null || streamDuration > durationSeconds)) durationSeconds = streamDuration;
                 if (type == "video")
                 {
                     hasVideo = true;
+                    videoDuration ??= streamDuration;
                     width ??= Integer(stream, "width");
                     height ??= Integer(stream, "height");
                     frameRate ??= Rational(stream, "r_frame_rate");
@@ -185,6 +186,7 @@ public static class MediaProbeParser
                 else if (type == "audio")
                 {
                     hasAudio = true;
+                    audioDuration ??= streamDuration;
                     sampleRate ??= Integer(stream, "sample_rate");
                     channels ??= Integer(stream, "channels");
                 }
@@ -192,6 +194,12 @@ public static class MediaProbeParser
 
             if ((expectedKind == MediaKind.Mov && !hasVideo) || (expectedKind == MediaKind.Wav && !hasAudio))
                 return Fail("MEDIA_KIND_MISMATCH", "The file contents do not match the MOV/WAV extension.", sourcePath);
+            // Kachinco decodes 0:v:0 from MOV and 0:a:0 from WAV. Embedded MOV audio is
+            // intentionally excluded, so a longer audio/container tail must not extend a
+            // video clip beyond the final decodable frame.
+            decimal? durationSeconds = expectedKind == MediaKind.Mov
+                ? videoDuration ?? formatDuration
+                : audioDuration ?? formatDuration;
             if (durationSeconds is null or <= 0)
                 return Fail("MEDIA_DURATION_MISSING", "The media duration could not be determined.", sourcePath);
             long durationTicks = TimelineTime.SecondsToTicks(durationSeconds.Value);

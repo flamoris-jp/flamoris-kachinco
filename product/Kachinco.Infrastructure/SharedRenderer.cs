@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Flamoris.Logging;
 using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
@@ -8,7 +9,8 @@ public interface ICaptionRasterizer
     ValueTask<ImmutableArray<byte>> RasterizeAsync(ImmutableArray<EvaluatedCaption> captions, int width, int height, CancellationToken token);
 }
 
-public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPath = null, ICaptionRasterizer? captions = null) : IFrameRenderer
+public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPath = null, ICaptionRasterizer? captions = null,
+    FlamorisLogger? logger = null) : IFrameRenderer
 {
     public ValueTask<Result<RenderedVideoFrame>> RenderPreviewAsync(Project project, EvaluatedFrame frame, PreviewQuality quality, CancellationToken token)
     {
@@ -33,7 +35,7 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
                 cancellationToken.ThrowIfCancellationRequested();
                 var path = paths[layer.MediaAssetId];
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MEDIA_MISSING", "Video source is missing.", layer.MediaAssetId));
-                var pixels = await decoder.VideoAsync(path.ResolvedPath, layer.SourceTicks, width, height, cancellationToken);
+                var pixels = await DecodeVideoAsync(path.ResolvedPath, layer, frame, width, height, cancellationToken);
                 Composite(output, pixels, width, height, layer.Appearance, cancellationToken);
             }
             if (!frame.Captions.IsEmpty)
@@ -46,7 +48,42 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        { return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("FRAME_RENDER_FAILED", e.Message)); }
+        {
+            logger?.Error("preview.decoder", "Video frame acquisition failed", e, new Dictionary<string, object?>
+            {
+                ["sequenceId"] = frame.SequenceId, ["timelineTick"] = frame.Tick,
+            });
+            return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("FRAME_RENDER_FAILED", e.Message));
+        }
+    }
+
+    private async Task<ImmutableArray<byte>> DecodeVideoAsync(string path, EvaluatedVideoLayer layer, EvaluatedFrame frame,
+        int width, int height, CancellationToken cancellationToken)
+    {
+        try { return await decoder.VideoAsync(path, layer.SourceTicks, width, height, cancellationToken); }
+        catch (MediaEndOfStreamException original)
+        {
+            long frameTicks = Math.Max(1, TimelineTime.FrameToTicks(1, frame.Settings.FrameRate));
+            for (int attempt = 1; attempt <= 8; attempt++)
+            {
+                long fallbackTick = Math.Max(0, layer.SourceTicks - checked(frameTicks * attempt));
+                if (fallbackTick == layer.SourceTicks) break;
+                try
+                {
+                    var pixels = await decoder.VideoAsync(path, fallbackTick, width, height, cancellationToken);
+                    logger?.Log(LogLevel.Warn, "preview.decoder", "Held the last decodable video frame across a short media tail",
+                        new Dictionary<string, object?>
+                        {
+                            ["sequenceId"] = frame.SequenceId, ["timelineTick"] = frame.Tick, ["clipId"] = layer.ClipId,
+                            ["mediaAssetId"] = layer.MediaAssetId, ["requestedSourceTick"] = layer.SourceTicks,
+                            ["decodedSourceTick"] = fallbackTick,
+                        }, original);
+                    return pixels;
+                }
+                catch (MediaEndOfStreamException) when (fallbackTick > 0) { }
+            }
+            throw;
+        }
     }
 
     public static void Composite(byte[] output, ImmutableArray<byte> source, int width, int height, ClipAppearance appearance, CancellationToken token = default)
