@@ -107,16 +107,48 @@ public sealed class InteractivePreviewTests
             Assert.IsTrue(actual >= tick && actual - tick < 735);
         }
     }
+
+    [TestMethod]
+    public void PlaybackContinuesAcrossTheExactBoundaryBetweenDifferentVideoAssets()
+    {
+        using var pump = new Pump();
+        var fixture = new Fixture();
+        var secondAsset = Fixture.Id(30); var secondClip = Fixture.Id(31);
+        Assert.IsTrue(fixture.Edit(
+            new TrimClip(fixture.SequenceId, fixture.ClipId, 0, Fixture.T, Fixture.T),
+            new RegisterMedia(new(secondAsset, "second", "second.mov", MediaKind.Mov, 8 * Fixture.T)),
+            new InsertClip(fixture.SequenceId, fixture.VideoTrackId,
+                Fixture.Clip(secondClip, secondAsset, Fixture.T, 2 * Fixture.T, 7 * Fixture.T))).Success);
+        var source = new Source(); var device = new Device();
+        using var preview = new InteractivePreview(source, () => device);
+        preview.SetContext(Context(fixture)); preview.Scrub(Fixture.T / 2); pump.Until(() => preview.Completion.IsCompleted);
+        source.Contributors.Clear(); preview.Play(); pump.Until(() => preview.State == InteractivePreviewState.Playing);
+
+        var limit = DateTime.UtcNow.AddSeconds(10);
+        while (!source.Contributors.Any(x => x.Tick >= Fixture.T && x.ClipId == secondClip))
+        {
+            device.Advance(1600); pump.Drain(); Thread.Sleep(1);
+            if (DateTime.UtcNow > limit) Assert.Fail("Playback did not cross the adjacent clip boundary.");
+        }
+
+        Assert.AreNotEqual(InteractivePreviewState.Failed, preview.State);
+        Assert.IsTrue(source.Contributors.Any(x => x.Tick < Fixture.T && x.ClipId == fixture.ClipId));
+        Assert.IsTrue(source.Contributors.Any(x => x.Tick >= Fixture.T && x.ClipId == secondClip && x.MediaAssetId == secondAsset));
+        preview.Dispose(); pump.Until(() => preview.Completion.IsCompleted);
+    }
     internal static PreviewContext Context(Fixture f) => PreviewContext.Create(f.Session.GetProject(), f.SequenceId).Value!;
     private static Result<RenderedVideoFrame> Frame(long tick) => Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [1, 2, 3, 255]));
     private sealed class Source : IInteractivePreviewSource
     {
         public readonly List<long> Video = [], Audio = [];
+        public readonly List<(long Tick, Guid ClipId, Guid MediaAssetId, long SourceTick)> Contributors = [];
         public bool Hold, Fail, AudioFail, AudioHold;
         public TaskCompletionSource<Result<RenderedAudioBlock>>? PendingAudio; public Result<RenderedAudioBlock>? HeldAudio; public CancellationToken Token; public TaskCompletionSource<Result<RenderedVideoFrame>>? Pending;
         public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext c, long tick, PreviewQuality q, bool forward, CancellationToken token)
         {
             Video.Add(tick); Token = token;
+            var layer = c.Evaluator.Evaluate(tick).Value!.VideoLayers.LastOrDefault();
+            if (layer is not null) Contributors.Add((tick, layer.ClipId, layer.MediaAssetId, layer.SourceTicks));
             if (Hold) { Pending = new(); return new(Pending.Task); } // Deliberately ignores cancellation: stale rejection must still work.
             return ValueTask.FromResult(Fail ? Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MISSING", "missing media")) : Frame(tick));
         }

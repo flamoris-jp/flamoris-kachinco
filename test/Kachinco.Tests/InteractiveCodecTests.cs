@@ -31,6 +31,24 @@ public sealed class InteractiveCodecTests
         }
         finally { Directory.Delete(dir, true); }
     }
+
+    [TestMethod]
+    public async Task RendererHoldsTheLastDecodableFrameAcrossAShortContainerTail()
+    {
+        var fixture = new Fixture();
+        var decoder = new TailDecoder(6 * Fixture.T);
+        var renderer = new SharedFrameRenderer(decoder);
+        var evaluated = TimelineEvaluator.Create(fixture.Project, fixture.SequenceId).Value!
+            .Evaluate(5 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1))).Value!;
+
+        var result = await renderer.RenderPreviewAsync(fixture.Project, evaluated, PreviewQuality.Full, default);
+
+        Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+        Assert.AreEqual(evaluated.Tick, result.Value!.Tick, "The canonical timeline tick must not move when the source image is held.");
+        Assert.AreEqual(2, decoder.Requests.Count);
+        Assert.AreEqual(6 * Fixture.T + TimelineTime.FrameToTicks(1, new(30, 1)), decoder.Requests[0]);
+        Assert.AreEqual(6 * Fixture.T, decoder.Requests[1]);
+    }
     [TestMethod]
     public async Task ForwardPcmMatchesRandomAccessAndHandlesFinalPartialSource()
     {
@@ -235,6 +253,20 @@ public sealed class InteractiveCodecTests
             return Task.FromResult(pixels.ToImmutableArray());
         }
         public Task<ImmutableArray<float>> AudioAsync(string p, long t, int c, int r, int ch, CancellationToken ct) => throw new AssertFailedException("Unexpected audio decode.");
+    }
+    private sealed class TailDecoder(long lastDecodableTick) : IMediaDecoder
+    {
+        public List<long> Requests { get; } = [];
+        public Task<ImmutableArray<byte>> VideoAsync(string path, long tick, int width, int height, CancellationToken token)
+        {
+            Requests.Add(tick);
+            if (tick > lastDecodableTick) throw new MediaEndOfStreamException("No frame at the requested source time.");
+            var pixels = new byte[width * height * 4];
+            for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+            return Task.FromResult(pixels.ToImmutableArray());
+        }
+        public Task<ImmutableArray<float>> AudioAsync(string path, long tick, int count, int rate, int channels, CancellationToken token) =>
+            throw new AssertFailedException("Unexpected audio decode.");
     }
     private sealed class CaptionInputs : ICaptionRasterizer
     {
