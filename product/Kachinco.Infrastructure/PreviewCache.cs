@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Flamoris.Logging;
 using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
@@ -106,11 +107,15 @@ public interface IInteractivePreviewSource
 }
 
 public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null,
-    IMediaDecoder? randomDecoder = null, IMediaDecoder? forwardVideo = null, IMediaDecoder? forwardAudio = null) : IInteractivePreviewSource, IDisposable
+    IMediaDecoder? randomDecoder = null, IMediaDecoder? forwardVideo = null, IMediaDecoder? forwardAudio = null,
+    FlamorisLogger? logger = null) : IInteractivePreviewSource, IDisposable
 {
     private readonly IMediaDecoder random = randomDecoder ?? new FfmpegMediaDecoder();
-    private readonly IMediaDecoder video = forwardVideo ?? new FfmpegForwardDecoder();
-    private readonly IMediaDecoder audio = forwardAudio ?? new FfmpegForwardDecoder();
+    private readonly IMediaDecoder video = forwardVideo ?? new FfmpegForwardDecoder(logger: logger, role: "video");
+    private readonly IMediaDecoder audio = forwardAudio ?? new FfmpegForwardDecoder(logger: logger, role: "audio");
+    private readonly object diagnosticsGate = new();
+    private CancellationToken forwardOwner;
+    private ImmutableArray<Guid> forwardClipIds = [];
     public PreviewCache<RenderedVideoFrame> Frames { get; } = new(96 * 1024 * 1024);
     public PreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024);
     public async ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
@@ -118,14 +123,18 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
         if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
         token.ThrowIfCancellationRequested();
         string key = context.VideoKey(tick, quality);
-        if (Frames.TryGet(key, out var cached)) return Result<RenderedVideoFrame>.Ok(cached);
         var frame = context.Evaluator.Evaluate(tick);
         if (!frame.Success) return new(null, frame.Diagnostics);
-        var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions);
+        bool cacheHit = Frames.TryGet(key, out var cached);
+        LogContributors(frame.Value!, forward, token, cacheHit);
+        if (cacheHit) return Result<RenderedVideoFrame>.Ok(cached);
+        var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions, logger);
         var result = await Task.Run(async () => await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token), token);
         token.ThrowIfCancellationRequested();
         if (key != context.VideoKey(tick, quality)) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Frames.Put(key, result.Value!, result.Value!.Rgba8.Length);
+        else logger?.Error("preview.decoder", "Preview video request returned diagnostics", properties: FrameProperties(frame.Value!, quality,
+            string.Join(",", result.Diagnostics.Select(x => x.Code))));
         return result;
     }
     public async ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token)
@@ -139,6 +148,37 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
         if (key != context.AudioKey(firstSample, count)) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Audio.Put(key, result.Value!, result.Value!.Samples.Length * 4L);
         return result;
+    }
+    private void LogContributors(EvaluatedFrame frame, bool forward, CancellationToken token, bool cacheHit)
+    {
+        if (!forward) return;
+        var current = frame.VideoLayers.Select(x => x.ClipId).ToImmutableArray();
+        ImmutableArray<Guid> previous;
+        lock (diagnosticsGate)
+        {
+            if (forwardOwner != token) { forwardOwner = token; forwardClipIds = []; }
+            previous = forwardClipIds;
+            if (previous.SequenceEqual(current)) return;
+            forwardClipIds = current;
+        }
+        var first = frame.VideoLayers.LastOrDefault();
+        logger?.Info("preview.transition", "Active preview video contributors changed", new Dictionary<string, object?>
+        {
+            ["timelineTick"] = frame.Tick,
+            ["previousClipIds"] = string.Join(",", previous), ["clipIds"] = string.Join(",", current),
+            ["activeClipId"] = first?.ClipId, ["mediaAssetId"] = first?.MediaAssetId, ["sourceTick"] = first?.SourceTicks,
+            ["cache"] = cacheHit ? "hit" : "miss", ["cacheHits"] = Frames.Statistics.Hits, ["cacheMisses"] = Frames.Statistics.Misses,
+        });
+    }
+    private static Dictionary<string, object?> FrameProperties(EvaluatedFrame frame, PreviewQuality quality, string? diagnosticCodes = null)
+    {
+        var first = frame.VideoLayers.LastOrDefault();
+        return new()
+        {
+            ["sequenceId"] = frame.SequenceId, ["timelineTick"] = frame.Tick, ["quality"] = quality.ToString(),
+            ["activeClipId"] = first?.ClipId, ["mediaAssetId"] = first?.MediaAssetId, ["sourceTick"] = first?.SourceTicks,
+            ["diagnosticCodes"] = diagnosticCodes,
+        };
     }
     public void Dispose()
     {
