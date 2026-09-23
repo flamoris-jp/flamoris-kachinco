@@ -116,7 +116,7 @@ public sealed class InteractivePreviewTests
         var secondAsset = Fixture.Id(30); var secondClip = Fixture.Id(31);
         Assert.IsTrue(fixture.Edit(
             new TrimClip(fixture.SequenceId, fixture.ClipId, 0, Fixture.T, Fixture.T),
-            new RegisterMedia(new(secondAsset, "second", "second.mov", MediaKind.Mov, 8 * Fixture.T)),
+            new RegisterMedia(new(secondAsset, "second", "second.mov", MediaKind.Mov, 10 * Fixture.T)),
             new InsertClip(fixture.SequenceId, fixture.VideoTrackId,
                 Fixture.Clip(secondClip, secondAsset, Fixture.T, 2 * Fixture.T, 7 * Fixture.T))).Success);
         var source = new Source(); var device = new Device();

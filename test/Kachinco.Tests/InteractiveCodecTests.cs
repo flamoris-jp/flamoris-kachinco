@@ -70,7 +70,7 @@ public sealed class InteractiveCodecTests
             long boundary = Fixture.T;
             Assert.IsTrue(session.Execute(new([
                 new CreateProject(project, "Boundary fixture"),
-                new CreateSequence(sequence, "Sequence", new(64, 36, new(30, 1)), 2 * Fixture.T),
+                new CreateSequence(sequence, "Sequence", SequenceSettings.Landscape, 2 * Fixture.T),
                 new RegisterMedia(new(firstAsset, "first", first, MediaKind.Mov, Fixture.T)),
                 new RegisterMedia(new(secondAsset, "second", second, MediaKind.Mov, Fixture.T)),
                 new AddTrack(sequence, track, "V1", TrackKind.Video),
@@ -81,9 +81,9 @@ public sealed class InteractiveCodecTests
             using var forward = new FfmpegForwardDecoder();
             using var source = new InteractivePreviewSource(forwardVideo: forward);
 
-            var before = await source.FrameAsync(context, boundary - TimelineTime.FrameToTicks(1, new(30, 1)), PreviewQuality.Full, true, default);
-            var at = await source.FrameAsync(context, boundary, PreviewQuality.Full, true, default);
-            var warm = await source.FrameAsync(context, boundary, PreviewQuality.Full, true, default);
+            var before = await source.FrameAsync(context, boundary - TimelineTime.FrameToTicks(1, new(30, 1)), PreviewQuality.Quarter, true, default);
+            var at = await source.FrameAsync(context, boundary, PreviewQuality.Quarter, true, default);
+            var warm = await source.FrameAsync(context, boundary, PreviewQuality.Quarter, true, default);
 
             Assert.IsTrue(before.Success, string.Join(";", before.Diagnostics));
             Assert.IsTrue(at.Success, string.Join(";", at.Diagnostics));
