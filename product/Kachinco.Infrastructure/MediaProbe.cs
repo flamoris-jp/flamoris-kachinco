@@ -177,16 +177,16 @@ public static class MediaProbeParser
                 var streamDuration = ReadDuration(stream);
                 if (type == "video")
                 {
+                    if (!hasVideo) videoDuration = streamDuration;
                     hasVideo = true;
-                    videoDuration ??= streamDuration;
                     width ??= Integer(stream, "width");
                     height ??= Integer(stream, "height");
                     frameRate ??= Rational(stream, "r_frame_rate");
                 }
                 else if (type == "audio")
                 {
+                    if (!hasAudio) audioDuration = streamDuration;
                     hasAudio = true;
-                    audioDuration ??= streamDuration;
                     sampleRate ??= Integer(stream, "sample_rate");
                     channels ??= Integer(stream, "channels");
                 }
