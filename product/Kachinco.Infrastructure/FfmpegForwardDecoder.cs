@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using Flamoris.Logging;
 using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
@@ -12,12 +13,18 @@ namespace Kachinco.Infrastructure;
 // Codec-side forward streams only: no timeline, transforms, blending or audio mixing.
 // A caller serializes video calls and audio calls independently. Each side owns a bounded LRU
 // pool large enough for the normal multi-track contributor set without per-frame process churn.
-public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaDecoder, IDisposable
+public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
 {
     public const int MaximumVideoStreams = 8;
     public const int MaximumAudioStreams = 8;
     private readonly Dictionary<long, PoolEntry<VideoStream>> videos = [];
     private readonly Dictionary<long, PoolEntry<AudioStream>> audios = [];
+    private readonly HashSet<string> randomVideoFallbacks = [];
+    private readonly string executable;
+    private readonly FlamorisLogger? logger;
+    private readonly string role;
+    private readonly IMediaDecoder randomVideoFallback;
+    private readonly bool ownsRandomVideoFallback;
     private long accessSequence, streamSequence;
     private long processStarts;
     private long startElapsed, stopElapsed;
@@ -25,22 +32,55 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
     public double ProcessStopMilliseconds => stopElapsed * 1000d / Stopwatch.Frequency;
     public int ActiveVideoStreams => videos.Count;
     public int ActiveAudioStreams => audios.Count;
-    private void Close(StreamProcess stream) { long at = Stopwatch.GetTimestamp(); try { stream.Dispose(); } finally { Interlocked.Add(ref stopElapsed, Stopwatch.GetTimestamp() - at); } }
+    public FfmpegForwardDecoder(string executable = "ffmpeg", FlamorisLogger? logger = null,
+        string role = "shared", IMediaDecoder? randomVideoFallback = null)
+    {
+        this.executable = executable;
+        this.logger = logger;
+        this.role = role;
+        this.randomVideoFallback = randomVideoFallback ?? new FfmpegMediaDecoder(executable);
+        ownsRandomVideoFallback = randomVideoFallback is null;
+    }
+    private void Close(StreamProcess stream, string kind = "stream", long? streamId = null, string reason = "release")
+    {
+        long at = Stopwatch.GetTimestamp();
+        try { stream.Dispose(); }
+        finally
+        {
+            Interlocked.Add(ref stopElapsed, Stopwatch.GetTimestamp() - at);
+            logger?.Debug("preview.decoder", "Closed forward decoder", new Dictionary<string, object?>
+            { ["role"] = role, ["kind"] = kind, ["streamId"] = streamId, ["reason"] = reason });
+        }
+    }
     public long ProcessStarts => Interlocked.Read(ref processStarts);
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         string baseKey = Key(path) + $"|{width}|{height}";
+        if (randomVideoFallbacks.Contains(baseKey))
+            return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
         RemoveExpired(videos, baseKey, stream => stream.IsOwnedBy(token));
         var entry = videos.Values.Where(candidate => candidate.BaseKey == baseKey && candidate.Stream.Accepts(sourceTicks, token))
             .OrderBy(candidate => candidate.Stream.ForwardDistance(sourceTicks)).ThenByDescending(candidate => candidate.LastUsed).FirstOrDefault();
-        if (entry is null) entry = Open();
-        entry.LastUsed = NextAccess();
-        try { return await entry.Stream.FrameAsync(sourceTicks, token); }
-        catch (EndOfStreamException)
+        try
         {
-            Close(entry.Stream); videos.Remove(entry.Id); entry = Open();
-            return await entry.Stream.FrameAsync(sourceTicks, token);
+            if (entry is null) entry = Open();
+            entry.LastUsed = NextAccess();
+            try { return await entry.Stream.FrameAsync(sourceTicks, token); }
+            catch (MediaEndOfStreamException)
+            {
+                Close(entry.Stream, "video", entry.Id, "window-ended"); videos.Remove(entry.Id); entry = Open();
+                return await entry.Stream.FrameAsync(sourceTicks, token);
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            if (entry is not null && videos.Remove(entry.Id)) Close(entry.Stream, "video", entry.Id, "degraded");
+            randomVideoFallbacks.Add(baseKey);
+            logger?.Log(LogLevel.Warn, "preview.decoder", "Forward video decoder degraded to accurate random access",
+                DecoderProperties(sourceTicks, width, height, entry?.Id), exception);
+            return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
         }
         PoolEntry<VideoStream> Open()
         {
@@ -49,7 +89,9 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             long at = Stopwatch.GetTimestamp();
             var stream = new VideoStream(executable, path, sourceTicks, width, height, token);
             Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at);
-            var opened = new PoolEntry<VideoStream>(NextStream(), baseKey, stream, NextAccess()); videos.Add(opened.Id, opened); return opened;
+            var opened = new PoolEntry<VideoStream>(NextStream(), baseKey, stream, NextAccess()); videos.Add(opened.Id, opened);
+            logger?.Debug("preview.decoder", "Opened forward video decoder", DecoderProperties(sourceTicks, width, height, opened.Id));
+            return opened;
         }
     }
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
@@ -67,27 +109,34 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
             var stream = new AudioStream(executable, path, sourceTicks, token);
             Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at);
             entry = new(NextStream(), baseKey, stream, NextAccess()); audios.Add(entry.Id, entry);
+            logger?.Debug("preview.decoder", "Opened forward audio decoder", new Dictionary<string, object?>
+            { ["role"] = role, ["sourceTicks"] = sourceTicks, ["streamId"] = entry.Id, ["sampleCount"] = count });
         }
         entry.LastUsed = NextAccess();
         return await entry.Stream.BlockAsync(count, token);
     }
     public void Dispose()
     {
-        foreach (var entry in videos.Values) Close(entry.Stream); videos.Clear();
-        foreach (var entry in audios.Values) Close(entry.Stream); audios.Clear();
+        foreach (var entry in videos.Values) Close(entry.Stream, "video", entry.Id, "dispose"); videos.Clear();
+        foreach (var entry in audios.Values) Close(entry.Stream, "audio", entry.Id, "dispose"); audios.Clear();
+        if (ownsRandomVideoFallback && randomVideoFallback is IDisposable disposable) disposable.Dispose();
     }
+    private Dictionary<string, object?> DecoderProperties(long sourceTicks, int width, int height, long? streamId = null) => new()
+    {
+        ["role"] = role, ["sourceTicks"] = sourceTicks, ["width"] = width, ["height"] = height, ["streamId"] = streamId,
+    };
     private long NextAccess() => Interlocked.Increment(ref accessSequence);
     private long NextStream() => Interlocked.Increment(ref streamSequence);
     private void RemoveExpired<T>(Dictionary<long, PoolEntry<T>> pool, string baseKey, Func<T, bool> usable) where T : StreamProcess
     {
         foreach (var expired in pool.Values.Where(entry => entry.BaseKey == baseKey && !usable(entry.Stream)).ToArray())
-        { Close(expired.Stream); pool.Remove(expired.Id); }
+        { Close(expired.Stream, typeof(T) == typeof(VideoStream) ? "video" : "audio", expired.Id, "owner-expired"); pool.Remove(expired.Id); }
     }
     private void MakeRoom<T>(Dictionary<long, PoolEntry<T>> pool, int maximum) where T : StreamProcess
     {
         if (pool.Count < maximum) return;
         var oldest = pool.MinBy(pair => pair.Value.LastUsed);
-        Close(oldest.Value.Stream); pool.Remove(oldest.Key);
+        Close(oldest.Value.Stream, typeof(T) == typeof(VideoStream) ? "video" : "audio", oldest.Key, "lru-eviction"); pool.Remove(oldest.Key);
     }
     private sealed class PoolEntry<T>(long id, string baseKey, T stream, long lastUsed) where T : StreamProcess
     {
@@ -130,7 +179,7 @@ public sealed class FfmpegForwardDecoder(string executable = "ffmpeg") : IMediaD
                     await Process.WaitForExitAsync(timeout.Token); await ErrorTask;
                     if (Process.ExitCode != 0) throw new InvalidDataException("FFmpeg forward decode failed: " + Error);
                     if (padPcmTail && offset % 8 == 0) return data; // Match independent decoder: final missing PCM samples are silence.
-                    if (offset == 0) throw new EndOfStreamException("Source has no frame at the requested time.");
+                    if (offset == 0) throw new MediaEndOfStreamException("Source has no frame at the requested time.");
                     throw new InvalidDataException("Incomplete decoded frame/PCM block.");
                 }
                 offset += read;

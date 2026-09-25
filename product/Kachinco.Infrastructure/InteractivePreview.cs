@@ -1,4 +1,5 @@
 using Kachinco.Core;
+using Flamoris.Logging;
 
 namespace Kachinco.Infrastructure;
 
@@ -16,7 +17,8 @@ public enum InteractivePreviewState { Stopped, Scrubbing, Buffering, Playing, Pa
 
 // Host calls/callbacks are serialized (Dispatcher in WPF). One mailbox runner, one video
 // request and one audio request; replacing intent cancels and joins old work before starting.
-public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IPreviewAudioOutput> outputFactory) : IDisposable
+public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IPreviewAudioOutput> outputFactory,
+    FlamorisLogger? logger = null) : IDisposable
 {
     public const int AudioBlockFrames = 4800;
     public const int StartupFrames = 9600;
@@ -40,6 +42,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     private long generation, startSample;
     private IPreviewAudioOutput? output;
     private bool playSession;
+    private Guid? playbackSessionId;
     private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After);
 
     public void SetContext(PreviewContext? value)
@@ -108,11 +111,14 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             TimelineTime.FrameToTicks(Math.Max(0, TimelineTime.FrameCount(context.Sequence.DurationTicks, context.Sequence.Settings.FrameRate) - 1), context.Sequence.Settings.FrameRate) : PositionTicks;
         wantPlay = play;
         pending = new(generation, renderTick, play, after);
+        logger?.Debug("preview.playback", play ? "Preview playback requested" : "Preview frame requested", Properties(renderTick));
         SetState(play ? InteractivePreviewState.Buffering : InteractivePreviewState.Scrubbing);
         if (!running) { running = true; runner = RunMailboxAsync(); }
     }
     private void Cancel()
     {
+        if (active is not null || pending is not null || playSession)
+            logger?.Debug("preview.playback", "Preview work cancelled", Properties(PositionTicks));
         generation++; pending = null; active?.Cancel(); wantPlay = false; playSession = false;
         // Stop sound immediately, but let the joined runner own disposal.
         try { output?.Pause(); } catch { }
@@ -135,7 +141,8 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                         Require(result); Frame = result.Value; SetState(request.After);
                     }
                 }
-                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                { logger?.Debug("preview.playback", "Preview request observed cancellation", Properties(request.Tick)); }
                 catch (Exception e) { if (request.Generation == generation) Fail(e); }
                 finally { if (ReferenceEquals(active, cancellation)) active = null; }
             }
@@ -144,6 +151,8 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     }
     private async Task RunPlaybackAsync(Request request, CancellationToken token)
     {
+        var sessionId = Guid.NewGuid(); playbackSessionId = sessionId;
+        logger?.Info("preview.playback", "Preview playback session started", Properties(request.Tick));
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         var ct = sessionCancellation.Token;
         using var device = outputFactory(); output = device; playSession = true;
@@ -185,7 +194,12 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             sessionCancellation.Cancel();
             try { if (audioTask is not null) try { await audioTask; } catch (OperationCanceledException) { } }
-            finally { if (ReferenceEquals(output, device)) { output = null; playSession = false; } }
+            finally
+            {
+                logger?.Info("preview.playback", "Preview playback session stopped", Properties(PositionTicks));
+                if (playbackSessionId == sessionId) playbackSessionId = null;
+                if (ReferenceEquals(output, device)) { output = null; playSession = false; }
+            }
         }
 
         async Task ProduceAudio()
@@ -214,7 +228,17 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public static long FirstSample(long tick) => checked((long)(((System.Numerics.BigInteger)tick * 48000 + TimelineTime.TicksPerSecond - 1) / TimelineTime.TicksPerSecond));
     private static long FrameIndex(long tick, FrameRate fps) => checked((long)((System.Numerics.BigInteger)tick * fps.Numerator / ((System.Numerics.BigInteger)TimelineTime.TicksPerSecond * fps.Denominator)));
     private static void Require<T>(Result<T> result) { if (!result.Success) throw new InvalidDataException(string.Join(" / ", result.Diagnostics.Select(d => $"[{d.Code}] {d.Message}"))); }
-    private void Fail(Exception e) { Cancel(); Error = e.Message; Frame = null; SetState(InteractivePreviewState.Failed); }
+    private void Fail(Exception e)
+    {
+        logger?.Error("preview.playback", "Preview playback failed", e, Properties(PositionTicks));
+        Cancel(); Error = e.Message; Frame = null; SetState(InteractivePreviewState.Failed);
+    }
+    private Dictionary<string, object?> Properties(long tick) => new()
+    {
+        ["playbackSessionId"] = playbackSessionId, ["generation"] = generation,
+        ["sequenceId"] = context?.Sequence.Id, ["timelineTick"] = tick,
+        ["quality"] = Quality.ToString(), ["state"] = State.ToString(),
+    };
     private void SetState(InteractivePreviewState value) { State = value; Notify(); }
     private void Notify() => Changed?.Invoke(this, EventArgs.Empty);
     public void Dispose() { if (disposed) return; disposed = true; Cancel(); Frame = null; }

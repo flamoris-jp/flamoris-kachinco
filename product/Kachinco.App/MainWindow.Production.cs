@@ -21,8 +21,8 @@ public partial class MainWindow
 
     private void InitializeProduction()
     {
-        previewSource = new(new WindowsCaptionRasterizer(Dispatcher));
-        playback = new(previewSource, () => new WindowsPreviewAudioOutput());
+        previewSource = new(new WindowsCaptionRasterizer(Dispatcher), logger: logger);
+        playback = new(previewSource, () => new WindowsPreviewAudioOutput(), logger);
         playback.Changed += (_, _) => RefreshPlaybackFeedback();
         CompositionTarget.Rendering += PlaybackRendering;
         Closed += async (_, _) =>

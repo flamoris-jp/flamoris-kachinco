@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Flamoris.Logging;
+using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -151,6 +153,42 @@ public sealed class LoggingIntegrationTests
         Assert.AreEqual(Path.Combine("logs", "kachinco-mcp.log"), host.Options.Outputs.Single().Path);
     }
 
+    [TestMethod]
+    public async Task PreviewLifecycleClipTransitionAndCacheOutcomeAreStructured()
+    {
+        using var temp = new TempDirectory();
+        var configuration = WriteFileConfiguration(temp.Path, "preview.log");
+        var logger = KachincoLogging.Create(configurationPath: configuration, basePath: temp.Path).Logger;
+        var path = Path.Combine(temp.Path, "source.mov"); File.WriteAllText(path, "decoder fixture");
+        var fixture = new Fixture(); Assert.IsTrue(fixture.Edit(new RelinkMedia(fixture.MovId, path, 10 * Fixture.T)).Success);
+        var context = InteractivePreviewTests.Context(fixture);
+        var decoder = new PreviewDecoder();
+        using (var source = new InteractivePreviewSource(randomDecoder: decoder, forwardVideo: decoder, forwardAudio: decoder, logger: logger))
+        {
+            using var firstOwner = new CancellationTokenSource();
+            using var secondOwner = new CancellationTokenSource();
+            Assert.IsTrue((await source.FrameAsync(context, 0, PreviewQuality.Quarter, true, firstOwner.Token)).Success);
+            Assert.IsTrue((await source.FrameAsync(context, 0, PreviewQuality.Quarter, true, secondOwner.Token)).Success);
+        }
+        using (var preview = new InteractivePreview(new PreviewSource(), () => new PreviewDevice(), logger))
+        {
+            preview.SetContext(context); await preview.Completion;
+            preview.Play(); await Until(() => preview.State == InteractivePreviewState.Playing);
+            preview.Dispose(); await preview.Completion;
+        }
+
+        var text = File.ReadAllText(Path.Combine(temp.Path, "logs", "preview.log"));
+        StringAssert.Contains(text, "[INFO ] [preview.transition] Active preview video contributors changed");
+        StringAssert.Contains(text, $"activeClipId={fixture.ClipId}");
+        StringAssert.Contains(text, $"mediaAssetId={fixture.MovId}");
+        StringAssert.Contains(text, "sourceTick=");
+        StringAssert.Contains(text, "cache=miss");
+        StringAssert.Contains(text, "cache=hit");
+        StringAssert.Contains(text, "[INFO ] [preview.playback] Preview playback session started");
+        StringAssert.Contains(text, "[INFO ] [preview.playback] Preview playback session stopped");
+        StringAssert.Contains(text, "playbackSessionId=");
+    }
+
     private static string WriteFileConfiguration(string directory, string fileName, bool includeConsole = false)
     {
         var path = Path.Combine(directory, "appsettings.json");
@@ -167,6 +205,47 @@ public sealed class LoggingIntegrationTests
         }
         """);
         return path;
+    }
+
+    private static async Task Until(Func<bool> condition)
+    {
+        var limit = DateTime.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > limit) Assert.Fail("Preview did not reach the expected state.");
+            await Task.Delay(5);
+        }
+    }
+
+    private sealed class PreviewDecoder : IMediaDecoder
+    {
+        public Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
+        {
+            var pixels = new byte[width * height * 4];
+            for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+            return Task.FromResult(pixels.ToImmutableArray());
+        }
+        public Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token) =>
+            Task.FromResult(new float[count * channels].ToImmutableArray());
+    }
+
+    private sealed class PreviewSource : IInteractivePreviewSource
+    {
+        public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token) =>
+            ValueTask.FromResult(Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [0, 0, 0, 255])));
+        public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token) =>
+            ValueTask.FromResult(Result<RenderedAudioBlock>.Ok(new(firstSample, 48000, 2, new float[count * 2].ToImmutableArray())));
+    }
+
+    private sealed class PreviewDevice : IPreviewAudioOutput
+    {
+        private long queued;
+        public long PlayedFrames => 0;
+        public long QueuedFrames => queued;
+        public void Enqueue(RenderedAudioBlock block) => queued += block.Samples.Length / block.Channels;
+        public void Play() { }
+        public void Pause() { }
+        public void Dispose() { }
     }
 
     private sealed class TempDirectory : IDisposable

@@ -26,6 +26,50 @@ public sealed class MediaProbeTests
     }
 
     [TestMethod]
+    public void MovDurationUsesTheDecodedVideoStreamInsteadOfALongerAudioOrContainerTail()
+    {
+        const string json = """
+            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1","duration":"6.000000"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"duration":"6.040000"}],"format":{"duration":"6.040000"}}
+            """;
+
+        var result = MediaProbeParser.Parse(Path.GetFullPath("shot.mov"), json);
+
+        Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+        Assert.AreEqual(6 * TimelineTime.TicksPerSecond, result.Value!.DurationTicks,
+            "MOV placement must stop at the video stream Kachinco actually decodes, not an ignored embedded-audio tail.");
+    }
+
+    [TestMethod]
+    public void MovWithMissingFirstVideoDurationFallsBackToContainerInsteadOfAnotherVideoStream()
+    {
+        const string json = """
+            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1"},{"codec_type":"video","codec_name":"mjpeg","duration":"12.0"}],"format":{"duration":"6.04"}}
+            """;
+
+        var result = MediaProbeParser.Parse(Path.GetFullPath("multi-video.mov"), json);
+
+        Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+        Assert.AreEqual(TimelineTime.SecondsToTicks(6.04m), result.Value!.DurationTicks,
+            "The decoder selects 0:v:0; a later video stream cannot supply its duration.");
+        Assert.AreEqual(1920, result.Value.Width);
+    }
+
+    [TestMethod]
+    public void WavWithMissingFirstAudioDurationFallsBackToContainerInsteadOfAnotherAudioStream()
+    {
+        const string json = """
+            {"streams":[{"codec_type":"audio","codec_name":"pcm_s16le","sample_rate":"48000","channels":2},{"codec_type":"audio","codec_name":"pcm_s16le","duration":"12.0"}],"format":{"duration":"6.04"}}
+            """;
+
+        var result = MediaProbeParser.Parse(Path.GetFullPath("multi-audio.wav"), json);
+
+        Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+        Assert.AreEqual(TimelineTime.SecondsToTicks(6.04m), result.Value!.DurationTicks,
+            "The decoder selects 0:a:0; a later audio stream cannot supply its duration.");
+        Assert.AreEqual(48000, result.Value.SampleRate);
+    }
+
+    [TestMethod]
     public void WavMetadataAndMalformedSourcesReturnStructuredDiagnostics()
     {
         var wav = MediaProbeParser.Parse(Path.GetFullPath("voice.wav"),
