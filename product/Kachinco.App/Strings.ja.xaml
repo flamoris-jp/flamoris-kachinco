@@ -43,7 +43,7 @@
   <system:String x:Key="Shell.Duplicate">複製</system:String>
   <system:String x:Key="Shell.Delete">削除</system:String>
   <system:String x:Key="Shell.ProjectMedia">プロジェクト / 素材</system:String>
-  <system:String x:Key="Shell.ImportMOVWAV">MOV / WAVを読み込む</system:String>
+  <system:String x:Key="Shell.ImportMOVWAV">素材を読み込む…</system:String>
   <system:String x:Key="Shell.Place">配置</system:String>
   <system:String x:Key="Shell.Placeonacompatibletrackattheplayhead">再生ヘッド位置の互換トラックへ配置</system:String>
   <system:String x:Key="Shell.Openproject">プロジェクトを開く…</system:String>

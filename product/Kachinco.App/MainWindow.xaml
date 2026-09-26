@@ -119,7 +119,7 @@
             </WrapPanel>
             <TextBlock x:Name="MediaGuidance" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,6,0,0"/>
           </StackPanel>
-          <ListBox Background="#202124" Foreground="#E7E7E7" BorderBrush="#484B50" x:Name="MediaList" Margin="0,8,0,0" SelectionChanged="Media_Changed"
+          <ListBox Background="#202124" Foreground="#E7E7E7" BorderBrush="#484B50" x:Name="MediaList" AllowDrop="True" PreviewDragOver="MediaFiles_DragOver" PreviewDrop="MediaFiles_Drop" Margin="0,8,0,0" SelectionChanged="Media_Changed"
                    PreviewMouseLeftButtonDown="Media_MouseDown" PreviewMouseMove="Media_MouseMove" MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
             <ListBox.ItemTemplate>
               <DataTemplate>
