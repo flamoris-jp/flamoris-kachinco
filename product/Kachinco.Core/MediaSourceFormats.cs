@@ -10,7 +10,7 @@ public static class MediaSourceFormats
 
     public static bool TryGetKind(string? path, out MediaKind kind)
     {
-        var extension = Path.GetExtension(path);
+        var extension = Path.GetExtension(path) ?? "";
         if (VideoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) { kind = MediaKind.Mov; return true; }
         if (AudioExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) { kind = MediaKind.Wav; return true; }
         kind = default;

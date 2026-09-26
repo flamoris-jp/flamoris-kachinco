@@ -9,12 +9,14 @@ namespace Kachinco.Tests;
 public sealed class MediaProbeTests
 {
     [TestMethod]
-    public void MovMetadataUsesCanonicalTicksAndKeepsTechnicalProbeDataTransient()
+    [DataRow("mov")]
+    [DataRow("mp4")]
+    public void MovMetadataUsesCanonicalTicksAndKeepsTechnicalProbeDataTransient(string extension)
     {
         const string json = """
-            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30000/1001","duration":"1.25"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"duration":"1.25"}],"format":{"duration":"1.25"}}
+            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30000/1001","duration":"1.25"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"duration":"1.25"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"1.25"}}
             """;
-        var result = MediaProbeParser.Parse(Path.GetFullPath("shot.mov"), json);
+        var result = MediaProbeParser.Parse(Path.GetFullPath("shot." + extension), json);
         Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
         Assert.AreEqual(TimelineTime.SecondsToTicks(1.25m), result.Value!.DurationTicks);
         Assert.AreEqual(MediaKind.Mov, result.Value.Kind);
@@ -26,13 +28,15 @@ public sealed class MediaProbeTests
     }
 
     [TestMethod]
-    public void MovDurationUsesTheDecodedVideoStreamInsteadOfALongerAudioOrContainerTail()
+    [DataRow("mov")]
+    [DataRow("mp4")]
+    public void MovDurationUsesTheDecodedVideoStreamInsteadOfALongerAudioOrContainerTail(string extension)
     {
         const string json = """
-            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1","duration":"6.000000"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"duration":"6.040000"}],"format":{"duration":"6.040000"}}
+            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1","duration":"6.000000"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"duration":"6.040000"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"6.040000"}}
             """;
 
-        var result = MediaProbeParser.Parse(Path.GetFullPath("shot.mov"), json);
+        var result = MediaProbeParser.Parse(Path.GetFullPath("shot." + extension), json);
 
         Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
         Assert.AreEqual(6 * TimelineTime.TicksPerSecond, result.Value!.DurationTicks,
@@ -40,13 +44,15 @@ public sealed class MediaProbeTests
     }
 
     [TestMethod]
-    public void MovWithMissingFirstVideoDurationFallsBackToContainerInsteadOfAnotherVideoStream()
+    [DataRow("mov")]
+    [DataRow("mp4")]
+    public void MovWithMissingFirstVideoDurationFallsBackToContainerInsteadOfAnotherVideoStream(string extension)
     {
         const string json = """
-            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1"},{"codec_type":"video","codec_name":"mjpeg","duration":"12.0"}],"format":{"duration":"6.04"}}
+            {"streams":[{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"r_frame_rate":"30/1"},{"codec_type":"video","codec_name":"mjpeg","duration":"12.0"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2","duration":"6.04"}}
             """;
 
-        var result = MediaProbeParser.Parse(Path.GetFullPath("multi-video.mov"), json);
+        var result = MediaProbeParser.Parse(Path.GetFullPath("multi-video." + extension), json);
 
         Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
         Assert.AreEqual(TimelineTime.SecondsToTicks(6.04m), result.Value!.DurationTicks,
@@ -58,7 +64,7 @@ public sealed class MediaProbeTests
     public void WavWithMissingFirstAudioDurationFallsBackToContainerInsteadOfAnotherAudioStream()
     {
         const string json = """
-            {"streams":[{"codec_type":"audio","codec_name":"pcm_s16le","sample_rate":"48000","channels":2},{"codec_type":"audio","codec_name":"pcm_s16le","duration":"12.0"}],"format":{"duration":"6.04"}}
+            {"streams":[{"codec_type":"audio","codec_name":"pcm_s16le","sample_rate":"48000","channels":2},{"codec_type":"audio","codec_name":"pcm_s16le","duration":"12.0"}],"format":{"format_name":"wav","duration":"6.04"}}
             """;
 
         var result = MediaProbeParser.Parse(Path.GetFullPath("multi-audio.wav"), json);
@@ -73,13 +79,13 @@ public sealed class MediaProbeTests
     public void WavMetadataAndMalformedSourcesReturnStructuredDiagnostics()
     {
         var wav = MediaProbeParser.Parse(Path.GetFullPath("voice.wav"),
-            "{\"streams\":[{\"codec_type\":\"audio\",\"codec_name\":\"pcm_s16le\",\"sample_rate\":\"44100\",\"channels\":1}],\"format\":{\"duration\":\"0.5\"}}");
+            "{\"streams\":[{\"codec_type\":\"audio\",\"codec_name\":\"pcm_s16le\",\"sample_rate\":\"44100\",\"channels\":1}],\"format\":{\"format_name\":\"wav\",\"duration\":\"0.5\"}}");
         Assert.IsTrue(wav.Success); Assert.AreEqual(MediaKind.Wav, wav.Value!.Kind);
         Assert.AreEqual(TimelineTime.TicksPerSecond / 2, wav.Value.DurationTicks);
         Assert.AreEqual(44100, wav.Value.SampleRate); Assert.AreEqual(1, wav.Value.Channels);
 
         Assert.AreEqual("MEDIA_KIND_MISMATCH", MediaProbeParser.Parse(Path.GetFullPath("fake.mov"),
-            "{\"streams\":[{\"codec_type\":\"audio\"}],\"format\":{\"duration\":\"1\"}}").Diagnostics[0].Code);
+            "{\"streams\":[{\"codec_type\":\"audio\"}],\"format\":{\"format_name\":\"wav\",\"duration\":\"1\"}}").Diagnostics[0].Code);
         Assert.AreEqual("MEDIA_PROBE_INVALID", MediaProbeParser.Parse(Path.GetFullPath("bad.wav"), "not-json").Diagnostics[0].Code);
         Assert.AreEqual("UNSUPPORTED_MEDIA_SOURCE", MediaProbeParser.Parse(Path.GetFullPath("image.png"), "{}").Diagnostics[0].Code);
     }
