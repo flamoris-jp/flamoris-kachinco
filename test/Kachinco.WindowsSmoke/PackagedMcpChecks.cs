@@ -160,7 +160,7 @@ internal static class PackagedMcpChecks
         await opening;
 
         var saving = Menu(main, "FileMenu", "SaveProjectMenu");
-        var saveDialog = await FileDialog(processId, saving);
+        var saveDialog = await FileDialog(processId, saving, saveAs: true);
         await AssertBusy("Save file picker");
         await Invoke(Find(saveDialog, "2"));
         await saving;
@@ -169,30 +169,30 @@ internal static class PackagedMcpChecks
             "Modal MCP request changed the project or history.");
         Console.WriteLine("Open confirmation/picker and Save picker reject MCP edits as busy: PASS");
     }
-    private static async Task<AutomationElement> FileDialog(int processId, Task invocation)
+    private static async Task<AutomationElement> FileDialog(int processId, Task invocation, bool saveAs = false)
     {
         AutomationElement? filename = null;
         AutomationElement? dialog = null;
-        try { await Until(() =>
+        await Until(() =>
         {
             if (invocation.IsFaulted) invocation.GetAwaiter().GetResult();
-            filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
-                new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+            var owner = new PropertyCondition(AutomationElement.ProcessIdProperty, processId);
+            if (saveAs)
+            {
+                dialog = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(owner,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window),
+                    new PropertyCondition(AutomationElement.ClassNameProperty, "#32770")));
+                return dialog is not null;
+            }
+            filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(owner,
                 new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")));
             return filename is not null;
-        }); }
-        catch (TimeoutException)
+        });
+        if (!saveAs)
         {
-            var windows = AutomationElement.RootElement.FindAll(TreeScope.Descendants, new AndCondition(
-                new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window)));
-            Console.WriteLine("File dialog probe timeout; invocation=" + invocation.Status + "; windows=" +
-                string.Join("; ", windows.Cast<AutomationElement>().Take(20).Select(w =>
-                    w.Current.Name + " [" + w.Current.ClassName + "]")));
-            throw;
+            dialog = filename;
+            while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
         }
-        dialog = filename;
-        while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
         Check(dialog is not null, "File dialog missing.");
         return dialog!;
     }
