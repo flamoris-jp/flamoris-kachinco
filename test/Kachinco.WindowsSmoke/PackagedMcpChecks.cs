@@ -154,13 +154,13 @@ internal static class PackagedMcpChecks
         var yes = await DiscardConfirmation(processId);
         await AssertBusy("Open discard confirmation");
         await Invoke(yes);
-        var openDialog = await FileDialog(processId);
+        var openDialog = await FileDialog(processId, opening);
         await AssertBusy("Open file picker");
         await Invoke(Find(openDialog, "2")); // Cancel without changing the current Project.
         await opening;
 
         var saving = Menu(main, "FileMenu", "SaveProjectMenu");
-        var saveDialog = await FileDialog(processId);
+        var saveDialog = await FileDialog(processId, saving);
         await AssertBusy("Save file picker");
         await Invoke(Find(saveDialog, "2"));
         await saving;
@@ -169,14 +169,17 @@ internal static class PackagedMcpChecks
             "Modal MCP request changed the project or history.");
         Console.WriteLine("Open confirmation/picker and Save picker reject MCP edits as busy: PASS");
     }
-    private static async Task<AutomationElement> FileDialog(int processId)
+    private static async Task<AutomationElement> FileDialog(int processId, Task invocation)
     {
-        AutomationElement? filename = null;
-        await Until(() => (filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
-            new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")))) is not null);
-        AutomationElement? dialog = filename;
-        while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
-        Check(dialog is not null, "File dialog missing.");
+        AutomationElement? dialog = null;
+        await Until(() =>
+        {
+            if (invocation.IsFaulted) invocation.GetAwaiter().GetResult();
+            dialog = AutomationElement.RootElement.FindFirst(TreeScope.Children, new AndCondition(
+                new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                new PropertyCondition(AutomationElement.ClassNameProperty, "#32770")));
+            return dialog is not null;
+        });
         return dialog!;
     }
     private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
