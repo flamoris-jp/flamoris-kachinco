@@ -5,7 +5,7 @@ implementation, preserving its application permission and shared-session policy.
 
 ## Decision and authority
 
-Consume `Flamoris.Mcp.Core` 1.1.0 from GitHub Packages. The existing bridge project
+Consume `Flamoris.Mcp.Core` 1.1.0 from nuget.org. The existing bridge project
 becomes a launcher of Core's `StdioBridge`, outputting `Flamoris.Mcp.Bridge.exe`.
 The portable package still ships a self-contained runtime under `mcp/`.
 
