@@ -19,6 +19,7 @@ internal static class Program
                 if (args is ["--packaged", var bundle])
                 {
                     await PackagedMcpChecks.Run(Path.GetFullPath(bundle));
+                    await PackagedMcpChecks.RunMediaImport(Path.GetFullPath(bundle));
                     exit = 0; return;
                 }
                 if (WindowsPreviewAudioOutput.ConvertPositionToFrames(1, 125) != 6000 ||
