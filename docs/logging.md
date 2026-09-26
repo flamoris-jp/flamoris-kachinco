@@ -1,6 +1,6 @@
 # Logging integration
 
-Kachinco consumes `Flamoris.Logging` 1.0.0 from the FLAMORIS GitHub Packages feed.
+Kachinco consumes `Flamoris.Logging` 1.0.0 from nuget.org.
 The package is referenced normally; its DLL is not copied into this repository.
 Logging observes the existing `EditorSession`, Project, preview/render and MCP
 boundaries and owns no editor state.
