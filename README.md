@@ -227,7 +227,7 @@ It extends the reviewed Phase 0/1 foundation with:
 - shared MOV/WAV decoding, Normal/Screen RGBA composition and stereo audio mixing;
 - render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
 - SRT round trips, caption editing and shared outlined Japanese text rendering;
-- stdio MCP bridge to the same running editor session, shared history and document-scoped Read only / Edit grants; external file jobs fail closed pending a separate grant;
+- Flamoris.Mcp.Core 1.1.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
 - named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
 - alpha MOV Recipe clips with source/output hashes and explicit regeneration;
 - self-contained Windows portable publishing and automated Windows raster checks.

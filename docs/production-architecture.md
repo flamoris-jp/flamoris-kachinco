@@ -231,7 +231,7 @@ the milestone that actually bundles FFmpeg; none is bundled here.
 ## AI/MCP surface and extensions
 
 The live stdio bridge attaches to the same WPF EditorSession through a local-only
-Windows named pipe. ADR 0003 and `api-contract.md` own the current scoped lease,
+Windows named pipe through Flamoris.Mcp.Core 1.1.0. ADR 0005 and `api-contract.md` own the current capability,
 permission/discovery and version contracts. Stop, permission changes, Open/New
 and shutdown revoke before further access. Ordinary edits/history remain typed
 and revision-qualified; there is no second Project, timebase or MCP editor.

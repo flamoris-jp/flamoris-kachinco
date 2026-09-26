@@ -58,4 +58,21 @@ public sealed class McpTests
         Assert.AreEqual(McpErrors.Busy, (await h.Call(grant, "get_project")).Error);
         Assert.AreEqual(before, h.Fixture.Session.GetProject());
     }
+    [TestMethod]
+    public async Task ReadOnlyRecipeValidationIsBoundedAndActivityAlwaysClears()
+    {
+        using var h = new McpCoreHarness(); using var grant = await h.Boundary.EnableAsync(McpPermission.ReadOnly);
+        var before = h.Fixture.Session.GetProject();
+        var compiled = await h.Call(grant, "recipe_validate", new { source = "text(text='x')" });
+        Assert.IsFalse(compiled.IsError);
+        Assert.IsTrue(compiled.Value!.Value.GetProperty("success").GetBoolean());
+        var rejected = await h.Call(grant, "recipe_validate", new { source = "import os" });
+        Assert.IsFalse(rejected.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.AreEqual(McpErrors.InvalidRequest, (await h.Call(grant, "recipe_validate", new { source = new string('x', 65537) })).Error);
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        Assert.AreEqual(McpErrors.Cancelled, (await h.Call(grant, "recipe_validate", new { source = "text(text='x')" }, token: cancelled.Token)).Error);
+        Assert.AreEqual(before, h.Fixture.Session.GetProject());
+        Assert.AreEqual(0, h.Boundary.Status.Current.ForegroundCount);
+    }
+
 }

@@ -67,23 +67,27 @@ particles(count=24, x=100, y=200, vx=80, vy=-20, size=5)
 
 - 起動時のMCPは無効です。プロジェクトを開いてから「AI接続」で
   「読み取り専用で接続」または「編集を許可して接続」を選びます。
-- 接続コマンドをローカルのstdio対応クライアントへ設定します。
-  `mcp/Kachinco.Mcp.exe --pipe <表示されたID>`。同時接続は1つです。
-  「接続コマンドをコピー」も使えます。接続待ちのまま2分たつと再接続が必要です。
+- 「接続情報をコピー」で得られる一時JSONの `command` / `args` / `env` を、
+  ローカルstdioクライアントの起動に渡します。`mcp/Flamoris.Mcp.Bridge.exe` を使い、
+  capabilityは `FLAMORIS_MCP_CAPABILITY` 環境変数だけで渡してください。
+  capabilityを引数・設定ファイルへ保存しないでください。同時接続は1つです。
+  正常なアイドル接続は時間切れになりません。緑はendpoint使用可能、接続中表示は
+  認証済みbridge、AI処理中表示はforeground requestを表します。
 - 読み取り専用は照会・Clapper解決・制限付きRecipe検証、編集許可は通常の
   型付き編集と共有Undo/Redoを追加します。ファイル操作は別の許可が必要です。
   今回は外部MCPによる素材登録・再リンク・Recipe生成・書き出しを無効にしています。
   素材の取り込み、生成、書き出しは通常のUIから利用できます。
 - 停止・権限変更・Open/New・終了で古い接続は失効します。同じファイルを開き直す
   場合も再有効化が必要です。古い接続情報ウィンドウは閉じます。クリップボードや
-  クライアント設定に残る古いコマンドは無効なので、新しいコマンドに差し替えてください。
+  クライアント設定に残る古い接続情報は無効なので、新しい接続情報に差し替えてください。
 - 読み込み失敗やファイル選択のキャンセルでは接続を維持します。読み込んだ文書を
   適用する直前に失効するため、その時点でrevision競合しても接続は無効になります。
 - 接続先はWindowsの同一ユーザー／昇格境界に制限し、サーバーのWindows APIに
   remote-client rejectionを指定します。LANやクラウドから直接接続する機能ではありません。
-- Target: MCP 2025-03-26. Official C# client SDK 1.0.0 is test-only; newer-protocol-only
-  clients are not claimed. Int64 fields are decimal strings, UUIDs stable, enums exact;
-  35,280,000 ticks/second. Query after revision conflict or ambiguous response.
+- Core 1.1.0 / official C# SDK 2.2.0を使用します。呼び出しは `input` と `guard`
+  を持つCore標準形式に変更されています。`mcp.context` でruntime/document/revisionを
+  確認してください。Int64は十進文字列、時間は35,280,000 ticks/secondです。
+  stale guardや応答消失時は再照会し、勝手に再実行しないでください。
 
 ### Automated package acceptance
 
@@ -99,7 +103,7 @@ dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c 
 The driver uses Windows UI Automation and the official SDK. The **separate published
 editor and bridge** receive System32-only PATH, so ordinary attachment/edit/history
 needs no developer .NET, Node, Python or FFmpeg. Existing worker/media tests run
-separately with their declared dependencies. Package tests must never ship in the
+separately with their declared dependencies. The official MCP SDK is now a required production dependency. Package tests must never ship in the
 bundle; normal CI continues to upload ZIPs only on manual runs, retaining 3 days.
 
 ## Human acceptance — not performed by CI

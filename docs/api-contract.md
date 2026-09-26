@@ -1,7 +1,7 @@
 # Shared editing API and live MCP adapter
 
 The C# API remains the sole persistent editing authority. The live named-pipe MCP
-adapter and stdio bridge are described in [ADR 0003](decisions/0003-live-mcp.md).
+adapter and stdio bridge are described in [ADR 0005](decisions/0005-mcp-core-migration.md).
 Persistent file JSON remains a separate versioned boundary.
 
 ## Lifecycle, queries and mutations
@@ -88,7 +88,8 @@ diagnostic code, severity, entityId and path. Do not serialize the abstract comm
 hierarchy with unsafe CLR type metadata. The live adapter uses an explicit `type` discriminator and a closed C# command
 allowlist with strict constructor-field decoding. Reuse Core validation afterwards.
 
-An expectedRevision mismatch returns REVISION_CONFLICT; re-query and re-plan.
+The C# API returns REVISION_CONFLICT for expectedRevision mismatch. MCP Core
+rejects stale guards with `error.code: stale_revision`; re-query and re-plan.
 Dry-run runs the same validators and returns diagnostics without committing or
 reserving IDs. It does not guarantee a later commit if another caller edits.
 There is no durable request deduplication yet. After an uncertain response, query
@@ -128,44 +129,91 @@ clip placement; incompatible source ranges fail. Old MOV generations remain on d
 for Undo. Paths refer to the machine running Kachinco, not the MCP client's host.
 
 
-## Scoped live access (Issue #13)
+## Scoped live access (Issues #13 / #19)
 
-Each explicit enable creates a fresh, document-bound `McpAccessLease`. This is only
-transient authorization. No second Project, editing session, history or timebase
-is created. WPF and the one admitted client serialize on the same dispatcher;
-Core still serializes state/history with its gate. Revisions remain monotonic.
+`Flamoris.Mcp.Core` 1.1.0 supplies official SDK 2.2.0 protocol handling, a
+same-user/local-only named pipe, transient 256-bit capability, Read only / Edit
+permissions, request limits, cancellation, diagnostics and status projection.
+`KachincoMcpHost` marshals onto the WPF dispatcher. There is one EditorSession,
+Project, history and monotonic revision; Core never owns these authorities.
 
-`edit_batch.commands.items.oneOf` describes every exposed constructor, nested
-record, enum, nullable field, UUID and decimal-string Int64. Unknown fields,
-computed properties, null nonnullable fields and unknown commands are rejected
-before Core. A separate explicit permission disposition must approve each command.
-Batches are limited to 64 commands (the internal Core limit is unchanged).
-`CreateProject`, `RegisterMedia`, `RelinkMedia`, `SetGeneratedProvenance` are denied.
-Use already imported asset IDs for ordinary clip editing. The UI owns Open/New,
-import/probe/relink and output selection. No generic filesystem/process tool exists.
+Kachinco registers closed `HostTool<T>` DTOs over its existing operations. The
+command registry explicitly allows or denies every current `EditCommand` type.
+The schema `input.commands.items.oneOf` and decoder reject unknown/duplicate fields,
+missing constructor fields, invalid nulls, enum names and integer ticks. Batches
+have 1–64 commands. Domain validation and atomic rollback remain in EditorSession.
 
-External `recipe_generate`, `export_start`, `job_status`, `job_cancel` are intentionally
-unavailable until source IDs and exact output targets have a separate reviewed UI
-grant. Direct invocation fails closed, including in Edit. Their unsafe background
-job admission path is removed; no externally accepted Recipe can later publish or
-commit after Stop. UI Recipe/export services and generated-file Undo retention are
-unchanged. The lease commit guard is barrier-tested against prepared generation.
+### Wire compatibility change
 
-Stop, permission rotation, successful-load replacement admission, New and shutdown
-revoke first, cancel in-flight compilation and close active/waiting pipes. A failed
-load or cancelled chooser preserves access; a revision failure after a valid load
-is ready leaves MCP disabled. Reopening the same project ID requires re-enable.
-Normal bridge disconnect is observed at the next pipe IO; an inline compiler may
-finish within its five-second limit, but produces no Project/file output. No MCP
-background jobs survive disconnect in this release. Stop cancels immediately.
+Call `mcp.context` with `{}` to obtain `runtimeId`, transient `documentToken`,
+revision and permission. Kachinco tools now take Core's `{ input, guard }`
+envelope. Queries require `input`; guard is optional. Mutations require a guard
+with runtime/document identity and decimal-string `expectedRevision`.
+`expectedRevision` is no longer an application input field. Example:
 
-Requests and responses are bounded to 4 MiB; strict UTF-8/depth 64 are retained.
-Read idle/partial-frame deadline: 2 minutes; request: 15 seconds; write: 5 seconds.
-Malformed envelopes use -32700 (invalid JSON) or -32600 (invalid envelope), tool
-arguments -32602, unknown methods -32601, permission -32001. Domain diagnostics stay
-inside tool results with `isError`. No hidden retry/rebase or request deduplication.
-A lost response after commit is ambiguous; query IDs/revision before retrying.
+```json
+{
+  "name": "edit_batch",
+  "arguments": {
+    "guard": {
+      "runtimeId": "<mcp.context runtimeId>",
+      "documentToken": "<mcp.context documentToken>",
+      "expectedRevision": "1"
+    },
+    "input": {
+      "commands": [{
+        "type": "SetTrackEnabled",
+        "sequenceId": "00000000-0000-0000-0000-000000000002",
+        "trackId": "00000000-0000-0000-0000-000000000005",
+        "enabled": false
+      }],
+      "dryRun": false
+    }
+  }
+}
+```
 
-Protocol target: 2025-03-26. The test-only official C# SDK package is pinned to
-`ModelContextProtocol.Core` 1.0.0. Modern-only per-request metadata/server discovery
-is not implemented or claimed. No Product SDK dependency was introduced.
+`undo`/`redo` use empty `input` and the same required guard. `get_project` keeps its
+v2 Project envelope, string revision, current UI context and shared history flags.
+Domain results retain `success`, string revision and structured diagnostics.
+Clients must check domain `success` as well as MCP `isError`: Core's `isError`
+represents boundary failures, whose structured/text content contains
+`{ "error": { "code": "stale_revision" } }` (or other Core error codes).
+No application-local JSON-RPC error mapping or protocol negotiation remains.
+Core 1.1.0 uses official C# SDK 2.2.0's modern 2026-07-28 and legacy initialization.
+
+### Permission and lifetime
+
+Read only admits inspection, Clapper resolution and bounded Recipe validation.
+Edit adds ordinary typed edits and shared history; it never grants a filesystem
+path. `CreateProject`, `RegisterMedia`, `RelinkMedia`, `SetGeneratedProvenance`
+remain forbidden. `recipe_generate`, `export_start`, `job_status`, `job_cancel`
+are unregistered (`unsupported_capability`) until separately reviewed source/output
+permissions exist. UI import, generation, export and retention of generated files
+for Undo/Redo remain unchanged.
+
+Every enable creates a fresh `flamoris-...` pipe and capability. Connection copy
+provides transient client-launch JSON (`command`, `args`, `env`). Pass the capability
+only in `FLAMORIS_MCP_CAPABILITY`, never argv, persistent client settings, Project
+or logs. The bridge removes its inherited environment variable at startup.
+
+Stop, permission rotation, valid-load replacement admission, New, document loss
+and shutdown revoke before further access and close active/waiting connections.
+Session document-instance identity changes even on same-ID replacement. Human
+Redo cannot resurrect old access after Undo to null. Failed/cancelled file loading
+preserves access; the existing UI revokes before attempting valid-load replacement.
+
+Every mutation enters `RequestContext.CommitAsync` once and uses the ordinary
+session operation. Core checks guard/permission/busy/cancellation immediately before
+that callback; EditorSession checks cancellation before history changes. Prepared
+work cannot commit after a cancelled/expired/revoked request. A commit itself may
+remove the document and revoke its own connection: a lost/cancelled response then
+requires reauthorization and inspection, not automatic retry. No hidden rebase or
+request deduplication exists.
+
+Healthy idle has no deadline. Started-frame deadline: 2 minutes; request: 15 seconds;
+write: 5 seconds. Input is strict UTF-8, depth bounded, at most 4 MiB per frame;
+concurrent requests are bounded by Core (default four). One bridge attaches at a
+time. Core status supplies endpoint availability (green), authenticated connection,
+and foreground activity; it does not identify a particular AI. Kachinco projects
+busy/active pointer gestures and retains normal editing when transport fails.
