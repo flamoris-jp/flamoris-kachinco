@@ -52,6 +52,7 @@ public partial class TimelineSurface : UserControl
     private Guid? selectedClipId;
     private long playheadTicks;
     private DragState? drag;
+    public bool HasActiveGesture => drag is not null;
     private Line? rulerPlayhead;
     private Line? canvasPlayhead;
     private Thumb? playheadHandle;

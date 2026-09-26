@@ -1,138 +1,152 @@
 using System.Globalization;
 using System.IO;
-using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
-using Kachinco.Core;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
+using Flamoris.Mcp.Core;
 using Kachinco.Infrastructure;
 
 namespace Kachinco.App;
 
 public partial class MainWindow
 {
-    private McpAccessLease? mcpLease;
-    private string? mcpPipeName;
+    private KachincoMcpHost? mcpHost;
+    private McpBoundary? mcpBoundary;
+    private CapabilityGrant? mcpGrant;
     private Window? mcpInformation;
+    private bool mcpShuttingDown;
+    private long mcpEnableGeneration;
+    // Includes nested WPF modal loops, which continue to dispatch MCP requests.
+    private int humanOperationDepth;
 
-    private void McpReadOnly_Click(object sender, RoutedEventArgs e) => EnableMcp(McpPermission.ReadOnly);
-    private void McpEdit_Click(object sender, RoutedEventArgs e) => EnableMcp(McpPermission.Edit);
+    private void InitializeMcp()
+    {
+        mcpHost = new(session, () => busy || Volatile.Read(ref humanOperationDepth) > 0 || Timeline.HasActiveGesture || draggedMediaId is not null,
+            (action, token) => {
+                if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; }
+                return Dispatcher.InvokeAsync(action, DispatcherPriority.Background, token).Task;
+            });
+        mcpHost.Invalidating += QueueMcpStatus;
+    }
+    private IDisposable BeginHumanOperation()
+    {
+        Interlocked.Increment(ref humanOperationDepth);
+        return new HumanOperation(this);
+    }
+    private sealed class HumanOperation(MainWindow owner) : IDisposable
+    {
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            Interlocked.Decrement(ref owner.humanOperationDepth);
+        }
+    }
+    private async void McpReadOnly_Click(object sender, RoutedEventArgs e) => await EnableMcp(McpPermission.ReadOnly);
+    private async void McpEdit_Click(object sender, RoutedEventArgs e) => await EnableMcp(McpPermission.Edit);
     private void McpStop_Click(object sender, RoutedEventArgs e) => RevokeMcp();
     private void McpCopy_Click(object sender, RoutedEventArgs e)
     {
-        if (mcpLease?.IsActive != true || mcpPipeName is null) return;
-        try { Clipboard.SetText(McpConnectionCommand()); }
+        if (mcpGrant?.IsActive != true) return;
+        try { Clipboard.SetText(McpConnectionInformation()); }
         catch (System.Runtime.InteropServices.ExternalException)
         { Status.Text = EditorText.Choose("クリップボードを使用中です。もう一度コピーしてください。", "Clipboard is busy. Try copying again."); }
     }
-    private string McpConnectionCommand() => "\"" + Path.Combine(AppContext.BaseDirectory, "mcp", "Kachinco.Mcp.exe") + "\" --pipe " + mcpPipeName;
+    // Explicit transient handoff only. Never persist this JSON as application settings.
+    private string McpConnectionInformation() => JsonSerializer.Serialize(new {
+        command = Path.Combine(AppContext.BaseDirectory, "mcp", "Flamoris.Mcp.Bridge.exe"),
+        args = new[] { "--pipe", mcpBoundary!.Options.PipeName },
+        env = new Dictionary<string, string> { [StdioBridge.CredentialEnvironmentVariable] = mcpGrant!.ExportCredential() }
+    }, new JsonSerializerOptions { WriteIndented = true });
+
+    private void QueueMcpStatus()
+    {
+        if (mcpShuttingDown || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        _ = Dispatcher.BeginInvoke(new Action(UpdateMcpStatus), DispatcherPriority.Background);
+    }
     private void UpdateMcpStatus()
     {
-        McpReadOnlyMenu.IsChecked = mcpLease?.Permission == McpPermission.ReadOnly;
-        McpEditMenu.IsChecked = mcpLease?.Permission == McpPermission.Edit;
-        McpCopyMenu.IsEnabled = McpStopMenu.IsEnabled = mcpLease?.IsActive == true;
+        if (mcpGrant is { IsActive: false }) { RevokeMcp(); return; }
+        var state = mcpBoundary?.Status.Current;
+        bool active = mcpGrant?.IsActive == true;
+        McpReadOnlyMenu.IsChecked = active && mcpGrant!.Permission == McpPermission.ReadOnly;
+        McpEditMenu.IsChecked = active && mcpGrant!.Permission == McpPermission.Edit;
+        McpCopyMenu.IsEnabled = McpStopMenu.IsEnabled = active;
+        string connection = state?.Connected == true ? EditorText.Choose("接続中", "Connected") :
+            state?.IsGreen == true ? EditorText.Choose("接続待ち", "Ready") : EditorText.Choose("無効 / 接続不可", "Disabled / unavailable");
+        McpStatusText.Text = (state?.IsGreen == true ? "🟢 MCP " : "🔴 MCP ") + connection;
+        McpActivityText.Text = state?.ActivityVisible == true ? EditorText.Choose("AI 処理中", "AI working") : "";
+        // Window cursor is a projection, not a cached tool cursor. Child tool cursors
+        // continue to own their local values; ClearValue restores normal inheritance.
+        if (state?.ActivityVisible == true) Cursor = Cursors.AppStarting;
+        else ClearValue(CursorProperty);
     }
     private void RevokeMcp()
     {
-        var previous = mcpLease; mcpLease = null; mcpPipeName = null;
-        previous?.Revoke();
-        if (previous is not null)
-            logger.Info("mcp.session", "MCP access revoked", ProjectContext(new Dictionary<string, object?>
-            {
-                ["permission"] = previous.Permission.ToString(),
-            }));
+        mcpEnableGeneration++;
+        var boundary = mcpBoundary;
+        mcpBoundary = null;
+        mcpGrant = null;
+        if (boundary is not null) { boundary.Status.Changed -= QueueMcpStatus; boundary.Dispose(); }
         mcpInformation?.Close(); mcpInformation = null;
         UpdateMcpStatus();
         Status.Text = EditorText.Choose("MCP接続は無効です。", "MCP is disabled.");
     }
-    private void EnableMcp(McpPermission permission)
+    private void ShutdownMcp()
+    {
+        mcpShuttingDown = true;
+        mcpHost?.Shutdown();
+        RevokeMcp();
+        mcpHost?.Dispose();
+    }
+    private async Task EnableMcp(McpPermission permission)
     {
         RevokeMcp();
-        if (session.GetProject().Project is null) { Status.Text = EditorText.Choose("先にプロジェクトを開いてください。", "Open a project first."); return; }
-        var lease = new McpAccessLease(session, permission); mcpLease = lease;
-        logger.Info("mcp.auth", "MCP access granted", ProjectContext(new Dictionary<string, object?>
-        {
-            ["permission"] = permission.ToString(),
-        }));
-        string pipeName = "kachinco-" + Guid.NewGuid().ToString("N"); mcpPipeName = pipeName;
-        UpdateMcpStatus();
-        var information = new System.Windows.Controls.TextBox { Text = McpConnectionCommand(), IsReadOnly = true, Margin = new Thickness(16) };
-        mcpInformation = new Window { Owner = this, Title = EditorText.Choose("MCP接続・同時接続は1つ", "MCP connection · one client at a time"), Width = 700,
-            SizeToContent = SizeToContent.Height, Content = information, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        mcpInformation.Closed += (_, _) => information.Clear();
-        mcpInformation.Show();
-        Status.Text = EditorText.Choose("MCP接続を待っています。ファイル操作は許可されていません。", "Waiting for MCP. File operations are not authorized.");
-        _ = ServeMcpAsync(pipeName, lease);
-    }
-    private async Task ServeMcpAsync(string pipeName, McpAccessLease lease)
-    {
-        var diagnostics = new McpTransportDiagnostics(logger, "same-user-named-pipe");
-        diagnostics.EndpointStarted();
+        long generation = mcpEnableGeneration;
+        if (mcpShuttingDown || session.GetProject().Project is null)
+        { Status.Text = EditorText.Choose("先にプロジェクトを開いてください。", "Open a project first."); return; }
+        var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
+            () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
+                playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
+            () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))),
+            new McpOptions(), new McpDiagnostics(logger));
+        mcpBoundary = boundary;
+        boundary.Status.Changed += QueueMcpStatus;
         try
         {
-            while (lease.IsActive)
-            {
-                await using var pipe = WindowsLocalPipe.Create(pipeName);
-                using var closeOnRevoke = lease.Token.Register(() => pipe.Dispose());
-                bool attached = false;
-                try
-                {
-                    await pipe.WaitForConnectionAsync(lease.Token);
-                    attached = true;
-                    diagnostics.ClientAttached();
-                    var adapter = new McpEditorAdapter(session,
-                        () => new { sequenceId = selectedSequenceId, clipId = selectedClipId, playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-                        () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP.")), lease, logger);
-                    var reader = new McpBoundedLineReader(pipe);
-                    await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                    while (pipe.IsConnected && lease.IsActive)
-                    {
-                        using var readDeadline = CancellationTokenSource.CreateLinkedTokenSource(lease.Token);
-                        readDeadline.CancelAfter(TimeSpan.FromMinutes(2));
-                        var frame = await reader.ReadAsync(readDeadline.Token);
-                        if (frame.Status == McpFrameStatus.EndOfStream) break;
-                        // Buffered clients must not starve Stop/New/permission input on WPF.
-                        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
-                        lease.Demand();
-                        using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(lease.Token);
-                        requestDeadline.CancelAfter(TimeSpan.FromSeconds(15));
-                        string? result = frame.Status == McpFrameStatus.Success
-                            ? await adapter.HandleAsync(frame.Line!, requestDeadline.Token, busy)
-                            : McpEnvelope.Error(null, -32700, "Invalid or oversized UTF-8 frame.");
-                        lease.Demand(cancellationToken: requestDeadline.Token);
-                        if (result is not null)
-                        {
-                            using var writeDeadline = CancellationTokenSource.CreateLinkedTokenSource(requestDeadline.Token);
-                            writeDeadline.CancelAfter(TimeSpan.FromSeconds(5));
-                            await writer.WriteLineAsync(result.AsMemory(), writeDeadline.Token);
-                        }
-                        if (frame.Status != McpFrameStatus.Success) break;
-                    }
-                }
-                // The request boundary must never fault the WPF dispatcher. Do not log payloads.
-                catch (Exception exception)
-                {
-                    if (lease.IsActive)
-                    {
-                        diagnostics.ConnectionFailed(exception);
-                        Status.Text = EditorText.Choose("MCP接続を閉じました。再接続できます。", "MCP connection closed. Reconnection is available.");
-                    }
-                }
-                finally
-                {
-                    if (attached)
-                        diagnostics.ClientDetached();
-                }
-            }
+            var grant = await boundary.EnableAsync(permission);
+            if (generation != mcpEnableGeneration || mcpShuttingDown) { boundary.Dispose(); return; }
+            mcpGrant = grant;
+            UpdateMcpStatus();
+            var information = new TextBox { Text = McpConnectionInformation(), IsReadOnly = true,
+                Margin = new Thickness(16), TextWrapping = TextWrapping.Wrap };
+            mcpInformation = new Window { Owner = this,
+                Title = EditorText.Choose("MCP接続・一時情報（保存しないでください）", "MCP connection · transient information (do not save)"),
+                Width = 700, SizeToContent = SizeToContent.Height, Content = information,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            mcpInformation.Closed += (_, _) => information.Clear();
+            mcpInformation.Show();
+            Status.Text = EditorText.Choose("MCP接続を待っています。ファイル操作は許可されていません。", "Waiting for MCP. File operations are not authorized.");
+            _ = ServeMcpAsync(boundary, grant);
         }
-        catch (Exception exception)
+        catch
         {
-            diagnostics.ConnectionFailed(exception);
-            if (ReferenceEquals(mcpLease, lease)) Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable.");
+            if (ReferenceEquals(mcpBoundary, boundary)) RevokeMcp(); else boundary.Dispose();
+            Status.Text = EditorText.Choose("MCP接続を開始できません。", "MCP endpoint unavailable.");
         }
+    }
+    private async Task ServeMcpAsync(McpBoundary boundary, CapabilityGrant grant)
+    {
+        try { await Task.Run(() => new LocalMcpEndpoint(boundary).RunAsync(grant)); }
+        catch { /* No transport exception may escape into WPF. */ }
         finally
         {
-            diagnostics.EndpointStopped();
-            if (ReferenceEquals(mcpLease, lease)) RevokeMcp(); else lease.Revoke();
+            if (ReferenceEquals(mcpBoundary, boundary)) RevokeMcp();
+            else boundary.Dispose();
         }
     }
 }

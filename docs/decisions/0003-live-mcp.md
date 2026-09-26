@@ -1,5 +1,9 @@
 # Live editor MCP adapter
 
+Historical implementation decision. [ADR 0005](0005-mcp-core-migration.md)
+supersedes transport, capability, protocol, framing and lease details below.
+The application file-access and shared-authority policy remains in force.
+
 Issue #5. Protocol compatibility target: MCP 2025-03-26
 ([lifecycle](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle),
 [tools](https://modelcontextprotocol.io/specification/2025-03-26/server/tools)).

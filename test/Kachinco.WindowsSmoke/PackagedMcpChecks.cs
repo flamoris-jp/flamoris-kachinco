@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Windows.Automation;
 using ModelContextProtocol.Client;
+using Flamoris.Mcp.Core;
 using ModelContextProtocol.Protocol;
 
 internal static class PackagedMcpChecks
@@ -14,10 +15,11 @@ internal static class PackagedMcpChecks
 
     public static async Task Run(string bundle)
     {
-        string editor = Path.Combine(bundle, "Kachinco.App.exe"), bridge = Path.Combine(bundle, "mcp", "Kachinco.Mcp.exe");
+        string editor = Path.Combine(bundle, "Kachinco.App.exe"), bridge = Path.Combine(bundle, "mcp", "Flamoris.Mcp.Bridge.exe");
         Check(File.Exists(editor) && File.Exists(bridge), "Published executables missing.");
+        Check(File.Exists(Path.Combine(bundle, "mcp", "Flamoris.Mcp.Core.dll")) &&
+            !File.Exists(Path.Combine(bundle, "mcp", "Kachinco.Core.dll")), "Bridge must contain Core infrastructure only, never editor authority.");
         Check(!Directory.GetFiles(bundle, "*", SearchOption.AllDirectories).Any(p =>
-            Path.GetFileName(p).StartsWith("ModelContextProtocol", StringComparison.Ordinal) ||
             Path.GetFileName(p).Contains("Tests", StringComparison.Ordinal) ||
             Path.GetFileName(p).Contains("WindowsSmoke", StringComparison.Ordinal)), "Test SDK/runtime entered package.");
         using (var archive = ZipFile.OpenRead(bundle + ".zip"))
@@ -42,7 +44,7 @@ internal static class PackagedMcpChecks
             await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
                 var client = connection.Client;
-                Check(client.NegotiatedProtocolVersion == "2025-03-26", "Unexpected negotiated protocol.");
+                Check(client.NegotiatedProtocolVersion == "2026-07-28", "Unexpected negotiated protocol.");
                 var tools = await client.ListToolsAsync(cancellationToken: Deadline());
                 Check(tools.Any(t => t.Name == "edit_batch") && !tools.Any(t => t.Name == "export_start"), "Discovery permissions.");
                 var state = await Query(client);
@@ -61,7 +63,7 @@ internal static class PackagedMcpChecks
                 Check(HasTrack(await Query(client), trackId), "UI Redo did not restore MCP transaction.");
                 await Until(() => VisibleText(main, "MCP acceptance"));
                 var stale = await Call(client, "edit_batch", new() { ["expectedRevision"] = beforeRevision, ["commands"] = commands });
-                Check(!stale.GetProperty("success").GetBoolean(), "Stale revision accepted.");
+                Check(stale.GetProperty("error").GetProperty("code").GetString() == McpErrors.StaleRevision, "Stale revision accepted.");
                 state = await Query(client); string revision = state.GetProperty("revision").GetString()!;
                 var rollback = await Call(client, "edit_batch", new() { ["expectedRevision"] = revision, ["commands"] = new object[] {
                     new { type = "AddTrack", sequenceId, trackId = Guid.NewGuid(), name = "Must roll back", kind = "Video" },
@@ -75,6 +77,7 @@ internal static class PackagedMcpChecks
                 Check(undone.GetProperty("success").GetBoolean() && TrackCount(state) == uiTrackCount - 1, "MCP Undo did not reverse the UI edit.");
                 var redone = await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
                 Check(redone.GetProperty("success").GetBoolean() && TrackCount(await Query(client)) == uiTrackCount, "MCP Redo did not restore the UI edit.");
+                await FileDialogsBlockMcpEdit(main, process.Id, client, sequenceId);
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(main, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);
@@ -89,7 +92,7 @@ internal static class PackagedMcpChecks
                 var tools = await client.ListToolsAsync(cancellationToken: Deadline());
                 Check(!tools.Any(t => t.Name == "undo" || t.Name == "edit_batch"), "Read-only discovery exposed edits.");
                 bool denied = false;
-                try { await Call(client, "undo", new() { ["expectedRevision"] = (await Query(client)).GetProperty("revision").GetString() }); }
+                try { var rejection = await Call(client, "undo", new() { ["expectedRevision"] = (await Query(client)).GetProperty("revision").GetString() }); denied = rejection.TryGetProperty("error", out var error) && error.GetProperty("code").GetString() == McpErrors.Forbidden; }
                 catch (Exception) { denied = true; }
                 Check(denied, "Read-only direct history call accepted.");
                 // Exercise document replacement through the ordinary New menu and confirmation.
@@ -102,6 +105,9 @@ internal static class PackagedMcpChecks
             await OldPipeRejected(readPipe);
             await Menu(main, "McpMenu", "McpEditMenu");
             string stoppedPipe = await Connection(process.Id);
+            Guid reconnectId;
+            await using (var first = await Connect(bridge, stoppedPipe)) reconnectId = ProjectId(await Query(first));
+            await using (var second = await Connect(bridge, stoppedPipe)) Check(ProjectId(await Query(second)) == reconnectId, "Reconnect changed live authority.");
             await using (var connection = new RevokedClient(await Connect(bridge, stoppedPipe)))
             {
                 var client = connection.Client;
@@ -118,11 +124,78 @@ internal static class PackagedMcpChecks
             string eofPipe = await Connection(process.Id);
             await BridgeInputEof(bridge, eofPipe);
             await BridgeEof(bridge, eofPipe, process);
-            Console.WriteLine("Published MCP: official C# SDK 1.0.0 / 2025-03-26 fallback; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
+            Console.WriteLine("Published MCP: Core 1.1.0 / official C# SDK 2.2.0 / 2026-07-28; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }
     private static Guid ProjectId(JsonElement state) => state.GetProperty("project").GetProperty("project").GetProperty("id").GetGuid();
+    private static async Task FileDialogsBlockMcpEdit(AutomationElement main, int processId, McpClient client, Guid sequenceId)
+    {
+        var before = await Query(client);
+        var revision = before.GetProperty("revision").GetString()!;
+        int tracks = TrackCount(before);
+        var identity = (await client.CallToolAsync("mcp.context", cancellationToken: Deadline())).StructuredContent!.Value;
+        var guard = new { runtimeId = identity.GetProperty("runtimeId").GetString(),
+            documentToken = identity.GetProperty("documentToken").GetString(), expectedRevision = revision };
+        async Task AssertBusy(string phase)
+        {
+            var reply = await client.CallToolAsync("edit_batch", new Dictionary<string, object?>
+            {
+                ["input"] = new { commands = new[] { new { type = "AddTrack", sequenceId,
+                    trackId = Guid.NewGuid(), name = "Must not enter during " + phase, kind = "Video" } } },
+                ["guard"] = guard
+            }, cancellationToken: Deadline());
+            using var json = JsonDocument.Parse(reply.Content.OfType<TextContentBlock>().Single().Text);
+            Check(json.RootElement.GetProperty("error").GetProperty("code").GetString() == McpErrors.Busy,
+                "MCP edit was not rejected as busy during " + phase);
+        }
+
+        var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+        var yes = await DiscardConfirmation(processId);
+        await AssertBusy("Open discard confirmation");
+        await Invoke(yes);
+        var openDialog = await FileDialog(processId, opening);
+        await AssertBusy("Open file picker");
+        await Invoke(Find(openDialog, "2")); // Cancel without changing the current Project.
+        await opening;
+
+        var saving = Menu(main, "FileMenu", "SaveProjectMenu");
+        var saveDialog = await FileDialog(processId, saving, saveAs: true);
+        await AssertBusy("Save file picker");
+        await Invoke(Find(saveDialog, "2"));
+        await saving;
+        var after = await Query(client);
+        Check(after.GetProperty("revision").GetString() == revision && TrackCount(after) == tracks,
+            "Modal MCP request changed the project or history.");
+        Console.WriteLine("Open confirmation/picker and Save picker reject MCP edits as busy: PASS");
+    }
+    private static async Task<AutomationElement> FileDialog(int processId, Task invocation, bool saveAs = false)
+    {
+        AutomationElement? filename = null;
+        AutomationElement? dialog = null;
+        await Until(() =>
+        {
+            if (invocation.IsFaulted) invocation.GetAwaiter().GetResult();
+            var owner = new PropertyCondition(AutomationElement.ProcessIdProperty, processId);
+            if (saveAs)
+            {
+                dialog = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(owner,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window),
+                    new PropertyCondition(AutomationElement.ClassNameProperty, "#32770")));
+                return dialog is not null;
+            }
+            filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(owner,
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")));
+            return filename is not null;
+        });
+        if (!saveAs)
+        {
+            dialog = filename;
+            while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
+        }
+        Check(dialog is not null, "File dialog missing.");
+        return dialog!;
+    }
     private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
     {
         var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
@@ -234,16 +307,26 @@ internal static class PackagedMcpChecks
         Check(dialog is not null, "Open dialog missing.");
         await Invoke(Find(dialog!, "1"));
     }
+    private static readonly Dictionary<string, string> Credentials = new(StringComparer.Ordinal);
     private static CancellationToken Deadline() => new CancellationTokenSource(Limit).Token;
     private static async Task<McpClient> Connect(string bridge, string pipe) => await McpClient.CreateAsync(new StdioClientTransport(new()
     {
         Command = bridge, Arguments = ["--pipe", pipe], Name = "Packaged Kachinco",
-        EnvironmentVariables = new Dictionary<string, string?> { ["PATH"] = CleanPath },
+        EnvironmentVariables = new Dictionary<string, string?> { ["PATH"] = CleanPath, [StdioBridge.CredentialEnvironmentVariable] = Credentials[pipe] },
         StandardErrorLines = line => Console.WriteLine("Bridge: " + line)
     }), cancellationToken: Deadline());
     private static async Task<JsonElement> Call(McpClient client, string name, Dictionary<string, object?> args)
     {
-        var result = await client.CallToolAsync(name, args, cancellationToken: Deadline());
+        var input = new Dictionary<string, object?>(args);
+        var wire = new Dictionary<string, object?> { ["input"] = input };
+        if (input.Remove("expectedRevision", out var revision))
+        {
+            var identity = await client.CallToolAsync("mcp.context", cancellationToken: Deadline());
+            var context = identity.StructuredContent!.Value;
+            wire["guard"] = new { runtimeId = context.GetProperty("runtimeId").GetString(),
+                documentToken = context.GetProperty("documentToken").GetString(), expectedRevision = revision };
+        }
+        var result = await client.CallToolAsync(name, wire, cancellationToken: Deadline());
         using var json = JsonDocument.Parse(result.Content.OfType<TextContentBlock>().Single().Text);
         return json.RootElement.Clone();
     }
@@ -274,20 +357,31 @@ internal static class PackagedMcpChecks
                 if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var pattern))
                 {
                     string command = ((ValuePattern)pattern).Current.Value;
-                    int at = command.IndexOf(" --pipe kachinco-", StringComparison.Ordinal);
-                    if (at >= 0) { pipe = command[(at + 8)..]; return true; }
+                    if (!command.TrimStart().StartsWith('{')) continue;
+                    try
+                    {
+                        using var json = JsonDocument.Parse(command);
+                        var root = json.RootElement;
+                        if (!root.TryGetProperty("args", out var arguments) || arguments.GetArrayLength() != 2 || arguments[0].GetString() != "--pipe") continue;
+                        pipe = arguments[1].GetString()!;
+                        Credentials[pipe] = root.GetProperty("env").GetProperty(StdioBridge.CredentialEnvironmentVariable).GetString()!;
+                        return true;
+                    }
+                    catch (JsonException) { }
+
                 }
             return false;
         });
         return pipe!;
     }
-    private static async Task ConfirmDiscard(int processId)
+    private static async Task<AutomationElement> DiscardConfirmation(int processId)
     {
         AutomationElement? yes = null;
         await Until(() => (yes = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
             new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "6")))) is not null);
-        await Invoke(yes!);
+        return yes!;
     }
+    private static async Task ConfirmDiscard(int processId) => await Invoke(await DiscardConfirmation(processId));
     private static async Task ExpectDisconnected(RevokedClient connection)
     {
         bool failed = false;
@@ -317,6 +411,7 @@ internal static class PackagedMcpChecks
     {
         var start = new ProcessStartInfo(bridge) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("--pipe"); start.ArgumentList.Add(pipe); start.Environment["PATH"] = CleanPath;
+        start.Environment[StdioBridge.CredentialEnvironmentVariable] = Credentials[pipe];
         using var child = Process.Start(start)!;
         try
         {
@@ -331,6 +426,7 @@ internal static class PackagedMcpChecks
     {
         var start = new ProcessStartInfo(bridge) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add("--pipe"); start.ArgumentList.Add(pipe); start.Environment["PATH"] = CleanPath;
+        start.Environment[StdioBridge.CredentialEnvironmentVariable] = Credentials[pipe];
         using var child = Process.Start(start)!;
         await child.StandardInput.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}");
         Check(await child.StandardOutput.ReadLineAsync().WaitAsync(Limit) is not null, "Bridge failed to attach.");

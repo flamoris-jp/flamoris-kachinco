@@ -10,6 +10,17 @@ public sealed class EditorSession
     private readonly int historyLimit;
     private Project? current;
     private long revision;
+    private string documentToken = Guid.NewGuid().ToString("N");
+
+    // Transient identity of an open document instance, never persisted or a revision.
+    public string DocumentToken { get { lock (gate) return documentToken; } }
+    public event Action? DocumentReplacing;
+    private void InvalidateDocument()
+    {
+        foreach (Action observer in DocumentReplacing?.GetInvocationList() ?? [])
+            try { observer(); } catch { /* observers cannot prevent host lifecycle */ }
+        documentToken = Guid.NewGuid().ToString("N");
+    }
 
     public EditorSession(int historyLimit = 100)
     {
@@ -46,6 +57,7 @@ public sealed class EditorSession
             {
                 if (revision == long.MaxValue) return Fail("REVISION_OVERFLOW", "Start a new session.");
                 cancellationToken.ThrowIfCancellationRequested();
+                if (candidate?.Id != current?.Id) InvalidateDocument();
                 Push(undo, current);
                 current = candidate;
                 redo.Clear();
@@ -67,6 +79,7 @@ public sealed class EditorSession
             var diagnostics = project is null ? ImmutableArray<Diagnostic>.Empty : ProjectValidator.Validate(project);
             if (!diagnostics.IsEmpty) return new(false, revision, diagnostics);
             if (revision == long.MaxValue) return Fail("REVISION_OVERFLOW", "Start a new session.");
+            InvalidateDocument();
             current = project;
             undo.Clear(); redo.Clear(); revision++;
             return new(true, revision, []);
@@ -90,6 +103,7 @@ public sealed class EditorSession
             if (from.Count == 0) return Fail("HISTORY_EMPTY", "No history entry available.");
             if (revision == long.MaxValue) return Fail("REVISION_OVERFLOW", "Start a new session.");
             cancellationToken.ThrowIfCancellationRequested();
+            if (current?.Id != from[^1]?.Id) InvalidateDocument();
             Push(to, current); current = from[^1]; from.RemoveAt(from.Count - 1); revision++;
             return new(true, revision, []);
         }

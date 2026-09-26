@@ -98,46 +98,20 @@ public sealed class LoggingIntegrationTests
         using var temp = new TempDirectory();
         var configuration = WriteFileConfiguration(temp.Path, "mcp.log");
         var logger = KachincoLogging.Create(configurationPath: configuration, basePath: temp.Path).Logger;
-        var transport = new McpTransportDiagnostics(logger, "test-pipe");
-        transport.EndpointStarted();
-        transport.ClientAttached();
-        transport.ConnectionFailed(new IOException("connection lost"));
-        transport.ClientDetached();
-        transport.EndpointStopped();
-
-        var fixture = new Fixture();
-        using (var editLease = new McpAccessLease(fixture.Session, McpPermission.Edit))
-        {
-            var adapter = new McpEditorAdapter(fixture.Session, () => new { }, () => { }, editLease, logger);
-            await adapter.HandleAsync(McpLeaseTests.Initialize);
-            await adapter.HandleAsync(McpLeaseTests.Call("edit_batch", new
-            {
-                expectedRevision = "0",
-                commands = new object[]
-                {
-                    new { type = "SetTrackEnabled", sequenceId = fixture.SequenceId, trackId = fixture.VideoTrackId, enabled = false },
-                },
-            }));
-        }
-        using (var readLease = new McpAccessLease(fixture.Session, McpPermission.ReadOnly))
-        {
-            var adapter = new McpEditorAdapter(fixture.Session, () => new { }, () => { }, readLease, logger);
-            await adapter.HandleAsync(McpLeaseTests.Initialize);
-            await adapter.HandleAsync(McpLeaseTests.Call("undo", new
-            {
-                expectedRevision = fixture.Session.GetProject().Revision.ToString(),
-            }));
-        }
-
+        using var h = new McpCoreHarness(logger: logger);
+        using var grant = await h.Boundary.EnableAsync(Flamoris.Mcp.Core.McpPermission.Edit);
+        string credential = grant.ExportCredential();
+        var stale = await h.Call(grant, "edit_batch", h.Batch(), h.Guard() with { ExpectedRevision = 0 });
+        Assert.AreEqual(Flamoris.Mcp.Core.McpErrors.StaleRevision, stale.Error);
+        h.Boundary.Disable();
         var text = File.ReadAllText(Path.Combine(temp.Path, "logs", "mcp.log"));
-        StringAssert.Contains(text, "[INFO ] [mcp.transport] MCP endpoint started");
-        StringAssert.Contains(text, "[INFO ] [mcp.transport] MCP client attached");
-        StringAssert.Contains(text, "[WARN ] [mcp.transport] MCP connection closed or unavailable");
-        StringAssert.Contains(text, "[INFO ] [mcp.transport] MCP client detached");
-        StringAssert.Contains(text, "[WARN ] [mcp.command] MCP revision conflict");
-        StringAssert.Contains(text, "diagnosticCodes=REVISION_CONFLICT");
-        StringAssert.Contains(text, "[WARN ] [mcp.auth] MCP permission denied");
+        StringAssert.Contains(text, "[mcp.auth]");
+        StringAssert.Contains(text, "outcome=enabled");
+        StringAssert.Contains(text, "outcome=revoked");
+        StringAssert.Contains(text, "outcome=stale_revision");
+        Assert.IsFalse(text.Contains(credential, StringComparison.Ordinal));
         Assert.IsFalse(text.Contains("expectedRevision", StringComparison.Ordinal));
+        Assert.IsFalse(text.Contains("SetTrackEnabled", StringComparison.Ordinal));
     }
 
     [TestMethod]

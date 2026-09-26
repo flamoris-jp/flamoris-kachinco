@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeMcp();
         InitializeProduction();
         BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
         Refresh(EditorText.ImportGuidance);
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
     private void NewPortrait_Click(object sender, RoutedEventArgs e) => NewProject(SequenceSettings.Portrait);
     private void NewProject(SequenceSettings settings)
     {
+        using var operation = BeginHumanOperation();
         if (!ConfirmDiscard()) return;
         RevokeMcp();
         session.ReplaceProject(null);
@@ -90,6 +92,7 @@ public partial class MainWindow : Window
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         if (!ConfirmDiscard()) return;
         var dialog = new OpenFileDialog { Filter = "Kachinco project (*.fkproj)|*.fkproj" };
         if (dialog.ShowDialog(this) != true) return;
@@ -114,6 +117,7 @@ public partial class MainWindow : Window
 
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var snapshot = session.GetProject();
         if (snapshot.Project is null) { Refresh("先にプロジェクトを作成してください。"); return; }
         var dialog = new SaveFileDialog
@@ -136,6 +140,7 @@ public partial class MainWindow : Window
 
     private async void Register_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var picker = new OpenFileDialog { Filter = "MOV / WAV (*.mov;*.wav)|*.mov;*.wav" };
         if (picker.ShowDialog(this) != true) return;
         SetBusy(true);
@@ -203,6 +208,7 @@ public partial class MainWindow : Window
     private void FitTimeline_Click(object sender, RoutedEventArgs e) { Timeline.FitSequence(); RefreshTimelineStatus(); }
     private void SequenceDuration_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         var input = new TextBox { Text = Seconds(sequence.DurationTicks), Margin = new Thickness(12) };
@@ -217,6 +223,7 @@ public partial class MainWindow : Window
 
     private async void Relink_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var project = session.GetProject().Project;
         var asset = SelectedAsset(project);
         if (project is null || asset is null) return;
@@ -384,7 +391,7 @@ public partial class MainWindow : Window
     {
         // All UI and MCP edits/history refresh synchronously on this dispatcher.
         // Invalidate at document loss, before AddSequence/import or human Redo.
-        if (mcpLease is { IsActive: false }) RevokeMcp();
+        UpdateMcpStatus();
         refreshing = true;
         var snapshot = session.GetProject();
         var project = snapshot.Project;
@@ -488,7 +495,12 @@ public partial class MainWindow : Window
 
     private bool IsDirty() => session.GetProject().Project is { } p && ProjectJson.Serialize(p).Value != savedJson;
     private bool ConfirmDiscard() => !IsDirty() || MessageBox.Show(this, "未保存の変更を破棄しますか？", "Kachinco", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-    private void Window_Closing(object? sender, CancelEventArgs e) { if (busy || !ConfirmDiscard()) e.Cancel = true; }
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (busy) { e.Cancel = true; return; }
+        using var operation = BeginHumanOperation();
+        if (!ConfirmDiscard()) e.Cancel = true;
+    }
     private void SetBusy(bool value) { busy = value; IsEnabled = !value; }
     private static string Seconds(long ticks) => ((decimal)ticks / TimelineTime.TicksPerSecond).ToString("0.###", CultureInfo.CurrentCulture);
     private static bool TrySeconds(string text, out long ticks)

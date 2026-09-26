@@ -11,25 +11,19 @@ public sealed class McpSchemaTests
     public async Task EveryCommandHasAnExplicitDispositionAndTypedDiscoveryMatchesDecoder()
     {
         var commands = typeof(EditCommand).Assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(EditCommand))).Select(t => t.Name).Order().ToArray();
-        CollectionAssert.AreEqual(commands, McpEditorAdapter.CommandDispositions.Keys.Order().ToArray());
-        var f = new Fixture(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
-        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => { }, lease);
-        await adapter.HandleAsync(McpLeaseTests.Initialize);
-        const string list = """{"jsonrpc":"2.0","id":3,"method":"tools/list"}""";
-        string first = (await adapter.HandleAsync(list))!;
-        Assert.AreEqual(first, await adapter.HandleAsync(list));
-        using var doc = JsonDocument.Parse(first);
-        var tools = doc.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().ToArray();
-        var schemas = tools.Single(t => t.GetProperty("name").GetString() == "edit_batch").GetProperty("inputSchema").GetProperty("properties").GetProperty("commands").GetProperty("items").GetProperty("oneOf").EnumerateArray().ToArray();
-        CollectionAssert.AreEquivalent(McpEditorAdapter.CommandDispositions.Where(p => p.Value).Select(p => p.Key).ToArray(), schemas.Select(s => s.GetProperty("properties").GetProperty("type").GetProperty("const").GetString()!).ToArray());
+        CollectionAssert.AreEqual(commands, KachincoMcpTools.CommandDispositions.Keys.Order().ToArray());
+        using var h = new McpCoreHarness(); using var grant = await h.Boundary.EnableAsync(Flamoris.Mcp.Core.McpPermission.Edit);
+        var tools = h.Boundary.Tools;
+        var schemas = tools["edit_batch"].InputSchema.GetProperty("properties").GetProperty("commands").GetProperty("items").GetProperty("oneOf").EnumerateArray().ToArray();
+        CollectionAssert.AreEquivalent(KachincoMcpTools.CommandDispositions.Where(p => p.Value).Select(p => p.Key).ToArray(), schemas.Select(s => s.GetProperty("properties").GetProperty("type").GetProperty("const").GetString()!).ToArray());
         foreach (var schema in schemas)
         {
             Assert.IsFalse(schema.GetProperty("additionalProperties").GetBoolean());
             string name = schema.GetProperty("properties").GetProperty("type").GetProperty("const").GetString()!;
-            using var missing = JsonDocument.Parse((await adapter.HandleAsync(McpLeaseTests.Call("edit_batch", new { expectedRevision = f.Session.GetProject().Revision.ToString(), commands = new[] { new { type = name } } })))!);
-            Assert.IsTrue(missing.RootElement.TryGetProperty("error", out _), name);
+            var missing = await h.Call(grant, "edit_batch", new { commands = new[] { new { type = name } } }, h.Guard());
+            Assert.AreEqual(Flamoris.Mcp.Core.McpErrors.InvalidRequest, missing.Error, name);
         }
-        Assert.IsFalse(tools.Any(t => t.GetProperty("name").GetString() is "export_start" or "recipe_generate"));
+        Assert.IsFalse(tools.ContainsKey("export_start") || tools.ContainsKey("recipe_generate"));
     }
 
     [TestMethod]

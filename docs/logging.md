@@ -42,7 +42,9 @@ working directory.
 
 The stdio MCP bridge removes console logging because stdout is the MCP protocol
 channel. Its file output is separated as `logs/kachinco-mcp.log` so the editor
-and bridge never write the same file concurrently.
+and bridge never write the same file concurrently. The launcher captures the raw
+stdout stream and redirects Console.Out to stderr before logger construction,
+including fallback sinks.
 
 ## Categories
 
@@ -56,6 +58,9 @@ and bridge never write the same file concurrently.
 Routine command/query detail stays at `debug`. Major lifecycle events use
 `info`; recoverable transport, permission and revision conflicts use `warn`;
 failed operations and unexpected exceptions use `error`.
+Core 1.1.0 MCP diagnostics use its curated `info` boundary events with transport,
+outcome, tool name and duration only; stale guards appear as `stale_revision`.
+Application-local transport diagnostics and request/exception logging were removed.
 
 ## Privacy and failure isolation
 

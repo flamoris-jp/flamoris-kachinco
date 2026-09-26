@@ -8,12 +8,11 @@ namespace Kachinco.Infrastructure;
 // already approved constructor payload; adding a Core command never exposes it.
 public static class McpTypedSchema
 {
-    private static readonly NullabilityInfoContext Nullability = new();
     private static ParameterInfo[] Fields(Type type) => type.GetConstructors()
         .OrderByDescending(c => c.GetParameters().Length).First().GetParameters();
     private static string Name(ParameterInfo field) => JsonNamingPolicy.CamelCase.ConvertName(field.Name!);
     private static bool Nullable(ParameterInfo field) => System.Nullable.GetUnderlyingType(field.ParameterType) is not null ||
-        !field.ParameterType.IsValueType && Nullability.Create(field).ReadState == NullabilityState.Nullable;
+        !field.ParameterType.IsValueType && new NullabilityInfoContext().Create(field).ReadState == NullabilityState.Nullable;
 
     public static JsonObject Describe(Type type)
     {
@@ -61,9 +60,10 @@ public static class McpTypedSchema
         if (type.IsEnum) { Require(value.ValueKind == JsonValueKind.String && Enum.GetNames(type).Contains(value.GetString(), StringComparer.Ordinal)); return; }
         Require(value.ValueKind == JsonValueKind.Object);
         var fields = Fields(type).ToDictionary(Name);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
-            if (!fields.TryGetValue(property.Name, out var field)) throw new JsonException("Unknown constructor field.");
+            if (!seen.Add(property.Name) || !fields.TryGetValue(property.Name, out var field)) throw new JsonException("Unknown constructor field.");
             if (property.Value.ValueKind == JsonValueKind.Null && Nullable(field)) continue;
             Validate(field.ParameterType, property.Value);
         }

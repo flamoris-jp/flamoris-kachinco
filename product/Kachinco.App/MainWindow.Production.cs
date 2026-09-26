@@ -27,7 +27,7 @@ public partial class MainWindow
         CompositionTarget.Rendering += PlaybackRendering;
         Closed += async (_, _) =>
         {
-            RevokeMcp();
+            ShutdownMcp();
             CompositionTarget.Rendering -= PlaybackRendering;
             Timeline.DisposeVisualizations();
             playback.Dispose();
@@ -149,6 +149,7 @@ public partial class MainWindow
     }
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var picker = new SaveFileDialog { Filter = "MP4 (*.mp4)|*.mp4", DefaultExt = ".mp4", FileName = "kachinco.mp4" };
         if (picker.ShowDialog(this) != true) return;
         await RenderOutput(picker.FileName);
@@ -222,6 +223,7 @@ public partial class MainWindow
 
     private void Authoring_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         if (selectedSequenceId is not { } id) return;
         new AuthoringWindow(session, id, Timeline.PlayheadTicks) { Owner = this }.ShowDialog();
         Refresh("Clapper / Recipe 編集を終了しました。");
@@ -229,6 +231,7 @@ public partial class MainWindow
 
     private async void ImportSrt_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var snapshot = session.GetProject();
         var sequence = snapshot.Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
@@ -262,6 +265,7 @@ public partial class MainWindow
     }
     private async void ExportSrt_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         var result = SrtCodec.Write(sequence.Tracks.Where(t => t.Enabled).SelectMany(t => t.Captions));
@@ -282,6 +286,7 @@ public partial class MainWindow
     }
     private void EditCaptions_Click(object sender, RoutedEventArgs e)
     {
+        using var operation = BeginHumanOperation();
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         new CaptionEditorWindow(session, sequence.Id) { Owner = this }.ShowDialog();

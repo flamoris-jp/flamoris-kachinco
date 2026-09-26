@@ -29,7 +29,7 @@
         <MenuItem Header="{DynamicResource Shell.NewportraitP}" Click="NewPortrait_Click" />
         <Separator />
         <MenuItem x:Name="OpenProjectMenu" Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
-        <MenuItem Header="{DynamicResource Shell.SaveasA}" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
+        <MenuItem x:Name="SaveProjectMenu" Header="{DynamicResource Shell.SaveasA}" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
         <Separator />
         <MenuItem Header="{DynamicResource Shell.ImportmediaI}" Click="Register_Click" />
         <MenuItem Header="{DynamicResource Shell.Exportvideo}" Click="Export_Click" />
@@ -95,6 +95,8 @@
     </ToolBarTray>
     <Border DockPanel.Dock="Bottom" Background="#292B2F" Padding="8,5">
       <DockPanel>
+        <TextBlock x:Name="McpStatusText" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
+        <TextBlock x:Name="McpActivityText" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
         <TextBlock x:Name="PlaybackStatus" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
         <TextBlock x:Name="Status" Foreground="#E7E7E7" TextWrapping="Wrap" />
       </DockPanel>
