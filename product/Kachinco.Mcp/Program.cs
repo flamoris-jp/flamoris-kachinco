@@ -1,48 +1,30 @@
-using System.IO.Pipes;
+using Flamoris.Mcp.Core;
 using Kachinco.Infrastructure;
 
+using var output = Console.OpenStandardOutput();
+// Even a logging sink fallback must never write to the protocol stream.
+Console.SetOut(Console.Error);
+string? capability = Environment.GetEnvironmentVariable(StdioBridge.CredentialEnvironmentVariable);
+Environment.SetEnvironmentVariable(StdioBridge.CredentialEnvironmentVariable, null);
 var logger = KachincoLogging.Create("mcp-bridge").Logger;
-var transportDiagnostics = new McpTransportDiagnostics(logger, "stdio-to-same-user-named-pipe");
-transportDiagnostics.EndpointStarted();
-
-if (args.Length != 2 || args[0] != "--pipe" || !(args[1].StartsWith("kachinco-", StringComparison.Ordinal) && Guid.TryParseExact(args[1][9..], "N", out _)))
+if (args.Length != 2 || args[0] != "--pipe" || !McpOptions.ValidPipeName(args[1]))
 {
-    logger.Warn("mcp.protocol", "MCP bridge arguments rejected",
-        new Dictionary<string, object?> { ["argumentsCount"] = args.Length });
-    transportDiagnostics.EndpointStopped();
-    Console.Error.WriteLine("Usage: Kachinco.Mcp --pipe <name displayed by the running editor>");
+    Console.Error.WriteLine("{\"error\":\"invalid_request\"}");
     return 2;
 }
 using var lifetime = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; lifetime.Cancel(); };
 try
 {
-    await using var pipe = new NamedPipeClientStream(".", args[1], PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-    await pipe.ConnectAsync(10000, lifetime.Token);
-    transportDiagnostics.ClientAttached();
-    var input = Console.OpenStandardInput().CopyToAsync(pipe, lifetime.Token);
-    var output = pipe.CopyToAsync(Console.OpenStandardOutput(), lifetime.Token);
-    await Task.WhenAny(input, output);
-    lifetime.Cancel();
-    pipe.Dispose();
-    // Windows console stdin may not honor cancellation. A losing pump must not
-    // hold the bridge alive after editor EOF or stdin closure.
-    try { await Task.WhenAll(input, output).WaitAsync(TimeSpan.FromSeconds(2)); }
-    catch (Exception e) when (e is OperationCanceledException or TimeoutException or IOException or ObjectDisposedException) { }
-    transportDiagnostics.ClientDetached();
-    transportDiagnostics.EndpointStopped();
+    logger.Info("mcp.transport", "MCP bridge started");
+    await StdioBridge.RunAsync(args[1], capability, Console.OpenStandardInput(), output, cancellationToken: lifetime.Token);
+    logger.Info("mcp.transport", "MCP bridge stopped");
     return 0;
 }
-catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException)
+catch (McpFault fault)
 {
-    transportDiagnostics.ConnectionFailed(e);
-    transportDiagnostics.EndpointStopped();
-    Console.Error.WriteLine("MCP bridge connection closed or unavailable."); return 1;
+    Console.Error.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { error = fault.Code }));
+    return 1;
 }
-catch (Exception exception)
-{
-    logger.Error("mcp.transport", "MCP bridge failed unexpectedly", exception,
-        new Dictionary<string, object?> { ["transport"] = "stdio-to-same-user-named-pipe" });
-    transportDiagnostics.EndpointStopped();
-    Console.Error.WriteLine("MCP bridge failed."); return 1;
-}
+catch (OperationCanceledException) { Console.Error.WriteLine("{\"error\":\"cancelled\"}"); return 1; }
+catch { Console.Error.WriteLine("{\"error\":\"transport_unavailable\"}"); return 1; }

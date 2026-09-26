@@ -27,7 +27,7 @@ public partial class MainWindow
         CompositionTarget.Rendering += PlaybackRendering;
         Closed += async (_, _) =>
         {
-            RevokeMcp();
+            ShutdownMcp();
             CompositionTarget.Rendering -= PlaybackRendering;
             Timeline.DisposeVisualizations();
             playback.Dispose();

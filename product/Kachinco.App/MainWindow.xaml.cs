@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeMcp();
         InitializeProduction();
         BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
         Refresh(EditorText.ImportGuidance);
@@ -384,7 +385,7 @@ public partial class MainWindow : Window
     {
         // All UI and MCP edits/history refresh synchronously on this dispatcher.
         // Invalidate at document loss, before AddSequence/import or human Redo.
-        if (mcpLease is { IsActive: false }) RevokeMcp();
+        UpdateMcpStatus();
         refreshing = true;
         var snapshot = session.GetProject();
         var project = snapshot.Project;
