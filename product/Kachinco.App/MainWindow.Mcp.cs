@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -23,7 +24,7 @@ public partial class MainWindow
 
     private void InitializeMcp()
     {
-        mcpHost = new(session, () => busy || humanOperationDepth > 0 || Timeline.HasActiveGesture || draggedMediaId is not null,
+        mcpHost = new(session, () => busy || Volatile.Read(ref humanOperationDepth) > 0 || Timeline.HasActiveGesture || draggedMediaId is not null,
             (action, token) => {
                 if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; }
                 return Dispatcher.InvokeAsync(action, DispatcherPriority.Background, token).Task;
@@ -32,7 +33,7 @@ public partial class MainWindow
     }
     private IDisposable BeginHumanOperation()
     {
-        humanOperationDepth++;
+        Interlocked.Increment(ref humanOperationDepth);
         return new HumanOperation(this);
     }
     private sealed class HumanOperation(MainWindow owner) : IDisposable
@@ -42,7 +43,7 @@ public partial class MainWindow
         {
             if (disposed) return;
             disposed = true;
-            owner.humanOperationDepth--;
+            Interlocked.Decrement(ref owner.humanOperationDepth);
         }
     }
     private async void McpReadOnly_Click(object sender, RoutedEventArgs e) => await EnableMcp(McpPermission.ReadOnly);
