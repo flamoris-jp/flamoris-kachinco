@@ -8,7 +8,9 @@ namespace Kachinco.Tests;
 public sealed class MediaRelinkTests
 {
     [TestMethod]
-    public async Task MissingProjectReopensAndRelinkPreservesAssetClipAndPlacementIdentity()
+    [DataRow("mov")]
+    [DataRow("mp4")]
+    public async Task MissingProjectReopensAndRelinkPreservesAssetClipAndPlacementIdentity(string extension)
     {
         var f = new Fixture();
         string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
@@ -21,9 +23,9 @@ public sealed class MediaRelinkTests
             Assert.AreEqual(2, MediaReferenceResolver.Inspect(loaded, projectPath).Count(x => !x.IsAvailable));
 
             var before = f.VideoClip;
-            var service = new MediaRelinkService(new StubProbe(new(Path.Combine(directory, "replacement.mov"),
+            var service = new MediaRelinkService(new StubProbe(new(Path.Combine(directory, "replacement." + extension),
                 MediaKind.Mov, 12 * Fixture.T, null, null, 1920, 1080, new(30, 1), ["h264"])));
-            var prepared = await service.PrepareAsync(f.Project, f.MovId, Path.Combine(directory, "replacement.mov"));
+            var prepared = await service.PrepareAsync(f.Project, f.MovId, Path.Combine(directory, "replacement." + extension));
             Assert.IsTrue(prepared.Success, string.Join(";", prepared.Diagnostics));
             Assert.IsTrue(f.Edit(prepared.Value!).Success);
             Assert.AreEqual(f.MovId, f.Project.Assets.First(x => x.Id == f.MovId).Id);
@@ -31,7 +33,7 @@ public sealed class MediaRelinkTests
             Assert.AreEqual(before.Id, after.Id); Assert.AreEqual(before.StartTicks, after.StartTicks);
             Assert.AreEqual(before.SourceInTicks, after.SourceInTicks); Assert.AreEqual(before.DurationTicks, after.DurationTicks);
             Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual("input.mov", f.Project.Assets.First(x => x.Id == f.MovId).SourcePath);
-            Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(Path.Combine(directory, "replacement.mov"), f.Project.Assets.First(x => x.Id == f.MovId).SourcePath);
+            Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(Path.Combine(directory, "replacement." + extension), f.Project.Assets.First(x => x.Id == f.MovId).SourcePath);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

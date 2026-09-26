@@ -43,7 +43,7 @@
   <system:String x:Key="Shell.Duplicate">Duplicate</system:String>
   <system:String x:Key="Shell.Delete">Delete</system:String>
   <system:String x:Key="Shell.ProjectMedia">Project / Media</system:String>
-  <system:String x:Key="Shell.ImportMOVWAV">Import MOV / WAV</system:String>
+  <system:String x:Key="Shell.ImportMOVWAV">Import media…</system:String>
   <system:String x:Key="Shell.Place">Place</system:String>
   <system:String x:Key="Shell.Placeonacompatibletrackattheplayhead">Place on a compatible track at the playhead</system:String>
   <system:String x:Key="Shell.Openproject">Open project…</system:String>

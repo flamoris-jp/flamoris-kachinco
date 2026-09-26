@@ -36,11 +36,10 @@ public static class ProjectValidator
             assets.TryAdd(asset.Id, asset);
             if (!Enum.IsDefined(asset.Kind)) Error("INVALID_MEDIA_KIND", "Unknown media kind.", asset.Id);
             if (!TimelineTime.ValidRange(0, asset.DurationTicks)) Error("INVALID_MEDIA_DURATION", "Media duration must be positive.", asset.Id);
-            var extension = asset.Kind == MediaKind.Mov ? ".mov" : ".wav";
             if (string.IsNullOrWhiteSpace(asset.SourcePath) || asset.SourcePath.Length > 32768 ||
                 asset.SourcePath.IndexOfAny(['\0', '\r', '\n']) >= 0 || asset.SourcePath.Contains("://", StringComparison.Ordinal) ||
-                !asset.SourcePath.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-                Error("UNSUPPORTED_MEDIA_SOURCE", "Register a local MOV/WAV path matching its media kind.", asset.Id, "sourcePath");
+                !MediaSourceFormats.Supports(asset.Kind, asset.SourcePath))
+                Error("UNSUPPORTED_MEDIA_SOURCE", "Register a local MOV/MP4 video or WAV/MP3/M4A audio path matching its media kind.", asset.Id, "sourcePath");
             if (asset.SampleRate is <= 0 or > 384000 || asset.Channels is <= 0 or > 32)
                 Error("INVALID_AUDIO_METADATA", "Invalid sample rate or channel count.", asset.Id);
         }
@@ -101,7 +100,7 @@ public static class ProjectValidator
                             Error("INVALID_SOURCE_RANGE", "Source range must fit inside the registered media.", clip.Id);
                         if ((track.Kind == TrackKind.Video && media.Kind != MediaKind.Mov) ||
                             (track.Kind == TrackKind.Audio && media.Kind != MediaKind.Wav))
-                            Error("TRACK_MEDIA_MISMATCH", "Video tracks accept MOV; audio tracks accept WAV.", clip.Id);
+                            Error("TRACK_MEDIA_MISMATCH", "Video tracks accept video assets; audio tracks accept audio assets.", clip.Id);
                     }
                     var appearance = clip.Appearance;
                     var transform = appearance?.Transform;

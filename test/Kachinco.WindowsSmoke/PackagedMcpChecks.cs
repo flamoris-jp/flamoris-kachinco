@@ -8,7 +8,7 @@ using ModelContextProtocol.Client;
 using Flamoris.Mcp.Core;
 using ModelContextProtocol.Protocol;
 
-internal static class PackagedMcpChecks
+internal static partial class PackagedMcpChecks
 {
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(20);
     private static readonly string CleanPath = Environment.GetFolderPath(Environment.SpecialFolder.System);

@@ -141,17 +141,23 @@ public partial class MainWindow : Window
     private async void Register_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
-        var picker = new OpenFileDialog { Filter = "MOV / WAV (*.mov;*.wav)|*.mov;*.wav" };
+        var picker = new OpenFileDialog { Filter = MediaFilter() };
         if (picker.ShowDialog(this) != true) return;
+        await ImportMediaPath(picker.FileName);
+    }
+
+    // Picker and single-file media-bin drops share this exact probe/command path.
+    private async Task ImportMediaPath(string path)
+    {
+        var snapshot = session.GetProject();
         SetBusy(true);
         try
         {
-            var probed = await mediaProbe.ProbeAsync(picker.FileName);
+            var probed = await mediaProbe.ProbeAsync(path);
             if (!probed.Success) { LogFailure("media", "Media probe failed", probed.Diagnostics); ShowErrors(probed.Diagnostics); return; }
             var asset = probed.Value!.ToMediaAsset(Guid.NewGuid());
-            selectedMediaId = asset.Id; selectedClipId = null;
-            var snapshot = session.GetProject();
             var imported = session.Execute(EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト"));
+            if (imported.Success) { selectedMediaId = asset.Id; selectedClipId = null; }
             Show(imported, $"{asset.Name} を読み込みました。");
             if (imported.Success) logger.Info("document", "Media imported", ProjectContext(new Dictionary<string, object?>
             {
@@ -162,6 +168,37 @@ public partial class MainWindow : Window
         }
         finally { SetBusy(false); }
     }
+
+    private static string MediaFilter(MediaKind? kind = null)
+    {
+        var extensions = kind switch
+        {
+            MediaKind.Mov => MediaSourceFormats.VideoExtensions,
+            MediaKind.Wav => MediaSourceFormats.AudioExtensions,
+            _ => MediaSourceFormats.VideoExtensions.AddRange(MediaSourceFormats.AudioExtensions)
+        };
+        string patterns = string.Join(";", extensions.Select(extension => "*" + extension));
+        return $"{EditorText.Choose("素材", "Media")} ({patterns})|{patterns}";
+    }
+
+    private void MediaFiles_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = !busy && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths &&
+            MediaSourceFormats.TryGetKind(paths[0], out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void MediaFiles_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (busy || e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } paths) return;
+        using var operation = BeginHumanOperation();
+        await ImportMediaPath(paths[0]);
+    }
+
+    private static string MediaDescription(MediaAsset asset) =>
+        (asset.Kind == MediaKind.Mov ? EditorText.Choose("映像", "Video") : EditorText.Choose("音声", "Audio")) +
+        " · " + System.IO.Path.GetExtension(asset.SourcePath).TrimStart('.').ToUpperInvariant();
 
     private void Insert_Click(object sender, RoutedEventArgs e)
     {
@@ -224,11 +261,11 @@ public partial class MainWindow : Window
     private async void Relink_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
-        var project = session.GetProject().Project;
+        var snapshot = session.GetProject();
+        var project = snapshot.Project;
         var asset = SelectedAsset(project);
         if (project is null || asset is null) return;
-        var extension = asset.Kind == MediaKind.Mov ? "mov" : "wav";
-        var picker = new OpenFileDialog { Filter = $"{extension.ToUpperInvariant()} (*.{extension})|*.{extension}" };
+        var picker = new OpenFileDialog { Filter = MediaFilter(asset.Kind) };
         if (picker.ShowDialog(this) != true) return;
         SetBusy(true);
         try
@@ -236,7 +273,9 @@ public partial class MainWindow : Window
             var prepared = await relink.PrepareAsync(project, asset.Id, picker.FileName);
             if (!prepared.Success) { LogFailure("media", "Media relink preparation failed", prepared.Diagnostics,
                 new Dictionary<string, object?> { ["mediaAssetId"] = asset.Id }); ShowErrors(prepared.Diagnostics); return; }
-            if (Apply("素材を再リンクしました。", prepared.Value!))
+            var result = session.Execute(new([prepared.Value!], snapshot.Revision));
+            Show(result, "素材を再リンクしました。");
+            if (result.Success)
                 logger.Info("document", "Media relinked",
                     ProjectContext(new Dictionary<string, object?> { ["mediaAssetId"] = asset.Id }));
         }
@@ -466,7 +505,7 @@ public partial class MainWindow : Window
             var state = MediaReferenceResolver.Inspect(project!, filename).First(x => x.MediaAssetId == asset.Id);
             AssetNameText.Text = asset.Name; AssetIdText.Text = asset.Id.ToString();
             AssetPathText.Text = state.ResolvedPath ?? asset.SourcePath;
-            AssetMetadataText.Text = $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s" +
+            AssetMetadataText.Text = $"{MediaDescription(asset)} · {Seconds(asset.DurationTicks)} s" +
                 (asset.SampleRate is { } rate ? $"\n{rate} Hz · {asset.Channels ?? 0} ch" : "") +
                 "\n" + (state.IsAvailable ? EditorText.Choose("利用可能", "Available") : EditorText.Choose("見つかりません", "Missing"));
         }
@@ -515,7 +554,7 @@ public partial class MainWindow : Window
     private sealed record MediaAssetRow(MediaAsset Asset, string Name, string Details, string State, Brush StateBrush)
     {
         public static MediaAssetRow Create(MediaAsset asset, MediaAvailability availability) => new(asset, asset.Name,
-            $"{asset.Kind.ToString().ToUpperInvariant()} · {Seconds(asset.DurationTicks)} s",
+            $"{MediaDescription(asset)} · {Seconds(asset.DurationTicks)} s",
             availability.IsAvailable ? "●" : "⚠",
             availability.IsAvailable ? Brushes.SeaGreen : Brushes.OrangeRed);
     }

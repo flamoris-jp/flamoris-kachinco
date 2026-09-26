@@ -62,7 +62,7 @@ public sealed class MediaRelinkService(IMediaProbe probe)
         if (!probed.Success) return new(null, probed.Diagnostics);
         if (probed.Value!.Kind != existing.Kind)
             return Result<RelinkMedia>.Fail(Diagnostic.Error("INCOMPATIBLE_RELINK",
-                "Replacement media must have the same MOV/WAV kind.", mediaAssetId, replacementPath));
+                "Replacement media must have the same video/audio kind.", mediaAssetId, replacementPath));
 
         var command = new RelinkMedia(mediaAssetId, probed.Value.SourcePath, probed.Value.DurationTicks,
             probed.Value.SampleRate, probed.Value.Channels);
