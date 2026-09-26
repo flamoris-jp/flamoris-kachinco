@@ -20,8 +20,8 @@ The first product is deliberately narrow.
   - **1920x1080, 16:9** for normal YouTube video.
   - **1080x1920, 9:16** for YouTube Shorts / vertical video.
 - Initial media import is intentionally limited to:
-  - **MOV** video.
-  - **WAV** audio.
+  - **MOV / MP4** video.
+  - **WAV / MP3 / M4A** audio.
 - The manual editor only needs the practical **basic NLE feature set** expected from a simple Premiere-like workflow: media import, timeline tracks, playback/scrubbing, clip insert/move/trim/split/delete, basic transforms/opacity, audio placement, captions/subtitles, Undo/Redo, save/reopen, and export.
 - **MCP is a foundational product surface**, not an optional automation layer added later. UI and MCP operate on the same project/domain model and command/history system.
 - The compositor must support at least **Normal, Screen, Add, Multiply, Alpha and opacity** workflows. **Screen blend mode is required from the early product** so black-background light/fire/spark assets can be composited naturally.
@@ -32,7 +32,7 @@ The narrow codec/resolution scope is intentional. Kachinco should first prove fa
 
 ## Core workflow
 
-1. Import MOV video and WAV audio.
+1. Import MOV/MP4 video and WAV/MP3/M4A audio.
 2. Arrange normal clips on a timeline.
 3. Create a named **Clapper** that binds a time range and, optionally, a canvas region/path and target track.
 4. Ask an AI assistant for an edit using that name.
@@ -137,7 +137,7 @@ Initial capability groups are expected to include:
 
 ### Timeline mutation commands
 
-- import/register MOV and WAV media
+- import/register MOV/MP4 video and WAV/MP3/M4A audio
 - insert/replace/move/trim/split clips
 - create subtitle tracks and captions
 - attach generated output to a Recipe and Clapper
@@ -224,7 +224,7 @@ Future systems such as Kinetai or AudioAnalyzer should connect through explicit 
 It extends the reviewed Phase 0/1 foundation with:
 
 - full-length media-bin drops, atomic sequence extension, timeline-local navigation;
-- shared MOV/WAV decoding, Normal/Screen RGBA composition and stereo audio mixing;
+- shared MOV/MP4 and WAV/MP3/M4A decoding, Normal/Screen RGBA composition and stereo audio mixing;
 - render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
 - SRT round trips, caption editing and shared outlined Japanese text rendering;
 - Flamoris.Mcp.Core 1.1.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
@@ -236,7 +236,9 @@ Preview preparation uses the same snapshot renderer as export. It is not a claim
 of real-time full-resolution composition: independent per-frame decoding is an
 initial implementation and can be slow. Recipe proof supports text and particles,
 up to 10 seconds, not arbitrary Python or a complete effects system. FFmpeg and
-Python are external prerequisites. MOV embedded audio is not mixed; use WAV.
+Python are external prerequisites. MOV/MP4 embedded audio is not mixed; use WAV/MP3/M4A audio.
+Media import and cross-container relink use real ffprobe validation; see
+[the media format contract](docs/decisions/0006-media-import-formats.md).
 Human Windows visual/playback acceptance remains separate from CI.
 
 See [Windows production workflow and limitations](staging/windows-production.md).

@@ -29,7 +29,7 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 
 - `CreateProject(projectId, name)` — only on an empty session.
 - `CreateSequence(sequenceId, name, settings, durationTicks)`.
-- `RegisterMedia(asset)` — explicit validated MOV/WAV metadata. Human import first
+- `RegisterMedia(asset)` — explicit validated video/audio metadata (MOV/MP4 and WAV/MP3/M4A). Human import first
   obtains it through `IMediaProbe`; Core still has no file/process dependency.
 - `RelinkMedia(mediaAssetId, sourcePath, durationTicks, sampleRate, channels)` —
   replaces source metadata for the same logical asset after probe/compatibility
@@ -217,3 +217,12 @@ concurrent requests are bounded by Core (default four). One bridge attaches at a
 time. Core status supplies endpoint availability (green), authenticated connection,
 and foreground activity; it does not identify a particular AI. Kachinco projects
 busy/active pointer gestures and retains normal editing when transport fails.
+
+## Media source formats (Issue #15)
+
+`MediaKind.Mov` / `MediaKind.Wav` remain the persisted video/audio kind tokens.
+`MediaSourceFormats` exposes the extension policy; Infrastructure probe validates
+actual container, selected stream and duration. MP4 follows the video path; MP3/M4A
+follow the audio path. Relink may change container within a kind while retaining
+asset/clip IDs and source ranges. See [ADR 0006](decisions/0006-media-import-formats.md).
+This does not grant MCP file access: external raw registration/relink remain denied.

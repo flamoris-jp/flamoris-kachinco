@@ -24,6 +24,13 @@ encoder silently changes persistent duration. Core is still independent of WPF,
 FFmpeg and Python. Windows rasterizers are injected shared RGBA producers, not
 viewport capture. All new features preserve the existing command/evaluator authority.
 
+## Media import expansion (Issue #15)
+
+[ADR 0006](decisions/0006-media-import-formats.md) expands source formats to MOV/MP4
+video and WAV/MP3/M4A audio through the existing probe/command pipeline. Persisted
+Mov/Wav kind tokens now identify video/audio editing paths, without schema changes.
+The historical MOV/WAV-only foundation sections below retain their original scope.
+
 ## Foundation rationale (historical implementation scope)
 
 ## Goals and non-goals

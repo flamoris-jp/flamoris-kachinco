@@ -6,7 +6,7 @@ Issues #5–#9 implement the following production slice; Issue #9 is pending PR 
 | Phase | Current implementation | Evidence / remaining acceptance |
 | --- | --- | --- |
 | 0 — Foundation | Existing | Shared domain, time, commands, persistence and evaluator |
-| 1 — Media/timeline | Existing plus hands-on fixes | Full-length drops, atomic extension, pane controls; Windows pointer/DPI check pending |
+| 1 — Media/timeline | Existing plus hands-on fixes | Full-length drops, atomic extension, pane controls; MP4/MP3/M4A probe-backed import (ADR 0006); Windows pointer/DPI check pending |
 | 2 — Shared preview/playback | Interactive scrub / buffered playback | Shared renderer/mixer, bounded forward decoding and sample clock; see Issue #9 evidence and physical A/V checklist |
 | 3 — Subtitle/SRT | Implemented fixed-style slice | SRT round trip, shared Windows caption rasterization; visual acceptance pending |
 | 4 — FFmpeg export | Implemented | Real MOV/WAV landscape/portrait H.264/AAC/frame-count fixtures; cancel/cleanup contracts |

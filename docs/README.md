@@ -9,6 +9,7 @@
 - [Project plan](project-plan.md): original long-term Clapper/Recipe vision.
 - [Windows acceptance](../staging/windows-foundation.md): manual shell checks.
 
+- [Media import formats ADR](decisions/0006-media-import-formats.md): MP4/MP3/M4A, probe validation and persisted-kind compatibility.
 - [Rendering ADR](decisions/0002-production-rendering.md): shared compositor/export/playback.
 - [Live MCP migration ADR](decisions/0005-mcp-core-migration.md): Core 1.1.0, typed host, local bridge, permissions and compatibility.
 - [Original Live MCP ADR](decisions/0003-live-mcp.md): historical scoped attachment design.

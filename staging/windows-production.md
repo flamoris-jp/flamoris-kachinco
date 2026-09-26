@@ -8,13 +8,13 @@
    Kachinco does not download or bundle these executables.
 3. Recipe generation additionally requires Python 3 (`python` on Windows PATH).
    The distributed `recipe-worker.py` must remain beside the app.
-4. Import MOV/WAV directly from the welcome screen, then create a landscape or
+4. Import MOV/MP4 video or WAV/MP3/M4A audio directly from the welcome screen, then create a landscape or
    portrait sequence; alternatively use File > New. Save as `.fkproj`.
-   Source MOV/WAV and generated MOV files remain external assets; keep them.
+   Source video/audio and generated MOV files remain external assets; keep them.
 
 ## Ordinary editing
 
-- Import MOV/WAV; drag from the media bin onto a video/audio row.
+- Import MOV/MP4 video or WAV/MP3/M4A audio; drag from the media bin onto a video/audio row.
 - A drop places the full asset at the pointer's snapped time and extends sequence
   duration if necessary. One Undo reverses both changes. Empty-project default is
   8 seconds; Sequence > duration can change it without clipping existing items.
@@ -39,7 +39,7 @@
 - File > export creates H.264/AAC MP4. Progress window supports cancellation.
   Existing output is replaced only after successful encoding; source paths cannot
   be used as output. Preview/export are flattened onto black. Generated MOV retains
-  alpha. MOV embedded audio is not mixed; import WAV separately.
+  alpha. MOV/MP4 embedded audio is not mixed; import WAV/MP3/M4A separately.
 - Follow [Issue #9 hands-on](windows-issue9.md) for current scrub/playback/thumbnail acceptance
   and Windows measurements. Hardware decoding/proxy management are not implemented.
 
@@ -127,3 +127,26 @@ visualization, family styling, geometry, coordinate mapping and transport feedba
 Phase 9 remains needs-driven for performance and external integrations. Kinetai,
 AudioAnalyzer, unrestricted Python, extra effects and broader media formats are
 not implemented by this slice.
+
+## Issue #15 media acceptance
+
+The portable package does not bundle FFmpeg/ffprobe. Use the external executables
+on PATH from the Start section; no pre-conversion or different MP4 editing path.
+
+- [ ] Pick MOV, MP4, WAV, MP3 and M4A (including uppercase extensions / spaces).
+- [ ] Drop one supported file from Explorer into the media bin; invalid files show
+  a diagnostic without changing Project/history. Multi-file and direct external
+  timeline drops are not supported in this slice.
+- [ ] Media bin / inspector show Video or Audio plus the actual extension.
+- [ ] Drag each registered asset onto its matching timeline row; scrub/play and
+  verify thumbnails or waveforms. MOV/MP4 embedded audio remains excluded.
+- [ ] Relink MOV to MP4 and WAV to MP3/M4A of sufficient duration. Confirm clip
+  placement and identities remain, including Undo/Redo and save/reopen.
+- [ ] A corrupt file, audio renamed to MP4, or incompatible/too-short replacement
+  produces a clear error; old media and timeline remain intact.
+
+The existing packaged smoke now imports five real generated formats through the
+published picker using a PATH restricted to System32 and the installed media-tool
+directories. It inspects the same session over read-only MCP and tests UI Undo/Redo
+and invalid-file rejection. This is separate from the unchanged System32-only MCP
+runtime proof. Physical pointer/DPI/playback perception is still manual acceptance.
