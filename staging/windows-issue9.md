@@ -4,7 +4,7 @@ This checklist requires Akino's physical Windows session. Automated source pixel
 geometry, process counts and sample-clock contracts do not establish natural scrub
 feel, audible sound, A/V synchronization or visual acceptance.
 
-See [the recorded CI performance evidence](../docs/issue-9-performance.md), including
+See [the recorded CI performance evidence](../docs/reviews/issue-9-performance.md), including
 the initial outliers, restart investigation and unavailable native-audio measurements.
 
 ## Setup and measurements

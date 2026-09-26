@@ -142,4 +142,4 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
 
 - Long-lived redirected stderr uses a dedicated reader per bounded process, so it cannot
   occupy the ThreadPool used for frame/PCM work. Measurements and the restart investigation
-  are in [Windows evidence](issue-9-performance.md); Recipe process isolation is unchanged.
+  are in [Windows evidence](reviews/issue-9-performance.md); Recipe process isolation is unchanged.

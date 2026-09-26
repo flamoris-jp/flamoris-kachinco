@@ -65,4 +65,4 @@
 制限: 初期動画表示は素材の先頭ポスター一枚。波形はmono概要で、トリム中のsource-aware
 再描画や高ズームのサンプル詳細は未実装。旧来の副ダイアログ・domain diagnosticsの完全英訳も対象外。
 
-自動化の対応表と実行結果は [self-review](../docs/issue-7-self-review.md) を参照。
+自動化の対応表と実行結果は [self-review](../docs/reviews/issue-7-self-review.md) を参照。
