@@ -171,15 +171,29 @@ internal static class PackagedMcpChecks
     }
     private static async Task<AutomationElement> FileDialog(int processId, Task invocation)
     {
+        AutomationElement? filename = null;
         AutomationElement? dialog = null;
-        await Until(() =>
+        try { await Until(() =>
         {
             if (invocation.IsFaulted) invocation.GetAwaiter().GetResult();
-            dialog = AutomationElement.RootElement.FindFirst(TreeScope.Children, new AndCondition(
+            filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
                 new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
-                new PropertyCondition(AutomationElement.ClassNameProperty, "#32770")));
-            return dialog is not null;
-        });
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")));
+            return filename is not null;
+        }); }
+        catch (TimeoutException)
+        {
+            var windows = AutomationElement.RootElement.FindAll(TreeScope.Descendants, new AndCondition(
+                new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window)));
+            Console.WriteLine("File dialog probe timeout; invocation=" + invocation.Status + "; windows=" +
+                string.Join("; ", windows.Cast<AutomationElement>().Take(20).Select(w =>
+                    w.Current.Name + " [" + w.Current.ClassName + "]")));
+            throw;
+        }
+        dialog = filename;
+        while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
+        Check(dialog is not null, "File dialog missing.");
         return dialog!;
     }
     private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
