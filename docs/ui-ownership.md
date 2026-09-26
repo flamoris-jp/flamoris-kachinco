@@ -47,7 +47,7 @@ reuse or independently testable policy, rather than adding empty service layers.
 - A new inspector/panel may get an App ViewModel for bindable transient state and
   immutable projections. It must not evaluate/render media or persist control values
   directly into Project. Do not introduce a mandatory MVVM rewrite for a new panel.
-- Preview changes extend `InteractivePreviewController`, shared renderer/mixer and
+- Preview changes extend `InteractivePreview`, shared renderer/mixer and
   dependency caches. WPF redraw frequency must never advance `TimelineTime`.
 - MCP additions adapt existing Product commands/queries and obey file-access grants;
   a new UI import capability does not implicitly authorize external file access.
