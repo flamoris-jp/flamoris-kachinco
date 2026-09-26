@@ -75,7 +75,9 @@ public sealed class McpLeaseTests
         string credential = grant.ExportCredential(), oldToken = h.Fixture.Session.DocumentToken;
         if (mcpUndo) await h.Call(grant, "undo", guard: h.Guard());
         else await h.Human(() => h.Fixture.Session.Undo());
-        Assert.IsNull(h.Fixture.Session.GetProject().Project);
+        // Revocation can finish the transport response inside the committing callback.
+        // Observe domain state on the editor lane, as WPF does, after that callback.
+        Assert.IsNull((await h.Human(() => h.Fixture.Session.GetProject())).Project);
         Assert.IsFalse(grant.IsActive); Assert.IsTrue(grant.Revoked.IsCancellationRequested);
         Assert.AreNotEqual(oldToken, h.Fixture.Session.DocumentToken);
         await h.Human(() => h.Fixture.Session.Redo());

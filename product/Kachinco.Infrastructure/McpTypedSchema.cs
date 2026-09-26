@@ -8,12 +8,11 @@ namespace Kachinco.Infrastructure;
 // already approved constructor payload; adding a Core command never exposes it.
 public static class McpTypedSchema
 {
-    private static readonly NullabilityInfoContext Nullability = new();
     private static ParameterInfo[] Fields(Type type) => type.GetConstructors()
         .OrderByDescending(c => c.GetParameters().Length).First().GetParameters();
     private static string Name(ParameterInfo field) => JsonNamingPolicy.CamelCase.ConvertName(field.Name!);
     private static bool Nullable(ParameterInfo field) => System.Nullable.GetUnderlyingType(field.ParameterType) is not null ||
-        !field.ParameterType.IsValueType && Nullability.Create(field).ReadState == NullabilityState.Nullable;
+        !field.ParameterType.IsValueType && new NullabilityInfoContext().Create(field).ReadState == NullabilityState.Nullable;
 
     public static JsonObject Describe(Type type)
     {
