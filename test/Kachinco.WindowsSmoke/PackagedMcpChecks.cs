@@ -77,6 +77,7 @@ internal static class PackagedMcpChecks
                 Check(undone.GetProperty("success").GetBoolean() && TrackCount(state) == uiTrackCount - 1, "MCP Undo did not reverse the UI edit.");
                 var redone = await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
                 Check(redone.GetProperty("success").GetBoolean() && TrackCount(await Query(client)) == uiTrackCount, "MCP Redo did not restore the UI edit.");
+                await FileDialogsBlockMcpEdit(main, process.Id, client, sequenceId);
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(main, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);
@@ -128,6 +129,56 @@ internal static class PackagedMcpChecks
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }
     private static Guid ProjectId(JsonElement state) => state.GetProperty("project").GetProperty("project").GetProperty("id").GetGuid();
+    private static async Task FileDialogsBlockMcpEdit(AutomationElement main, int processId, McpClient client, Guid sequenceId)
+    {
+        var before = await Query(client);
+        var revision = before.GetProperty("revision").GetString()!;
+        int tracks = TrackCount(before);
+        var identity = (await client.CallToolAsync("mcp.context", cancellationToken: Deadline())).StructuredContent!.Value;
+        var guard = new { runtimeId = identity.GetProperty("runtimeId").GetString(),
+            documentToken = identity.GetProperty("documentToken").GetString(), expectedRevision = revision };
+        async Task AssertBusy(string phase)
+        {
+            var reply = await client.CallToolAsync("edit_batch", new Dictionary<string, object?>
+            {
+                ["input"] = new { commands = new[] { new { type = "AddTrack", sequenceId,
+                    trackId = Guid.NewGuid(), name = "Must not enter during " + phase, kind = "Video" } } },
+                ["guard"] = guard
+            }, cancellationToken: Deadline());
+            using var json = JsonDocument.Parse(reply.Content.OfType<TextContentBlock>().Single().Text);
+            Check(json.RootElement.GetProperty("error").GetProperty("code").GetString() == McpErrors.Busy,
+                "MCP edit was not rejected as busy during " + phase);
+        }
+
+        var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+        var yes = await DiscardConfirmation(processId);
+        await AssertBusy("Open discard confirmation");
+        await Invoke(yes);
+        var openDialog = await FileDialog(processId);
+        await AssertBusy("Open file picker");
+        await Invoke(Find(openDialog, "2")); // Cancel without changing the current Project.
+        await opening;
+
+        var saving = Menu(main, "FileMenu", "SaveProjectMenu");
+        var saveDialog = await FileDialog(processId);
+        await AssertBusy("Save file picker");
+        await Invoke(Find(saveDialog, "2"));
+        await saving;
+        var after = await Query(client);
+        Check(after.GetProperty("revision").GetString() == revision && TrackCount(after) == tracks,
+            "Modal MCP request changed the project or history.");
+        Console.WriteLine("Open confirmation/picker and Save picker reject MCP edits as busy: PASS");
+    }
+    private static async Task<AutomationElement> FileDialog(int processId)
+    {
+        AutomationElement? filename = null;
+        await Until(() => (filename = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "1148")))) is not null);
+        AutomationElement? dialog = filename;
+        while (dialog is not null && dialog.Current.ClassName != "#32770") dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
+        Check(dialog is not null, "File dialog missing.");
+        return dialog!;
+    }
     private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
     {
         var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
@@ -306,13 +357,14 @@ internal static class PackagedMcpChecks
         });
         return pipe!;
     }
-    private static async Task ConfirmDiscard(int processId)
+    private static async Task<AutomationElement> DiscardConfirmation(int processId)
     {
         AutomationElement? yes = null;
         await Until(() => (yes = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
             new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.AutomationIdProperty, "6")))) is not null);
-        await Invoke(yes!);
+        return yes!;
     }
+    private static async Task ConfirmDiscard(int processId) => await Invoke(await DiscardConfirmation(processId));
     private static async Task ExpectDisconnected(RevokedClient connection)
     {
         bool failed = false;

@@ -18,15 +18,32 @@ public partial class MainWindow
     private Window? mcpInformation;
     private bool mcpShuttingDown;
     private long mcpEnableGeneration;
+    // Includes nested WPF modal loops, which continue to dispatch MCP requests.
+    private int humanOperationDepth;
 
     private void InitializeMcp()
     {
-        mcpHost = new(session, () => busy || Timeline.HasActiveGesture || draggedMediaId is not null,
+        mcpHost = new(session, () => busy || humanOperationDepth > 0 || Timeline.HasActiveGesture || draggedMediaId is not null,
             (action, token) => {
                 if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; }
                 return Dispatcher.InvokeAsync(action, DispatcherPriority.Background, token).Task;
             });
         mcpHost.Invalidating += QueueMcpStatus;
+    }
+    private IDisposable BeginHumanOperation()
+    {
+        humanOperationDepth++;
+        return new HumanOperation(this);
+    }
+    private sealed class HumanOperation(MainWindow owner) : IDisposable
+    {
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            owner.humanOperationDepth--;
+        }
     }
     private async void McpReadOnly_Click(object sender, RoutedEventArgs e) => await EnableMcp(McpPermission.ReadOnly);
     private async void McpEdit_Click(object sender, RoutedEventArgs e) => await EnableMcp(McpPermission.Edit);
