@@ -37,7 +37,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         string fullPath;
         try
         {
-            if (string.IsNullOrWhiteSpace(path)) return Failure("MEDIA_PATH_REQUIRED", "Choose a MOV or WAV file.");
+            if (string.IsNullOrWhiteSpace(path)) return Failure("MEDIA_PATH_REQUIRED", "Choose a MOV, MP4, WAV, MP3 or M4A file.");
             fullPath = Path.GetFullPath(path);
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
@@ -46,7 +46,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         }
 
         if (!File.Exists(fullPath)) return Failure("MEDIA_NOT_FOUND", "The selected media file does not exist.", path: fullPath);
-        if (!TryKind(fullPath, out _)) return Failure("UNSUPPORTED_MEDIA_SOURCE", "Only MOV and WAV files are supported.", path: fullPath);
+        if (!MediaSourceFormats.TryGetKind(fullPath, out _)) return Failure("UNSUPPORTED_MEDIA_SOURCE", "Supported video: MOV/MP4; audio: WAV/MP3/M4A.", path: fullPath);
 
         using var process = new Process
         {
@@ -109,7 +109,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         foreach (var argument in new[]
         {
             "-v", "error", "-show_entries",
-            "format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,duration",
+            "format=format_name,duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,duration",
             "-of", "json", fullPath
         }) info.ArgumentList.Add(argument);
         return info;
@@ -137,15 +137,6 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         return string.IsNullOrEmpty(value) ? fallback : value[..Math.Min(value.Length, 512)];
     }
 
-    internal static bool TryKind(string path, out MediaKind kind)
-    {
-        var extension = Path.GetExtension(path);
-        if (extension.Equals(".mov", StringComparison.OrdinalIgnoreCase)) { kind = MediaKind.Mov; return true; }
-        if (extension.Equals(".wav", StringComparison.OrdinalIgnoreCase)) { kind = MediaKind.Wav; return true; }
-        kind = default;
-        return false;
-    }
-
     private static Result<MediaProbeInfo> Failure(string code, string message, string? path = null) =>
         Result<MediaProbeInfo>.Fail(Diagnostic.Error(code, message, path: path));
 }
@@ -154,8 +145,8 @@ public static class MediaProbeParser
 {
     public static Result<MediaProbeInfo> Parse(string sourcePath, string ffprobeJson)
     {
-        if (!FfprobeMediaProbe.TryKind(sourcePath, out var expectedKind))
-            return Fail("UNSUPPORTED_MEDIA_SOURCE", "Only MOV and WAV files are supported.", sourcePath);
+        if (!MediaSourceFormats.TryGetKind(sourcePath, out var expectedKind))
+            return Fail("UNSUPPORTED_MEDIA_SOURCE", "Supported video: MOV/MP4; audio: WAV/MP3/M4A.", sourcePath);
         try
         {
             using var document = JsonDocument.Parse(ffprobeJson, new() { MaxDepth = 32 });
@@ -166,6 +157,7 @@ public static class MediaProbeParser
             bool hasVideo = false, hasAudio = false;
             int? sampleRate = null, channels = null, width = null, height = null;
             FrameRate? frameRate = null;
+            string? videoCodec = null, audioCodec = null;
             decimal? formatDuration = ReadDuration(root.TryGetProperty("format", out var format) ? format : default);
             decimal? videoDuration = null, audioDuration = null;
             var codecs = ImmutableArray.CreateBuilder<string>();
@@ -177,24 +169,35 @@ public static class MediaProbeParser
                 var streamDuration = ReadDuration(stream);
                 if (type == "video")
                 {
-                    if (!hasVideo) videoDuration = streamDuration;
+                    if (!hasVideo)
+                    {
+                        videoDuration = streamDuration; videoCodec = codec;
+                        width = Integer(stream, "width"); height = Integer(stream, "height");
+                        frameRate = Rational(stream, "r_frame_rate");
+                    }
                     hasVideo = true;
-                    width ??= Integer(stream, "width");
-                    height ??= Integer(stream, "height");
-                    frameRate ??= Rational(stream, "r_frame_rate");
                 }
                 else if (type == "audio")
                 {
-                    if (!hasAudio) audioDuration = streamDuration;
+                    if (!hasAudio)
+                    {
+                        audioDuration = streamDuration; audioCodec = codec;
+                        sampleRate = Integer(stream, "sample_rate"); channels = Integer(stream, "channels");
+                    }
                     hasAudio = true;
-                    sampleRate ??= Integer(stream, "sample_rate");
-                    channels ??= Integer(stream, "channels");
                 }
             }
 
             if ((expectedKind == MediaKind.Mov && !hasVideo) || (expectedKind == MediaKind.Wav && !hasAudio))
-                return Fail("MEDIA_KIND_MISMATCH", "The file contents do not match the MOV/WAV extension.", sourcePath);
-            // Kachinco decodes 0:v:0 from MOV and 0:a:0 from WAV. Embedded MOV audio is
+                return Fail("MEDIA_KIND_MISMATCH", "The file has no stream of the video/audio kind required by its extension.", sourcePath);
+            var container = Text(format, "format_name");
+            if (!ContainerMatches(sourcePath, container))
+                return Fail("MEDIA_CONTAINER_MISMATCH", "The actual media container does not match a supported format for this extension.", sourcePath);
+            string? selectedCodec = expectedKind == MediaKind.Mov ? videoCodec : audioCodec;
+            if (string.IsNullOrWhiteSpace(selectedCodec) || selectedCodec == "unknown" ||
+                (expectedKind == MediaKind.Mov ? width is null || height is null : sampleRate is null || channels is null))
+                return Fail("MEDIA_STREAM_UNSUPPORTED", "The selected media stream has missing or unsupported codec metadata.", sourcePath);
+            // Kachinco decodes 0:v:0 from video and 0:a:0 from audio. Embedded video audio is
             // intentionally excluded, so a longer audio/container tail must not extend a
             // video clip beyond the final decodable frame.
             decimal? durationSeconds = expectedKind == MediaKind.Mov
@@ -207,10 +210,23 @@ public static class MediaProbeParser
             return Result<MediaProbeInfo>.Ok(new(Path.GetFullPath(sourcePath), expectedKind, durationTicks,
                 sampleRate, channels, width, height, frameRate, codecs.Distinct(StringComparer.Ordinal).ToImmutableArray()));
         }
-        catch (Exception e) when (e is JsonException or FormatException or OverflowException or ArgumentException)
+        catch (Exception e) when (e is JsonException or FormatException or OverflowException or ArgumentException or InvalidOperationException)
         {
             return Fail("MEDIA_PROBE_INVALID", "ffprobe returned invalid or unsupported metadata.", sourcePath);
         }
+    }
+
+    private static bool ContainerMatches(string path, string? formatName)
+    {
+        var formats = (formatName ?? "").Split(',');
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension switch
+        {
+            ".mov" or ".mp4" or ".m4a" => formats.Any(f => f is "mov" or "mp4" or "m4a"),
+            ".wav" => formats.Contains("wav", StringComparer.Ordinal),
+            ".mp3" => formats.Contains("mp3", StringComparer.Ordinal),
+            _ => false
+        };
     }
 
     private static decimal? ReadDuration(JsonElement element)
