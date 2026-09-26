@@ -21,18 +21,25 @@ public sealed class McpEnvelopeTests
         var before = h.Fixture.Session.GetProject();
         try
         {
+            var ready = NextEndpoint(h);
             await using (var denied = await Connect(h, lifetime.Token))
             {
                 await Send(denied, new string('0', 64), lifetime.Token);
                 using var reader = new StreamReader(denied, leaveOpen: true);
                 StringAssert.Contains((await reader.ReadLineAsync(lifetime.Token))!, "unauthorized");
             }
+            await ready.WaitAsync(lifetime.Token);
             foreach (byte[] input in new[] { "{\n"u8.ToArray(), new byte[] { 0xff, 10 }, Encoding.UTF8.GetBytes(new string('x', 5000) + "\n") })
             {
-                await using var pipe = await Connect(h, lifetime.Token);
-                await Authenticate(pipe, grant, lifetime.Token);
-                await pipe.WriteAsync(input, lifetime.Token); await pipe.FlushAsync(lifetime.Token);
-                // Disposal is connection-local even when SDK emits an error before EOF.
+                ready = NextEndpoint(h);
+                await using (var pipe = await Connect(h, lifetime.Token))
+                {
+                    await Authenticate(pipe, grant, lifetime.Token);
+                    try { await pipe.WriteAsync(input, lifetime.Token); await pipe.FlushAsync(lifetime.Token); }
+                    catch (IOException) { /* oversized/invalid input may close immediately */ }
+                }
+                // Wait for a new listening instance, not the closing Unix socket.
+                await ready.WaitAsync(lifetime.Token);
             }
             await using var healthy = await Connect(h, lifetime.Token);
             await Authenticate(healthy, grant, lifetime.Token);
@@ -55,6 +62,7 @@ public sealed class McpEnvelopeTests
         var server = new LocalMcpEndpoint(h.Boundary).RunAsync(grant, lifetime.Token);
         try
         {
+            var ready = NextEndpoint(h);
             await using (var partial = await Connect(h, lifetime.Token))
             {
                 await Authenticate(partial, grant, lifetime.Token);
@@ -62,6 +70,7 @@ public sealed class McpEnvelopeTests
                 using var reader = new StreamReader(partial, leaveOpen: true);
                 Assert.IsNull(await reader.ReadLineAsync(lifetime.Token));
             }
+            await ready.WaitAsync(lifetime.Token);
             await using var idle = await Connect(h, lifetime.Token);
             await Authenticate(idle, grant, lifetime.Token);
             h.Boundary.Disable();
@@ -69,6 +78,23 @@ public sealed class McpEnvelopeTests
             Assert.IsFalse(grant.IsActive);
         }
         finally { lifetime.Cancel(); await server.WaitAsync(TimeSpan.FromSeconds(5)); }
+    }
+    private static Task NextEndpoint(McpCoreHarness h)
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool unavailable = false;
+        void Changed()
+        {
+            var state = h.Boundary.Status.Current;
+            if (!state.EndpointAvailable) unavailable = true;
+            if (unavailable && state.IsGreen && !state.Connected)
+            {
+                h.Boundary.Status.Changed -= Changed;
+                ready.TrySetResult();
+            }
+        }
+        h.Boundary.Status.Changed += Changed;
+        return ready.Task;
     }
     private static async Task<NamedPipeClientStream> Connect(McpCoreHarness h, CancellationToken token)
     {
