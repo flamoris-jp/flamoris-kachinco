@@ -55,6 +55,9 @@ and [WPF overview](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview
 No speculative empty plugin/media/MCP projects. Add adapters when their behavior
 exists. Runtime never references tests, staging or history.
 
+See [WPF ownership boundaries](ui-ownership.md) for the shell/partial responsibility
+audit and placement rules for new editor features.
+
 ## Domain and identity
 
 Project is persistent authority: ID, name, assets, sequences. Each sequence owns
