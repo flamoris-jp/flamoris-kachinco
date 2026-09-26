@@ -61,9 +61,10 @@ public static class McpTypedSchema
         if (type.IsEnum) { Require(value.ValueKind == JsonValueKind.String && Enum.GetNames(type).Contains(value.GetString(), StringComparer.Ordinal)); return; }
         Require(value.ValueKind == JsonValueKind.Object);
         var fields = Fields(type).ToDictionary(Name);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
-            if (!fields.TryGetValue(property.Name, out var field)) throw new JsonException("Unknown constructor field.");
+            if (!seen.Add(property.Name) || !fields.TryGetValue(property.Name, out var field)) throw new JsonException("Unknown constructor field.");
             if (property.Value.ValueKind == JsonValueKind.Null && Nullable(field)) continue;
             Validate(field.ParameterType, property.Value);
         }

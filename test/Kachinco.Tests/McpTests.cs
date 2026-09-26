@@ -1,5 +1,5 @@
-using System.Text.Json;
-using Kachinco.Infrastructure;
+using Flamoris.Mcp.Core;
+using Kachinco.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Kachinco.Tests;
@@ -7,40 +7,55 @@ namespace Kachinco.Tests;
 public sealed class McpTests
 {
     [TestMethod]
-    public async Task FramingRejectsOversizedInvalidUtf8AndTruncatedInputWithoutThrowing()
+    public async Task CoreEditsTheSameSessionAndBothClientsShareHistory()
     {
-        var oversized = new McpBoundedLineReader(new MemoryStream("123456789\n"u8.ToArray()), maximumBytes: 8, bufferSize: 4);
-        Assert.AreEqual(McpFrameStatus.Oversized, (await oversized.ReadAsync()).Status);
-
-        var invalid = new McpBoundedLineReader(new MemoryStream([0xff, (byte)'\n']), bufferSize: 2);
-        Assert.AreEqual(McpFrameStatus.InvalidUtf8, (await invalid.ReadAsync()).Status);
-
-        var truncated = new McpBoundedLineReader(new MemoryStream("{}"u8.ToArray()), bufferSize: 2);
-        Assert.AreEqual(McpFrameStatus.Truncated, (await truncated.ReadAsync()).Status);
+        using var h = new McpCoreHarness();
+        using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
+        var guard = h.Guard();
+        var result = await h.Call(grant, "edit_batch", h.Batch(), guard);
+        Assert.IsFalse(result.IsError); Assert.IsTrue(result.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.IsFalse(h.Fixture.Project.Sequences[0].Tracks[0].Enabled); Assert.AreEqual(1, h.Changes);
+        Assert.AreEqual(McpErrors.StaleRevision, (await h.Call(grant, "edit_batch", h.Batch(), guard)).Error);
+        Assert.IsTrue((await h.Human(() => h.Fixture.Session.Undo())).Success);
+        Assert.IsTrue(h.Fixture.Project.Sequences[0].Tracks[0].Enabled);
+        Assert.IsFalse((await h.Call(grant, "redo", guard: h.Guard())).IsError);
+        Assert.IsFalse(h.Fixture.Project.Sequences[0].Tracks[0].Enabled);
+        Assert.IsTrue((await h.Human(() => h.Fixture.Edit(new SetTrackEnabled(h.Fixture.SequenceId, h.Fixture.VideoTrackId, true)))).Success);
+        Assert.IsFalse((await h.Call(grant, "undo", guard: h.Guard())).IsError);
+        Assert.IsFalse(h.Fixture.Project.Sequences[0].Tracks[0].Enabled);
+        var state = (await h.Call(grant, "get_project")).Value!.Value;
+        Assert.AreEqual(h.Fixture.Session.GetProject().Revision.ToString(), state.GetProperty("revision").GetString());
+        Assert.AreEqual(h.Fixture.SequenceId, state.GetProperty("context").GetProperty("sequenceId").GetGuid());
     }
 
     [TestMethod]
-    public async Task FramingBuffersReadsAndPreservesTheNextLine()
+    public async Task DryRunAndFailedBatchLeaveHistoryAndRevisionUntouched()
     {
-        var reader = new McpBoundedLineReader(new MemoryStream("one\r\ntwo\n"u8.ToArray()), bufferSize: 16);
-        Assert.AreEqual("one", (await reader.ReadAsync()).Line);
-        Assert.AreEqual("two", (await reader.ReadAsync()).Line);
-        Assert.AreEqual(McpFrameStatus.EndOfStream, (await reader.ReadAsync()).Status);
+        using var h = new McpCoreHarness(); using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
+        var before = h.Fixture.Session.GetProject();
+        var command = new { type = "SetTrackEnabled", sequenceId = h.Fixture.SequenceId, trackId = h.Fixture.VideoTrackId, enabled = false };
+        var dry = await h.Call(grant, "edit_batch", new { commands = new[] { command }, dryRun = true }, h.Guard());
+        Assert.IsTrue(dry.Value!.Value.GetProperty("success").GetBoolean());
+        var failure = await h.Call(grant, "edit_batch", new { commands = new object[] { command,
+            new { type = "DeleteClip", sequenceId = h.Fixture.SequenceId, clipId = Guid.NewGuid() } } }, h.Guard());
+        Assert.IsFalse(failure.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.AreEqual(before, h.Fixture.Session.GetProject()); Assert.AreEqual(0, h.Changes);
     }
 
     [TestMethod]
-    public async Task McpEditsTheSameSessionAndRejectsStaleCommands()
+    public async Task StaleIdentityMissingRevisionAndHumanGestureRejectBeforeCommit()
     {
-        var f = new Fixture(); int changes = 0;
-        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => changes++, new(f.Session, McpPermission.Edit));
-        await adapter.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}");
-        string request = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "edit_batch", arguments = new { expectedRevision = f.Session.GetProject().Revision.ToString(), commands = new[] { new { type = "SetTrackEnabled", sequenceId = f.SequenceId, trackId = f.VideoTrackId, enabled = false } } } } });
-        using var result = JsonDocument.Parse((await adapter.HandleAsync(request))!);
-        Assert.IsFalse(result.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
-        Assert.IsFalse(f.Project.Sequences[0].Tracks[0].Enabled); Assert.AreEqual(1, changes);
-        using var stale = JsonDocument.Parse((await adapter.HandleAsync(request))!);
-        Assert.IsTrue(stale.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
-        Assert.AreEqual(1, changes);
-        Assert.IsTrue(f.Session.Undo().Success); Assert.IsTrue(f.Project.Sequences[0].Tracks[0].Enabled);
+        using var h = new McpCoreHarness(); using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
+        var before = h.Fixture.Session.GetProject();
+        foreach (var (guard, error) in new[] {
+            (h.Guard() with { RuntimeId = "old" }, McpErrors.StaleSession),
+            (h.Guard() with { DocumentToken = "old" }, McpErrors.StaleDocument),
+            (h.Guard() with { ExpectedRevision = null }, McpErrors.InvalidRequest) })
+            Assert.AreEqual(error, (await h.Call(grant, "edit_batch", h.Batch(), guard)).Error);
+        Assert.AreEqual(McpErrors.InvalidRequest, (await h.Call(grant, "undo")).Error);
+        h.Busy = true;
+        Assert.AreEqual(McpErrors.Busy, (await h.Call(grant, "edit_batch", h.Batch(), h.Guard())).Error);
+        Assert.AreEqual(McpErrors.Busy, (await h.Call(grant, "get_project")).Error);
+        Assert.AreEqual(before, h.Fixture.Session.GetProject());
     }
 }

@@ -1,5 +1,5 @@
-using System.Collections.Immutable;
 using System.Text.Json;
+using Flamoris.Mcp.Core;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -8,138 +8,108 @@ namespace Kachinco.Tests;
 [TestClass]
 public sealed class McpLeaseTests
 {
-    internal const string Initialize = """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tests","version":"1"}}}""";
-    internal static string Call(string name, object args) => JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name, arguments = args } });
-
     [TestMethod]
-    public async Task RevokedPreparedWorkCannotCommitUnderNewLease()
+    [DataRow("cancel")]
+    [DataRow("timeout")]
+    [DataRow("revoke")]
+    [DataRow("replace")]
+    public async Task PreparedGenerationCannotCommitAfterTerminalBoundary(string reason)
     {
-        var f = new Fixture(); var before = f.Session.GetProject();
-        using var oldLease = new McpAccessLease(f.Session, McpPermission.Edit);
-        var prepared = new TaskCompletionSource<PreparedGeneration>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var worker = Task.Run(async () =>
-        {
-            var work = new PreparedGeneration("not-published.mov", new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)], before.Revision), Guid.NewGuid(), Guid.NewGuid());
-            prepared.SetResult(work);
-            await resume.Task;
-            oldLease.Commit(f.Session, work.Batch);
-        });
-        await prepared.Task;
-        oldLease.Revoke();
-        using var freshLease = new McpAccessLease(f.Session, McpPermission.Edit);
-        resume.SetResult();
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await worker);
-        Assert.AreEqual(before, f.Session.GetProject());
-        Assert.IsTrue(freshLease.Commit(f.Session, new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)], before.Revision)).Success);
-        Assert.IsTrue(f.Session.Undo().Success);
+        var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        McpCoreHarness? fixture = null;
+        var tool = new HostTool<int>("prepared", "Test-only prepared command barrier.", JsonSerializer.SerializeToElement(new { type = "object" }),
+            OperationKind.Mutation, _ => 0, async (context, _, token) => {
+                var f = fixture!.Fixture;
+                var prepared = new PreparedGeneration("not-published.mov", new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)], f.Session.GetProject().Revision), Guid.NewGuid(), Guid.NewGuid());
+                entered.SetResult(); await resume.Task; // deliberately uncooperative preparation
+                try { return await context.CommitAsync(() => JsonSerializer.SerializeToElement(f.Session.Execute(prepared.Batch, token))); }
+                finally { exited.SetResult(); }
+            });
+        using var h = fixture = new(new McpOptions { RequestTimeoutMs = reason == "timeout" ? 500 : 5000 }, [tool]);
+        using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
+        using var cancellation = new CancellationTokenSource();
+        var before = h.Fixture.Session.GetProject();
+        var call = h.Call(grant, "prepared", guard: h.Guard(), token: cancellation.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (reason == "cancel") cancellation.Cancel();
+        if (reason == "revoke") h.Boundary.Disable();
+        if (reason == "replace") await h.Human(() => h.Fixture.Session.ReplaceProject(h.Fixture.Project));
+        var terminal = await call.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.IsTrue(terminal.IsError);
+        using var fresh = await h.Boundary.EnableAsync(McpPermission.Edit);
+        var after = h.Fixture.Session.GetProject();
+        resume.SetResult(); await exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.AreEqual(after, h.Fixture.Session.GetProject());
+        Assert.IsTrue(h.Fixture.Project.Sequences[0].Tracks[0].Enabled);
+        Assert.AreEqual(0, h.Boundary.Status.Current.ForegroundCount);
+        Assert.IsFalse((await h.Call(fresh, "edit_batch", h.Batch(), h.Guard())).IsError);
     }
 
     [TestMethod]
-    public async Task PermissionsRejectDirectCallsAndFileCommandsWithoutMutating()
+    public async Task PermissionsRejectFileCommandsAndUnregisteredJobs()
     {
-        var f = new Fixture(); var before = f.Session.GetProject();
+        using var h = new McpCoreHarness(); var before = h.Fixture.Session.GetProject();
         foreach (var permission in new[] { McpPermission.ReadOnly, McpPermission.Edit })
         {
-            using var lease = new McpAccessLease(f.Session, permission);
-            var adapter = new McpEditorAdapter(f.Session, () => new { }, () => Assert.Fail(), lease);
-            await adapter.HandleAsync(Initialize);
-            string[] denied = [Call("export_start", new { expectedRevision = "1", sequenceId = f.SequenceId, outputPath = "denied.mp4" }),
-                Call("recipe_generate", new { }), Call("job_status", new { jobId = Guid.NewGuid() }),
-                Call("edit_batch", new { expectedRevision = before.Revision.ToString(), commands = new object[] { new { type = "RelinkMedia", mediaAssetId = Guid.NewGuid(), sourcePath = "secret.mov", durationTicks = "1" } } }),
-                Call("edit_batch", new { expectedRevision = before.Revision.ToString(), commands = new object[] { new { type = "CreateProject", projectId = Guid.NewGuid(), name = "unauthorized" } } })];
-            foreach (var request in denied)
-            {
-                using var response = JsonDocument.Parse((await adapter.HandleAsync(request))!);
-                Assert.AreEqual(-32001, response.RootElement.GetProperty("error").GetProperty("code").GetInt32());
-            }
+            using var grant = await h.Boundary.EnableAsync(permission);
+            foreach (string name in new[] { "export_start", "recipe_generate", "job_status", "job_cancel", "file.read", "process.run", "eval" })
+                Assert.AreEqual(McpErrors.UnsupportedCapability, (await h.Call(grant, name)).Error);
+            foreach (string type in new[] { "CreateProject", "RegisterMedia", "RelinkMedia", "SetGeneratedProvenance" })
+                Assert.AreEqual(McpErrors.Forbidden, (await h.Call(grant, "edit_batch", new { commands = new[] { new { type } } }, h.Guard())).Error);
             if (permission == McpPermission.ReadOnly)
-            {
-                using var response = JsonDocument.Parse((await adapter.HandleAsync(Call("undo", new { expectedRevision = before.Revision.ToString() })))!);
-                Assert.AreEqual(-32001, response.RootElement.GetProperty("error").GetProperty("code").GetInt32());
-            }
-            lease.Revoke();
-            using var revoked = JsonDocument.Parse((await adapter.HandleAsync(Call("get_project", new { })))!);
-            Assert.IsTrue(revoked.RootElement.TryGetProperty("error", out _));
+                foreach (string name in new[] { "undo", "redo", "edit_batch" })
+                    Assert.AreEqual(McpErrors.Forbidden, (await h.Call(grant, name, h.Batch(), h.Guard())).Error);
         }
-        Assert.AreEqual(before, f.Session.GetProject());
+        Assert.AreEqual(before, h.Fixture.Session.GetProject());
     }
 
     [TestMethod]
     [DataRow(McpPermission.Edit, false)]
     [DataRow(McpPermission.Edit, true)]
     [DataRow(McpPermission.ReadOnly, false)]
-    public async Task DocumentLossRevokesBeforeImplicitCreationAndHumanRedoCannotRevive(McpPermission permission, bool mcpUndo)
+    public async Task DocumentLossRevokesAndHumanRedoCannotRevive(McpPermission permission, bool mcpUndo)
     {
-        var f = new Fixture();
-        using var lease = new McpAccessLease(f.Session, permission);
-        var adapter = new McpEditorAdapter(f.Session, () => new { }, () => { _ = lease.IsActive; }, lease);
-        await adapter.HandleAsync(Initialize);
-        if (mcpUndo)
-            await adapter.HandleAsync(Call("undo", new { expectedRevision = f.Session.GetProject().Revision.ToString() }));
-        else
-            Assert.IsTrue(f.Session.Undo().Success);
-        Assert.IsNull(f.Session.GetProject().Project);
-        // The shared WPF Refresh performs this check synchronously after UI history.
-        Assert.IsFalse(lease.IsActive);
-        Assert.IsTrue(lease.Token.IsCancellationRequested);
-        Assert.IsTrue(f.Session.Redo().Success);
-        Assert.AreEqual(f.ProjectId, f.Project.Id);
-        Assert.IsFalse(lease.IsActive);
-        Assert.IsTrue(f.Session.Undo().Success);
-        var newId = Guid.NewGuid();
-        Assert.IsTrue(f.Session.Execute(new([new CreateProject(newId, "Implicit new document"),
-            new CreateSequence(Guid.NewGuid(), "Sequence", SequenceSettings.Landscape, Fixture.T)])).Success);
-        var before = f.Session.GetProject();
-        foreach (var request in new[] { Call("get_project", new { }), Call("undo", new { expectedRevision = before.Revision.ToString() }) })
-        {
-            using var response = JsonDocument.Parse((await adapter.HandleAsync(request))!);
-            Assert.IsTrue(response.RootElement.TryGetProperty("error", out _));
-        }
-        Assert.AreEqual(before, f.Session.GetProject());
-        using var fresh = new McpAccessLease(f.Session, permission);
-        Assert.IsTrue(fresh.IsActive);
-        fresh.Demand();
+        using var h = new McpCoreHarness(); using var grant = await h.Boundary.EnableAsync(permission);
+        string credential = grant.ExportCredential(), oldToken = h.Fixture.Session.DocumentToken;
+        if (mcpUndo) await h.Call(grant, "undo", guard: h.Guard());
+        else await h.Human(() => h.Fixture.Session.Undo());
+        Assert.IsNull(h.Fixture.Session.GetProject().Project);
+        Assert.IsFalse(grant.IsActive); Assert.IsTrue(grant.Revoked.IsCancellationRequested);
+        Assert.AreNotEqual(oldToken, h.Fixture.Session.DocumentToken);
+        await h.Human(() => h.Fixture.Session.Redo());
+        Assert.AreEqual(h.Fixture.ProjectId, h.Fixture.Project.Id);
+        Assert.IsFalse(grant.Authenticate(credential));
+        Assert.AreEqual(McpErrors.Unauthorized, (await h.Call(grant, "get_project")).Error);
+        await h.Human(() => h.Fixture.Session.Undo());
+        var asset = new MediaAsset(Guid.NewGuid(), "import", "import.mov", MediaKind.Mov, Fixture.T);
+        await h.Human(() => h.Fixture.Session.Execute(EditorStartup.Import(h.Fixture.Session.GetProject(), asset, Guid.NewGuid(), "New import")));
+        Assert.AreEqual(McpErrors.Unauthorized, (await h.Call(grant, "get_project")).Error);
+        using var fresh = await h.Boundary.EnableAsync(permission);
+        Assert.IsFalse((await h.Call(fresh, "get_project")).IsError);
     }
 
     [TestMethod]
-    public void FirstImportAfterDocumentLossDoesNotInheritTheGrant()
+    public async Task RotationSameIdReplacementStopAndShutdownRevoke()
     {
-        var f = new Fixture(); var asset = f.Project.Assets[0];
-        using var lease = new McpAccessLease(f.Session, McpPermission.ReadOnly);
-        Assert.IsTrue(f.Session.Undo().Success);
-        Assert.IsFalse(lease.IsActive); // UI Refresh at document loss.
-        Assert.IsTrue(f.Session.Execute(EditorStartup.Import(f.Session.GetProject(), asset, Guid.NewGuid(), "Imported document")).Success);
-        Assert.AreNotEqual(f.ProjectId, f.Project.Id);
-        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Demand());
-    }
-
-    [TestMethod]
-    public void SameDocumentSnapshotsRemainAuthorizedButDifferentIdentityCannotBeReadOrCommitted()
-    {
-        var f = new Fixture(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
-        var original = f.Project;
-        Assert.IsTrue(lease.Commit(f.Session, new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)])).Success);
-        Assert.AreNotSame(original, f.Project);
-        Assert.IsTrue(lease.IsActive);
-        Assert.IsTrue(lease.Run(() => f.Session.Undo(), true).Success);
-        Assert.IsTrue(lease.Run(() => f.Session.Redo(), true).Success);
-        Assert.IsTrue(lease.IsActive);
-        // Also fail closed if a caller missed the UI observation at an identity transition.
-        Assert.IsTrue(f.Session.ReplaceProject(original with { Id = Guid.NewGuid() }).Success);
-        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Demand());
-        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Commit(f.Session,
-            new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, true)])));
-    }
-
-    [TestMethod]
-    public void CancelledCommitAndHistoryNeverChangeTheSession()
-    {
-        var f = new Fixture(); var before = f.Session.GetProject(); using var lease = new McpAccessLease(f.Session, McpPermission.Edit);
-        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
-        Assert.ThrowsExactly<OperationCanceledException>(() => lease.Commit(f.Session,
-            new([new SetTrackEnabled(f.SequenceId, f.VideoTrackId, false)], before.Revision), cancellation.Token));
-        Assert.ThrowsExactly<OperationCanceledException>(() => f.Session.Undo(before.Revision, cancellation.Token));
-        Assert.AreEqual(before, f.Session.GetProject());
+        using var h = new McpCoreHarness();
+        using var a = await h.Boundary.EnableAsync(McpPermission.Edit);
+        string secret = a.ExportCredential();
+        Assert.IsFalse(a.Authenticate(null)); Assert.IsFalse(a.Authenticate(new string('0', 64)));
+        Assert.IsTrue(a.Authenticate(secret)); Assert.IsFalse(a.ToString().Contains(secret));
+        using var b = await h.Boundary.EnableAsync(McpPermission.ReadOnly);
+        Assert.IsFalse(a.Authenticate(secret)); Assert.AreNotEqual(secret, b.ExportCredential());
+        string token = h.Fixture.Session.DocumentToken;
+        // Failed replacement leaves the valid attachment intact.
+        Assert.IsFalse((await h.Human(() => h.Fixture.Session.ReplaceProject(h.Fixture.Project, -1))).Success);
+        Assert.IsTrue(b.IsActive); Assert.AreEqual(token, h.Fixture.Session.DocumentToken);
+        await h.Human(() => h.Fixture.Session.ReplaceProject(h.Fixture.Project));
+        Assert.IsFalse(b.IsActive); Assert.AreNotEqual(token, h.Fixture.Session.DocumentToken);
+        using var c = await h.Boundary.EnableAsync(McpPermission.Edit);
+        h.Boundary.Disable(); Assert.IsFalse(c.IsActive);
+        using var d = await h.Boundary.EnableAsync(McpPermission.Edit);
+        h.Host.Shutdown(); Assert.IsFalse(d.IsActive);
+        await Assert.ThrowsExactlyAsync<McpFault>(async () => await h.Boundary.EnableAsync(McpPermission.Edit));
     }
 }
