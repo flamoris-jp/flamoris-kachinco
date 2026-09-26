@@ -2,7 +2,7 @@
 
 Reviewed against main `c0a3601321efd807d480a620ab2be13e16d5e4d0` (PR #8).
 The reference/design note was committed before broad implementation. Official Adobe,
-Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-interactive-preview.md).
+Blackmagic, FFmpeg and Windows references are in the [design note](../issue-9-interactive-preview.md).
 
 ## Authority review
 
@@ -90,7 +90,7 @@ Blackmagic, FFmpeg and Windows references are in the [design note](issue-9-inter
 ## Evidence and remaining acceptance
 
 The current Windows harness records real 1080p/30 MOV + WAV codec measurements and separately
-attempts native device playback. See [Windows hands-on](../staging/windows-issue9.md) and the
+attempts native device playback. See [Windows hands-on](../../staging/windows-issue9.md) and the
 [performance evidence](issue-9-performance.md). CI audio-device absence is a limitation, not
 passed sound/sync acceptance. Full throughput can be below 30 fps; default 1/2 and selectable
 1/4, explicit dropped-frame counts and bounded buffering expose the degradation policy.

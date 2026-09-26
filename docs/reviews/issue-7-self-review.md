@@ -2,8 +2,8 @@
 
 Review date: 2026-09-14. Baseline main: `af1731cf56f1cd54786c36606de66bf4966ff410`.
 Reference/design decisions were committed before implementation in
-[the audit](issue-7-editor-ux.md). Final acceptance still requires the
-[Windows hands-on checklist](../staging/windows-issue7.md).
+[the audit](../issue-7-editor-ux.md). Final acceptance still requires the
+[Windows hands-on checklist](../../staging/windows-issue7.md).
 
 ## Findings and disposition
 

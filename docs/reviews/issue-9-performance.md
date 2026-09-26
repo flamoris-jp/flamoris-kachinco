@@ -64,9 +64,9 @@ Recipe process isolation was introduced.
 
 Retained raw evidence, including the unfavorable observations:
 
-- [Initial measurement](../staging/evidence/issue9-initial-windows.json)
-- [Fresh startup / restart audit](../staging/evidence/issue9-restart-audit-windows.json)
-- [After dedicated readers](../staging/evidence/issue9-windows.json)
+- [Initial measurement](../../staging/evidence/issue9-initial-windows.json)
+- [Fresh startup / restart audit](../../staging/evidence/issue9-restart-audit-windows.json)
+- [After dedicated readers](../../staging/evidence/issue9-windows.json)
 
 ## Unavailable and remaining acceptance
 
@@ -78,4 +78,4 @@ sustained playback, actual A/V drift and perceptual overload behavior remain
 Automated contracts cover consumed-sample timing, underrun freeze/refill, bounded
 video skips and stale/edit handling. Windows verifies real viewer scrub pixels,
 thumbnail strip, layout geometry, build/startup and worker/raster behavior. Follow
-[the physical checklist](../staging/windows-issue9.md) for the remaining acceptance.
+[the physical checklist](../../staging/windows-issue9.md) for the remaining acceptance.
