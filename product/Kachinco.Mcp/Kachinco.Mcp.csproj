@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Flamoris.Mcp.Bridge</AssemblyName></PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Flamoris.Mcp.Core" Version="1.2.0" Condition="'$(FlamorisMcpSourceRoot)' == ''"  />
-    <ProjectReference Include="$(FlamorisMcpSourceRoot)/src/Flamoris.Mcp.Core/Flamoris.Mcp.Core.csproj" Condition="'$(FlamorisMcpSourceRoot)' != ''" />
+    <PackageReference Include="Flamoris.Mcp.Core" Version="1.2.0" />
     <Compile Include="../Kachinco.Infrastructure/KachincoLogging.cs" Link="KachincoLogging.cs" />
     <None Include="../../appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
