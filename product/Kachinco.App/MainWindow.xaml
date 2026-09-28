@@ -55,13 +55,7 @@
         <MenuItem Header="{DynamicResource Shell.ZoomoutO}" Click="ZoomOut_Click" />
       </MenuItem>
       <MenuItem Header="Clapper / Recipe"><MenuItem Header="{DynamicResource Shell.EditnamedrangesandRecipes}" Click="Authoring_Click" /></MenuItem>
-      <MenuItem x:Name="McpMenu" Header="{DynamicResource Shell.AIconnection}">
-        <MenuItem x:Name="McpReadOnlyMenu" Header="{DynamicResource Mcp.ReadOnly}" Click="McpReadOnly_Click" />
-        <MenuItem x:Name="McpEditMenu" Header="{DynamicResource Mcp.Edit}" Click="McpEdit_Click" />
-        <Separator />
-        <MenuItem x:Name="McpCopyMenu" Header="{DynamicResource Mcp.Copy}" IsEnabled="False" Click="McpCopy_Click" />
-        <MenuItem x:Name="McpStopMenu" Header="{DynamicResource Mcp.Stop}" IsEnabled="False" Click="McpStop_Click" />
-      </MenuItem>
+      <MenuItem x:Name="McpMenu" Header="MCP / AI" />
       <MenuItem Header="{DynamicResource Shell.Language}">
         <MenuItem x:Name="JapaneseMenu" Header="日本語" IsCheckable="True" IsChecked="True" Tag="ja" Click="Language_Click"/>
         <MenuItem x:Name="EnglishMenu" Header="English" IsCheckable="True" Tag="en" Click="Language_Click"/>
@@ -95,8 +89,7 @@
     </ToolBarTray>
     <Border DockPanel.Dock="Bottom" Background="#292B2F" Padding="8,5">
       <DockPanel>
-        <TextBlock x:Name="McpStatusText" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
-        <TextBlock x:Name="McpActivityText" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
+        <ContentControl x:Name="McpStatusPanel" DockPanel.Dock="Right" Margin="16,0,0,0"/>
         <TextBlock x:Name="PlaybackStatus" DockPanel.Dock="Right" Foreground="#E7E7E7" Margin="16,0,0,0"/>
         <TextBlock x:Name="Status" Foreground="#E7E7E7" TextWrapping="Wrap" />
       </DockPanel>

@@ -124,7 +124,7 @@ internal static partial class PackagedMcpChecks
             string eofPipe = await Connection(process.Id);
             await BridgeInputEof(bridge, eofPipe);
             await BridgeEof(bridge, eofPipe, process);
-            Console.WriteLine("Published MCP: Core 1.1.0 / official C# SDK 2.2.0 / 2026-07-28; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
+            Console.WriteLine("Published MCP: Core 1.2.0 / official C# SDK 2.2.0 / 2026-07-28; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }
@@ -217,7 +217,7 @@ internal static partial class PackagedMcpChecks
         await OldPipeRejected(pipe);
         var mcpMenu = (ExpandCollapsePattern)Find(main, "McpMenu").GetCurrentPattern(ExpandCollapsePattern.Pattern);
         mcpMenu.Expand();
-        Check(!Find(main, "McpCopyMenu").Current.IsEnabled, "Document loss retained connection information.");
+        Check(!Find(main, "McpConnectMenu").Current.IsEnabled, "Document loss retained connect availability.");
         mcpMenu.Collapse();
         // Human Redo is preserved, without resurrecting the revoked client or address.
         await Invoke(Find(main, "RedoButton"));
@@ -340,39 +340,44 @@ internal static partial class PackagedMcpChecks
     private static Task Invoke(AutomationElement element) => Task.Run(() => ((InvokePattern)element.GetCurrentPattern(InvokePattern.Pattern)).Invoke());
     private static async Task Menu(AutomationElement root, string parent, string child)
     {
-        var menu = Find(root, parent);
-        ((ExpandCollapsePattern)menu.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
-        await Invoke(Find(root, child));
+        bool connect = parent == "McpMenu" && child is "McpReadMenu" or "McpReadOnlyMenu" or "McpEditMenu";
+        ((ExpandCollapsePattern)Find(root, parent).GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
+        if (!connect) { await Invoke(Find(root, child)); return; }
+        var opening = Invoke(Find(root, "McpConnectMenu"));
+        int pid = root.Current.ProcessId;
+        AutomationElement? permission = null;
+        await Until(() => (permission = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+            new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "McpPermission")))) is not null);
+        ((ExpandCollapsePattern)permission!.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
+        var items = permission.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+        ((SelectionItemPattern)items[child == "McpEditMenu" ? 1 : 0].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        var accept = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
+            new PropertyCondition(AutomationElement.AutomationIdProperty, "McpAccept")));
+        await Invoke(accept!); await opening;
+        await Until(() => root.Current.IsEnabled);
     }
     private static bool VisibleText(AutomationElement root, string text) => root.FindAll(TreeScope.Descendants,
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
     private static async Task<string> Connection(int processId)
     {
-        string? pipe = null;
-        await Until(() =>
-        {
-            var edits = AutomationElement.RootElement.FindAll(TreeScope.Descendants, new AndCondition(
-                new PropertyCondition(AutomationElement.ProcessIdProperty, processId), new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit)));
-            foreach (AutomationElement edit in edits)
-                if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var pattern))
-                {
-                    string command = ((ValuePattern)pattern).Current.Value;
-                    if (!command.TrimStart().StartsWith('{')) continue;
-                    try
-                    {
-                        using var json = JsonDocument.Parse(command);
-                        var root = json.RootElement;
-                        if (!root.TryGetProperty("args", out var arguments) || arguments.GetArrayLength() != 2 || arguments[0].GetString() != "--pipe") continue;
-                        pipe = arguments[1].GetString()!;
-                        Credentials[pipe] = root.GetProperty("env").GetProperty(StdioBridge.CredentialEnvironmentVariable).GetString()!;
-                        return true;
-                    }
-                    catch (JsonException) { }
-
-                }
-            return false;
-        });
-        return pipe!;
+        var main = AutomationElement.FromHandle(Process.GetProcessById(processId).MainWindowHandle);
+        var opening = Menu(main, "McpMenu", "McpSettingsMenu");
+        AutomationElement? edit = null;
+        await Until(() => (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+            new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null);
+        using var json = JsonDocument.Parse(((ValuePattern)edit!.GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+        var root = json.RootElement.GetProperty("mcpServers").GetProperty("flamoris-kachinco");
+        string pipe = root.GetProperty("args")[1].GetString()!;
+        Credentials[pipe] = root.GetProperty("env").GetProperty(StdioBridge.CredentialEnvironmentVariable).GetString()!;
+        AutomationElement? dialog = edit;
+        while (dialog is not null && dialog.Current.ControlType != ControlType.Window)
+            dialog = TreeWalker.ControlViewWalker.GetParent(dialog);
+        await Task.Run(() => ((WindowPattern)dialog!.GetCurrentPattern(WindowPattern.Pattern)).Close());
+        await opening;
+        return pipe;
     }
     private static async Task<AutomationElement> DiscardConfirmation(int processId)
     {
