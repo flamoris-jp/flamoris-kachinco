@@ -87,7 +87,7 @@ public sealed class McpEnvelopeTests
         {
             var state = h.Boundary.Status.Current;
             if (!state.EndpointAvailable) unavailable = true;
-            if (unavailable && state.IsGreen && !state.Connected)
+            if (unavailable && state.EndpointAvailable && !state.Connected)
             {
                 h.Boundary.Status.Changed -= Changed;
                 ready.TrySetResult();
