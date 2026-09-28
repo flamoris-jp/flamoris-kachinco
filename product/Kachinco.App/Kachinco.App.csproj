@@ -13,7 +13,6 @@
     <None Include="../../appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Flamoris.Mcp.Wpf" Version="1.2.0" Condition="'$(FlamorisMcpSourceRoot)' == ''" />
-    <ProjectReference Include="$(FlamorisMcpSourceRoot)/src/Flamoris.Mcp.Wpf/Flamoris.Mcp.Wpf.csproj" Condition="'$(FlamorisMcpSourceRoot)' != ''" />
+    <PackageReference Include="Flamoris.Mcp.Wpf" Version="1.2.0" />
   </ItemGroup>
 </Project>
