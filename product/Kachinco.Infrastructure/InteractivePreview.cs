@@ -39,7 +39,9 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     private CancellationTokenSource? active;
     private Task? runner;
     private bool running, disposed, wantPlay;
-    private long generation, startSample;
+    private long generation;
+    private readonly Kachinco.Native.NativePlayback native = new();
+    private Kachinco.Native.NativePlaybackTicket ticket;
     private IPreviewAudioOutput? output;
     private bool playSession;
     private Guid? playbackSessionId;
@@ -66,19 +68,21 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public void Play()
     {
         if (context is null || disposed) return;
-        if (playSession && output is not null && State == InteractivePreviewState.Paused)
-        {
-            wantPlay = true;
-            try { if (output.QueuedFrames > 0) { output.Play(); SetState(InteractivePreviewState.Playing); } else SetState(InteractivePreviewState.Buffering); }
-            catch (Exception e) { Fail(e); }
-            return;
-        }
         RequestFrame(FirstSample(PositionTicks) >= TimelineTime.SampleCount(context.Sequence.DurationTicks, 48000) ? 0 : PositionTicks, true, InteractivePreviewState.Playing);
     }
     public void Pause()
     {
         wantPlay = false;
-        try { output?.Pause(); ReadPositionTicks(); if (playSession) SetState(InteractivePreviewState.Paused); }
+        try
+        {
+            output?.Pause();
+            long position = ReadPositionTicks();
+            if (playSession || pending?.Play == true || running)
+            {
+                RequestFrame(position, false, InteractivePreviewState.Paused);
+                SetState(InteractivePreviewState.Paused);
+            }
+        }
         catch (Exception e) { Fail(e); }
     }
     public void Stop() => RequestFrame(0, false, InteractivePreviewState.Stopped);
@@ -94,7 +98,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         try
         {
             if (playSession && output is not null && context is not null)
-                PositionTicks = Math.Min(context.Sequence.DurationTicks, TimelineTime.SampleToTicks(checked(startSample + output.PlayedFrames), 48000));
+                PositionTicks = native.Clock(generation, output.PlayedFrames);
         }
         catch (Exception e) { Fail(e); }
         return PositionTicks;
@@ -104,11 +108,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         if (disposed) return;
         Cancel(); Error = null; Frame = null;
         if (context is null) { PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
-        PositionTicks = Math.Clamp(tick, 0, context.Sequence.DurationTicks);
-        // The end cursor is an editing boundary, not a decodable frame at duration - 1 tick.
-        // Show the final canonical output frame while retaining the end cursor for replay.
-        long renderTick = PositionTicks == context.Sequence.DurationTicks ?
-            TimelineTime.FrameToTicks(Math.Max(0, TimelineTime.FrameCount(context.Sequence.DurationTicks, context.Sequence.Settings.FrameRate) - 1), context.Sequence.Settings.FrameRate) : PositionTicks;
+        ticket = native.Request(context.Sequence.DurationTicks, context.Sequence.Settings.FrameRate.Numerator,
+            context.Sequence.Settings.FrameRate.Denominator, tick, play);
+        generation = ticket.Generation; PositionTicks = ticket.Position;
+        long renderTick = ticket.RenderTick;
         wantPlay = play;
         pending = new(generation, renderTick, play, after);
         logger?.Debug("preview.playback", play ? "Preview playback requested" : "Preview frame requested", Properties(renderTick));
@@ -119,7 +122,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     {
         if (active is not null || pending is not null || playSession)
             logger?.Debug("preview.playback", "Preview work cancelled", Properties(PositionTicks));
-        generation++; pending = null; active?.Cancel(); wantPlay = false; playSession = false;
+        generation = native.Cancel(); pending = null; active?.Cancel(); wantPlay = false; playSession = false;
         // Stop sound immediately, but let the joined runner own disposal.
         try { output?.Pause(); } catch { }
     }
@@ -137,17 +140,17 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                     else
                     {
                         var result = await source.FrameAsync(context!, request.Tick, Quality, false, cancellation.Token);
-                        if (request.Generation != generation || cancellation.IsCancellationRequested) continue;
+                        if (!native.Accept(request.Generation) || cancellation.IsCancellationRequested) continue;
                         Require(result); Frame = result.Value; SetState(request.After);
                     }
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 { logger?.Debug("preview.playback", "Preview request observed cancellation", Properties(request.Tick)); }
-                catch (Exception e) { if (request.Generation == generation) Fail(e); }
+                catch (Exception e) { if (native.Accept(request.Generation)) Fail(e); }
                 finally { if (ReferenceEquals(active, cancellation)) active = null; }
             }
         }
-        finally { running = false; }
+        finally { running = false; if (disposed) native.Dispose(); }
     }
     private async Task RunPlaybackAsync(Request request, CancellationToken token)
     {
@@ -156,38 +159,37 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         var ct = sessionCancellation.Token;
         using var device = outputFactory(); output = device; playSession = true;
-        startSample = FirstSample(request.Tick);
-        long total = TimelineTime.SampleCount(context!.Sequence.DurationTicks, 48000);
-        long nextAudio = startSample;
+        var playbackTicket = ticket;
+        long startSample = playbackTicket.StartSample;
         var audioReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task? audioTask = null;
         try
         {
             audioTask = ProduceAudio();
-            var first = await source.FrameAsync(context, TimelineTime.SampleToTicks(startSample, 48000), Quality, true, ct);
+            var first = await source.FrameAsync(context!, TimelineTime.SampleToTicks(startSample, 48000), Quality, true, ct);
             ct.ThrowIfCancellationRequested(); Require(first); Frame = first.Value; Notify();
             await audioReady.Task.WaitAsync(ct);
             ct.ThrowIfCancellationRequested();
             if (wantPlay) { device.Play(); SetState(InteractivePreviewState.Playing); }
             else SetState(InteractivePreviewState.Paused);
-            var fps = context.Sequence.Settings.FrameRate;
-            long nextFrame = FrameIndex(request.Tick, fps) + 1;
             var ready = new Queue<RenderedVideoFrame>();
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                long now = ReadPositionTicks();
-                if (device.PlayedFrames >= total - startSample) { PositionTicks = context.Sequence.DurationTicks; SetState(InteractivePreviewState.Stopped); break; }
-                if (!wantPlay) { await Task.Delay(8, ct); continue; }
-                while (ready.TryPeek(out var candidate) && candidate.Tick <= now)
-                { Frame = ready.Dequeue(); Notify(); }
-                long clockFrame = FrameIndex(now, fps);
-                if (nextFrame < clockFrame) { DroppedVideoFrames += clockFrame - nextFrame; nextFrame = clockFrame; }
-                long at = TimelineTime.FrameToTicks(nextFrame, fps);
-                if (ready.Count >= ForwardVideoFrames || nextFrame > clockFrame + ForwardVideoFrames || at >= context.Sequence.DurationTicks)
-                { await Task.Delay(5, ct); continue; }
-                var result = await source.FrameAsync(context, Math.Max(request.Tick, at), Quality, true, ct);
-                ct.ThrowIfCancellationRequested(); Require(result); ready.Enqueue(result.Value!); nextFrame++;
+                var step = native.Video(request.Generation, device.PlayedFrames, ready.Count,
+                    ready.TryPeek(out var candidate) ? candidate.Tick : -1);
+                PositionTicks = step.Position; DroppedVideoFrames += step.Dropped;
+                if (step.Ended != 0)
+                {
+                    RequestFrame(context!.Sequence.DurationTicks, false, InteractivePreviewState.Stopped);
+                    break;
+                }
+                if (step.Present != 0) { Frame = ready.Dequeue(); Notify(); continue; }
+                if (step.VideoTick < 0) { await Task.Delay(5, ct); continue; }
+                var result = await source.FrameAsync(context!, step.VideoTick, Quality, true, ct);
+                ct.ThrowIfCancellationRequested();
+                if (!native.Accept(request.Generation)) break;
+                Require(result); ready.Enqueue(result.Value!);
             }
         }
         finally
@@ -206,27 +208,30 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             try
             {
-                while (nextAudio < total)
+                while (true)
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (device.QueuedFrames > MaximumQueuedFrames - AudioBlockFrames) { await Task.Delay(5, ct); continue; }
-                    bool underrun = audioReady.Task.IsCompleted && wantPlay && device.QueuedFrames == 0;
-                    if (underrun && State == InteractivePreviewState.Playing)
+                    var step = native.Audio(request.Generation, device.QueuedFrames);
+                    if (step.Underrun != 0 && State == InteractivePreviewState.Playing)
                     { device.Pause(); Underruns++; SetState(InteractivePreviewState.Buffering); }
-                    int count = (int)Math.Min(AudioBlockFrames, total - nextAudio);
-                    var result = await source.AudioAsync(context!, nextAudio, count, ct);
-                    ct.ThrowIfCancellationRequested(); Require(result); device.Enqueue(result.Value!); nextAudio += count;
-                    if (nextAudio - startSample >= StartupFrames || nextAudio == total) audioReady.TrySetResult();
-                    if (State == InteractivePreviewState.Buffering && Frame is not null && wantPlay &&
-                        (device.QueuedFrames >= StartupFrames || nextAudio == total))
+                    if (step.Count == 0)
+                    {
+                        if (step.FirstSample == playbackTicket.TotalSamples) { audioReady.TrySetResult(); break; }
+                        await Task.Delay(5, ct); continue;
+                    }
+                    var result = await source.AudioAsync(context!, step.FirstSample, step.Count, ct);
+                    ct.ThrowIfCancellationRequested();
+                    if (!native.Accept(request.Generation)) break;
+                    Require(result); device.Enqueue(result.Value!);
+                    if (step.Ready != 0) audioReady.TrySetResult();
+                    if (State == InteractivePreviewState.Buffering && Frame is not null && wantPlay && step.Resume != 0)
                     { device.Play(); SetState(InteractivePreviewState.Playing); }
                 }
             }
             catch (Exception) { audioReady.TrySetCanceled(); sessionCancellation.Cancel(); throw; }
         }
     }
-    public static long FirstSample(long tick) => checked((long)(((System.Numerics.BigInteger)tick * 48000 + TimelineTime.TicksPerSecond - 1) / TimelineTime.TicksPerSecond));
-    private static long FrameIndex(long tick, FrameRate fps) => checked((long)((System.Numerics.BigInteger)tick * fps.Numerator / ((System.Numerics.BigInteger)TimelineTime.TicksPerSecond * fps.Denominator)));
+    public static long FirstSample(long tick) => Kachinco.Native.NativePlayback.FirstSample(tick);
     private static void Require<T>(Result<T> result) { if (!result.Success) throw new InvalidDataException(string.Join(" / ", result.Diagnostics.Select(d => $"[{d.Code}] {d.Message}"))); }
     private void Fail(Exception e)
     {
@@ -241,5 +246,5 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     };
     private void SetState(InteractivePreviewState value) { State = value; Notify(); }
     private void Notify() => Changed?.Invoke(this, EventArgs.Empty);
-    public void Dispose() { if (disposed) return; disposed = true; Cancel(); Frame = null; }
+    public void Dispose() { if (disposed) return; disposed = true; Cancel(); Frame = null; if (!running) native.Dispose(); }
 }

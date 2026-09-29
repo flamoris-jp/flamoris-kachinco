@@ -132,5 +132,5 @@ public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPa
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
         { return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("AUDIO_RENDER_FAILED", e.Message)); }
     }
-    private static long FirstSampleAtOrAfter(long tick, int rate) => checked((long)(((System.Numerics.BigInteger)tick * rate + TimelineTime.TicksPerSecond - 1) / TimelineTime.TicksPerSecond));
+    private static long FirstSampleAtOrAfter(long tick, int rate) => Kachinco.Native.NativePlayback.FirstSample(tick, rate);
 }

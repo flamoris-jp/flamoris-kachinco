@@ -32,7 +32,7 @@ public sealed class InteractivePreviewTests
         foreach (decimal duration in new[] { 8m, 219.6m })
         {
             var f = new Fixture(); Assert.IsTrue(f.Edit(new SetSequenceDuration(f.SequenceId, TimelineTime.SecondsToTicks(duration))).Success);
-            var source = new Source(); var device = new Device(); using var p = new InteractivePreview(source, () => device);
+            var source = new Source(); var device = new Device(); using var p = new InteractivePreview(source, () => device = new Device());
             p.SetContext(Context(f)); p.Scrub(4 * Fixture.T); source.Video.Clear(); source.Audio.Clear();
             p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing);
             Assert.IsTrue(source.Video.All(t => t >= 4 * Fixture.T));
@@ -41,7 +41,9 @@ public sealed class InteractivePreviewTests
             Assert.AreEqual(4 * Fixture.T, p.ReadPositionTicks()); pump.Drain(); Assert.AreEqual(4 * Fixture.T, p.ReadPositionTicks());
             device.Advance(4800); Assert.AreEqual(TimelineTime.SecondsToTicks(4.1m), p.ReadPositionTicks());
             p.Pause(); Assert.AreEqual(InteractivePreviewState.Paused, p.State); Assert.IsFalse(device.Running);
-            p.Play(); Assert.AreEqual(InteractivePreviewState.Playing, p.State);
+            var pausedDevice = device; pump.Until(() => p.Completion.IsCompleted);
+            Assert.AreEqual(p.PositionTicks, p.Frame!.Tick); Assert.IsTrue(pausedDevice.Disposed);
+            p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing);
             p.Scrub(6 * Fixture.T); Assert.AreEqual(6 * Fixture.T, p.ReadPositionTicks(), "Old device cannot overwrite a new seek.");
             pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(6 * Fixture.T, p.Frame!.Tick); Assert.IsTrue(device.Disposed);
             p.Stop(); pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(InteractivePreviewState.Stopped, p.State); Assert.AreEqual(0L, p.Frame!.Tick);
@@ -54,12 +56,14 @@ public sealed class InteractivePreviewTests
         using var p = new InteractivePreview(source, () => { var d = new Device(); devices.Add(d); return d; });
         p.SetContext(Context(f)); source.Hold = true; p.Play(); var late = source.Pending!;
         p.Pause(); source.Hold = false; late.SetResult(Frame(0)); pump.Until(() => p.State == InteractivePreviewState.Paused);
-        Assert.IsFalse(devices[0].Running); p.Play(); Assert.IsTrue(devices[0].Running);
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.IsFalse(devices[0].Running); Assert.IsTrue(devices[0].Disposed);
+        p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing); Assert.IsTrue(devices[1].Running);
         Assert.IsTrue(f.Edit(new MoveClip(f.SequenceId, f.AudioClipId, f.AudioTrackId, 2 * Fixture.T)).Success);
-        p.SetContext(Context(f)); Assert.AreEqual(1, devices.Count, "Edit outside queued window preserves transport.");
+        p.SetContext(Context(f)); Assert.AreEqual(2, devices.Count, "Edit outside queued window preserves transport.");
         Assert.IsTrue(f.Edit(new SetClipProperties(f.SequenceId, f.ClipId, true, ClipAppearance.Default with { Opacity = .5 }, AudioProperties.Default)).Success);
-        p.SetContext(Context(f)); pump.Until(() => devices.Count == 2 && p.State == InteractivePreviewState.Playing);
-        Assert.IsTrue(devices[0].Disposed); p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+        p.SetContext(Context(f)); pump.Until(() => devices.Count == 3 && p.State == InteractivePreviewState.Playing);
+        Assert.IsTrue(devices[1].Disposed); p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
     }
     [TestMethod]
     public void DeviceAndAudioFailuresClearViewerAndDisposeTransport()
@@ -135,6 +139,35 @@ public sealed class InteractivePreviewTests
         Assert.IsTrue(source.Contributors.Any(x => x.Tick < Fixture.T && x.ClipId == fixture.ClipId));
         Assert.IsTrue(source.Contributors.Any(x => x.Tick >= Fixture.T && x.ClipId == secondClip && x.MediaAssetId == secondAsset));
         preview.Dispose(); pump.Until(() => preview.Completion.IsCompleted);
+    }
+    [TestMethod]
+    public void PauseAtClipBoundaryRendersFrozenSampleTimeAndRejectsLateOlderFrames()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var second = Fixture.Id(30); var clip = Fixture.Id(31);
+        Assert.IsTrue(f.Edit(new TrimClip(f.SequenceId,f.ClipId,0,Fixture.T,Fixture.T),
+            new RegisterMedia(new(second,"second","second.mov",MediaKind.Mov,10*Fixture.T)),
+            new InsertClip(f.SequenceId,f.VideoTrackId,Fixture.Clip(clip,second,Fixture.T,0,7*Fixture.T))).Success);
+        var source = new Source(); var devices = new List<Device>();
+        using var p = new InteractivePreview(source,()=>{var d=new Device();devices.Add(d);return d;});
+        p.SetContext(Context(f)); p.Scrub(9*Fixture.T/10); pump.Until(()=>p.Completion.IsCompleted);
+        p.Play(); pump.Until(()=>p.State==InteractivePreviewState.Playing);
+        source.Hold=true; devices[^1].Advance(9600); pump.Until(()=>source.Pending is not null);
+        var late=source.Pending!; p.Pause(); long frozen=p.PositionTicks;
+        Assert.AreEqual(11*Fixture.T/10,frozen); Assert.IsFalse(devices[^1].Running);
+        source.Hold=false; late.SetResult(Frame(Fixture.T/2)); pump.Until(()=>p.Completion.IsCompleted);
+        Assert.AreEqual(InteractivePreviewState.Paused,p.State); Assert.AreEqual(frozen,p.Frame!.Tick);
+        Assert.AreEqual(clip,source.Contributors.Last().ClipId); Assert.IsTrue(devices[^1].Disposed);
+        for(int i=0;i<5;++i)
+        {
+            p.Play(); pump.Until(()=>p.State==InteractivePreviewState.Playing); devices[^1].Advance(1600);
+            p.Pause(); frozen=p.PositionTicks; pump.Until(()=>p.Completion.IsCompleted);
+            Assert.AreEqual(frozen,p.Frame!.Tick); Assert.IsTrue(devices[^1].Disposed);
+        }
+        p.Scrub(79*Fixture.T/10); pump.Until(()=>p.Completion.IsCompleted); p.Play();
+        pump.Until(()=>p.State==InteractivePreviewState.Playing); devices[^1].Advance(4800);
+        pump.Until(()=>p.Completion.IsCompleted);
+        Assert.AreEqual(InteractivePreviewState.Stopped,p.State); Assert.AreEqual(8*Fixture.T,p.PositionTicks);
+        Assert.AreEqual(TimelineTime.FrameToTicks(239,new(30,1)),p.Frame!.Tick);
     }
     internal static PreviewContext Context(Fixture f) => PreviewContext.Create(f.Session.GetProject(), f.SequenceId).Value!;
     private static Result<RenderedVideoFrame> Frame(long tick) => Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [1, 2, 3, 255]));
