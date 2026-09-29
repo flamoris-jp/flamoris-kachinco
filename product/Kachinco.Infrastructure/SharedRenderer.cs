@@ -88,46 +88,10 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
 
     public static void Composite(byte[] output, ImmutableArray<byte> source, int width, int height, ClipAppearance appearance, CancellationToken token = default)
     {
-        if (output.Length != checked(width * height * 4) || source.Length != output.Length) throw new InvalidDataException("Invalid RGBA buffer dimensions.");
         var t = appearance.Transform;
-        if (t == Transform2D.Identity && appearance.Opacity == 1 && appearance.Blend == BlendMode.Normal)
-        {
-            bool opaque = true;
-            for (int i = 3; i < source.Length; i += 4)
-            {
-                if ((i & 65535) == 3) token.ThrowIfCancellationRequested();
-                if (source[i] != 255) { opaque = false; break; }
-            }
-            if (opaque) { source.AsSpan().CopyTo(output); return; }
-            for (int i = 0; i < source.Length; i += 4)
-            {
-                if (i % (width * 4) == 0) token.ThrowIfCancellationRequested();
-                if (source[i + 3] == 0) continue;
-                if (source[i + 3] == 255) { source.AsSpan(i, 4).CopyTo(output.AsSpan(i, 4)); continue; }
-                var mixed = BlendReference.Composite(new(output[i]/255d,output[i+1]/255d,output[i+2]/255d,output[i+3]/255d),
-                    new(source[i]/255d,source[i+1]/255d,source[i+2]/255d,source[i+3]/255d), appearance.Blend, 1);
-                output[i]=Byte(mixed.R); output[i+1]=Byte(mixed.G); output[i+2]=Byte(mixed.B); output[i+3]=Byte(mixed.A);
-            }
-            return;
-        }
-        double radians = t.RotationDegrees * Math.PI / 180, cos = Math.Cos(radians), sin = Math.Sin(radians);
-        for (int y = 0; y < height; y++)
-        {
-            token.ThrowIfCancellationRequested();
-            for (int x = 0; x < width; x++)
-            {
-                double px = x + 0.5 - t.X, py = y + 0.5 - t.Y;
-                double sx = (cos * px + sin * py) / t.ScaleX, sy = (-sin * px + cos * py) / t.ScaleY;
-                if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
-                int src = ((int)sy * width + (int)sx) * 4, dst = (y * width + x) * 4;
-                if (source[src + 3] == 0) continue;
-                var mixed = BlendReference.Composite(new(output[dst] / 255d, output[dst + 1] / 255d, output[dst + 2] / 255d, output[dst + 3] / 255d),
-                    new(source[src] / 255d, source[src + 1] / 255d, source[src + 2] / 255d, source[src + 3] / 255d), appearance.Blend, appearance.Opacity);
-                output[dst] = Byte(mixed.R); output[dst + 1] = Byte(mixed.G); output[dst + 2] = Byte(mixed.B); output[dst + 3] = Byte(mixed.A);
-            }
-        }
+        Kachinco.Native.NativeComposition.Composite(output, source.AsSpan(), width, height,
+            new(t.X, t.Y, t.ScaleX, t.ScaleY, t.RotationDegrees, appearance.Opacity, (int)appearance.Blend), token);
     }
-    private static byte Byte(double value) => (byte)Math.Clamp((int)Math.Round(value * 255, MidpointRounding.AwayFromZero), 0, 255);
 }
 
 public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPath = null) : IAudioRenderer
@@ -159,10 +123,10 @@ public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPa
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("MEDIA_MISSING", "Audio source is missing.", layer.MediaAssetId));
                 var samples = await decoder.AudioAsync(path.ResolvedPath, sourceTicks, (int)(until - from), sampleRate, channels, cancellationToken);
                 int offset = checked((int)(from - firstSample) * channels);
-                for (int i = 0; i < samples.Length; i++) mix[offset + i] += samples[i] * layer.Gain;
+                Kachinco.Native.NativeComposition.Mix(mix, samples.AsSpan(), offset, layer.Gain);
             }
             return Result<RenderedAudioBlock>.Ok(new(firstSample, sampleRate, channels,
-                ImmutableArray.CreateRange(mix.Select(x => (float)Math.Clamp(x, -1d, 1d)))));
+                System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(Kachinco.Native.NativeComposition.Finish(mix))));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)

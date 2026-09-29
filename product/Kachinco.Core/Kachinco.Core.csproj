@@ -1,1 +1,3 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../Kachinco.Native/Kachinco.Native.csproj" /></ItemGroup>
+</Project>

@@ -87,6 +87,18 @@ KN_API int32_t KN_CALL kn_decode_pcm(const uint8_t* data, uint32_t size, int32_t
 KN_API void KN_CALL kn_buffer_destroy(kn_buffer* buffer) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_size(const kn_buffer* buffer, uint32_t* size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_copy(const kn_buffer* buffer, uint8_t* output, uint32_t capacity) KN_NOEXCEPT;
+
+/* Straight-alpha encoded SDR, nearest pixel centers. Inputs borrowed only in call. */
+typedef struct kn_appearance {
+    double x, y, scale_x, scale_y, rotation, opacity;
+    int32_t blend, reserved;
+} kn_appearance;
+typedef struct kn_rgba { double r, g, b, a; } kn_rgba;
+KN_API int32_t KN_CALL kn_blend(kn_rgba backdrop, kn_rgba source, int32_t mode, double opacity, kn_rgba* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_composite_rows(uint8_t* output, const uint8_t* source, uint32_t size, int32_t width, int32_t height, const kn_appearance* appearance, int32_t first_row, int32_t row_count) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_mix_add(double* mix, uint32_t mix_count, const float* source, uint32_t source_count, uint32_t offset, double gain) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_mix_finish(const double* mix, float* output, uint32_t count) KN_NOEXCEPT;
+
 #ifdef __cplusplus
 }
 #endif
