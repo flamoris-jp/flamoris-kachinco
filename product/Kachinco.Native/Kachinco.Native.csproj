@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NativeSource>$(MSBuildThisFileDirectory)../native</NativeSource>
+    <NativeBuild>$(NativeSource)/obj/$(Configuration)</NativeBuild>
+    <NativeFileName Condition="'$(OS)' == 'Windows_NT'">Kachinco.Native.Runtime.dll</NativeFileName>
+    <NativeFileName Condition="'$(OS)' != 'Windows_NT'">libKachinco.Native.Runtime.so</NativeFileName>
+    <NativeArtifact Condition="'$(OS)' == 'Windows_NT'">$(NativeBuild)/$(Configuration)/$(NativeFileName)</NativeArtifact>
+    <NativeArtifact Condition="'$(OS)' != 'Windows_NT'">$(NativeBuild)/$(NativeFileName)</NativeArtifact>
+    <NativeGeneratorArgs Condition="'$(OS)' == 'Windows_NT'">-G &quot;Visual Studio 17 2022&quot; -A x64</NativeGeneratorArgs>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(NativeArtifact)" Link="$(NativeFileName)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildNativeRuntime" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'win-x64' and '$(RuntimeIdentifier)' != 'linux-x64'" Text="Native runtime supports win-x64 and linux-x64; cross-compilation is not configured." />
+    <Exec Command="cmake -S &quot;$(NativeSource)&quot; -B &quot;$(NativeBuild)&quot; $(NativeGeneratorArgs) -DCMAKE_BUILD_TYPE=$(Configuration)" />
+    <Exec Command="cmake --build &quot;$(NativeBuild)&quot; --config $(Configuration) --parallel 2" />
+    <Exec Command="ctest --test-dir &quot;$(NativeBuild)&quot; -C $(Configuration) --output-on-failure" />
+  </Target>
+</Project>

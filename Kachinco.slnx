@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/product/">
+    <Project Path="product/Kachinco.Native/Kachinco.Native.csproj" />
     <Project Path="product/Kachinco.Core/Kachinco.Core.csproj" />
     <Project Path="product/Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />
     <Project Path="product/Kachinco.Mcp/Kachinco.Mcp.csproj" />
