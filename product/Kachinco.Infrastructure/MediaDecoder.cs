@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -24,9 +25,8 @@ public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDec
             ["-v", "error", "-nostdin", "-ss", Seconds(sourceTicks), "-i", Path.GetFullPath(path), "-map", "0:v:0",
              "-an", "-frames:v", "1", "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0",
              "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], size, token);
-        if (bytes.Length == 0) throw new MediaEndOfStreamException("Source has no video frame at the requested time.");
-        if (bytes.Length != size) throw new InvalidDataException("Decoder returned an incomplete video frame.");
-        return ImmutableArray.CreateRange(bytes);
+        try { return ImmutableArray.CreateRange(NativeDecodedMedia.Rgba(bytes, width, height)); }
+        catch (EndOfStreamException e) { throw new MediaEndOfStreamException(e.Message); }
     }
 
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
@@ -36,15 +36,7 @@ public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDec
             ["-v", "error", "-nostdin", "-ss", Seconds(sourceTicks), "-i", Path.GetFullPath(path), "-map", "0:a:0",
              "-vn", "-af", $"aresample={rate},atrim=end_sample={count}", "-ac", channels.ToString(CultureInfo.InvariantCulture),
              "-ar", rate.ToString(CultureInfo.InvariantCulture), "-f", "f32le", "pipe:1"], size, token);
-        if (bytes.Length % (4 * channels) != 0) throw new InvalidDataException("Decoder returned partial PCM samples.");
-        var samples = new float[count * channels];
-        for (int i = 0; i < bytes.Length / 4; i++)
-        {
-            var value = BitConverter.Int32BitsToSingle(System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i * 4, 4)));
-            if (!float.IsFinite(value)) throw new InvalidDataException("Decoder returned non-finite PCM.");
-            samples[i] = value;
-        }
-        return ImmutableArray.CreateRange(samples);
+        return ImmutableArray.CreateRange(NativeDecodedMedia.Pcm(bytes, count, channels));
     }
     internal static string Seconds(long ticks) => ((decimal)ticks / TimelineTime.TicksPerSecond).ToString("0.################", CultureInfo.InvariantCulture);
 }
@@ -56,6 +48,11 @@ internal static class MediaProcess
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
         foreach (var arg in args) info.ArgumentList.Add(arg);
         return info;
+    }
+    internal static void Kill(NativeMediaProcess process)
+    {
+        try { process.Kill(); }
+        catch (ObjectDisposedException) { }
     }
     internal static void Kill(Process process)
     {
@@ -81,9 +78,7 @@ internal static class MediaProcess
         token.ThrowIfCancellationRequested();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        using var process = new Process { StartInfo = StartInfo(executable, args) };
-        process.StartInfo.RedirectStandardOutput = true;
-        process.Start();
+        using var process = NativeMediaProcess.Start(executable, args);
         using var cancellation = timeout.Token.Register(() => Kill(process));
         var error = DrainErrorAsync(process.StandardError, timeout.Token);
         try

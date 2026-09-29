@@ -7,7 +7,7 @@ namespace Kachinco.Native;
 
 public enum NativeStatus : int
 {
-    Ok = 0, InvalidArgument = 1, AbiMismatch = 2, Overflow = 3, OutOfMemory = 4, InternalError = 5
+    Ok = 0, InvalidArgument = 1, AbiMismatch = 2, Overflow = 3, OutOfMemory = 4, InternalError = 5, IoError = 6, Cancelled = 7, Timeout = 8, EndOfStream = 9, InvalidMedia = 10
 }
 
 public sealed class NativeRuntimeException(NativeStatus status, string message) : Exception(message)
@@ -40,7 +40,7 @@ public struct NativeMediaValue
 public sealed class NativeRuntime : IDisposable
 {
     public const uint AbiVersion = 1;
-    public const ulong RequiredCapabilities = 3;
+    public const ulong RequiredCapabilities = 31;
     private readonly NativeRuntimeHandle handle;
 
     private NativeRuntime(NativeRuntimeHandle handle) => this.handle = handle;
@@ -50,7 +50,7 @@ public sealed class NativeRuntime : IDisposable
         try
         {
             if (NativeMethods.AbiVersion() != AbiVersion)
-                throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH");
+                throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH: Native runtime is incompatible. Rebuild the complete application or extract a matching portable package.");
             var status = NativeMethods.Create(AbiVersion, out var handle);
             if (status != NativeStatus.Ok) { handle.Dispose(); Check(status); }
             var runtime = new NativeRuntime(handle);
@@ -59,7 +59,7 @@ public sealed class NativeRuntime : IDisposable
                 var info = runtime.GetInfo();
                 if (info.AbiVersion != AbiVersion || (info.Capabilities & RequiredCapabilities) != RequiredCapabilities ||
                     info.TicksPerSecond != 35_280_000)
-                    throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH");
+                    throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH: Native runtime is incompatible. Rebuild the complete application or extract a matching portable package.");
                 return runtime;
             }
             catch { runtime.Dispose(); throw; }

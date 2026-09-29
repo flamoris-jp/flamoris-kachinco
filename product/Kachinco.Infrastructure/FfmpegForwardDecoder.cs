@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Flamoris.Logging;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -148,7 +149,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
 
     private abstract class StreamProcess : IDisposable
     {
-        protected readonly Process Process;
+        protected readonly NativeMediaProcess Process;
         protected readonly CancellationToken Owner;
         private readonly CancellationTokenRegistration cancellation;
         private readonly CancellationTokenSource lifetime;
@@ -159,9 +160,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         {
             owner.ThrowIfCancellationRequested(); Owner = owner;
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(owner);
-            Process = new() { StartInfo = MediaProcess.StartInfo(executable, args) };
-            Process.StartInfo.RedirectStandardOutput = true;
-            Process.Start(); cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
+            Process = NativeMediaProcess.Start(executable, args);
+            cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
         public bool IsOwnedBy(CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested;
@@ -198,7 +198,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     private sealed class VideoStream : StreamProcess
     {
         private readonly long start;
-        private readonly int size;
+        private readonly int size, width, height;
         private long lastRequest = -1, lastPts = long.MinValue;
         private int frames;
         private ImmutableArray<byte> last;
@@ -211,7 +211,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 "-i", Path.GetFullPath(path), "-map", "0:v:0", "-an", "-t", "2", "-frames:v", "64",
                 "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,showinfo=checksum=0",
                 "-fps_mode", "passthrough", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], token)
-        { start = tick; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
+        { start = tick; this.width = width; this.height = height; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
         public bool Accepts(long tick, CancellationToken token) => IsOwnedBy(token) &&
             tick >= lastRequest && tick >= start && tick - start < 2 * TimelineTime.TicksPerSecond;
         public long ForwardDistance(long tick) => tick - lastRequest;
@@ -230,7 +230,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 var bytes = await ReadAsync(size, timeout.Token);
                 long pts = await timestamps.Reader.ReadAsync(timeout.Token);
                 if (pts <= lastPts) throw new InvalidDataException("Non-monotonic source video timestamps.");
-                lastPts = pts; frames++; last = ImmutableCollectionsMarshal.AsImmutableArray(bytes);
+                lastPts = pts; frames++; last = ImmutableCollectionsMarshal.AsImmutableArray(NativeDecodedMedia.Rgba(bytes, width, height));
             }
             return last;
         }
@@ -281,12 +281,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
         {
-            var bytes = await ReadAsync(count * 8, token, padPcmTail: true); var samples = new float[count * 2];
-            for (int i = 0; i < samples.Length; i++)
-            {
-                samples[i] = BitConverter.Int32BitsToSingle(System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i * 4, 4)));
-                if (!float.IsFinite(samples[i])) throw new InvalidDataException("Non-finite source PCM.");
-            }
+            var bytes = await ReadAsync(count * 8, token, padPcmTail: true);
+            var samples = NativeDecodedMedia.Pcm(bytes, count, 2);
             consumed += count; return ImmutableCollectionsMarshal.AsImmutableArray(samples);
         }
     }

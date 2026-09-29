@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -71,11 +72,10 @@ public sealed class MediaVisualizationService(string executable = "ffmpeg")
         var accumulator = new WaveformAccumulator(samples, 2048);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
-        using var process = new Process { StartInfo = MediaProcess.StartInfo(executable,
+        using var process = NativeMediaProcess.Start(executable,
             ["-v", "error", "-nostdin", "-i", Path.GetFullPath(path), "-map", "0:a:0", "-vn", "-t", FfmpegMediaDecoder.Seconds(asset.DurationTicks),
-             "-ac", "1", "-ar", "8000", "-f", "f32le", "pipe:1"]) };
-        process.StartInfo.RedirectStandardOutput = true;
-        token.ThrowIfCancellationRequested(); process.Start();
+             "-ac", "1", "-ar", "8000", "-f", "f32le", "pipe:1"]);
+        token.ThrowIfCancellationRequested();
         using var cancellation = timeout.Token.Register(() => MediaProcess.Kill(process));
         var error = MediaProcess.DrainErrorAsync(process.StandardError, timeout.Token);
         try

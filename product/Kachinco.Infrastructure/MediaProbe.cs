@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -48,23 +49,21 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         if (!File.Exists(fullPath)) return Failure("MEDIA_NOT_FOUND", "The selected media file does not exist.", path: fullPath);
         if (!MediaSourceFormats.TryGetKind(fullPath, out _)) return Failure("UNSUPPORTED_MEDIA_SOURCE", "Supported video: MOV/MP4; audio: WAV/MP3/M4A.", path: fullPath);
 
-        using var process = new Process
-        {
-            StartInfo = BuildStartInfo(configuredExecutable, fullPath),
-            EnableRaisingEvents = true
-        };
+        NativeMediaProcess process;
         try
         {
-            if (!process.Start()) return Failure("FFPROBE_START_FAILED", "ffprobe could not be started.");
+            var info = BuildStartInfo(configuredExecutable, fullPath);
+            process = NativeMediaProcess.Start(info.FileName, info.ArgumentList);
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return Failure("FFPROBE_NOT_FOUND", "ffprobe is not available. Configure FFmpeg or add ffprobe to PATH.");
         }
+        using var ownedProcess = process;
 
         using var cancellation = cancellationToken.Register(() =>
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            try { if (!process.HasExited) process.Kill(); }
             catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
         });
 
@@ -85,7 +84,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         }
         catch (InvalidDataException)
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            try { if (!process.HasExited) process.Kill(); } catch { }
             return Failure("MEDIA_PROBE_OUTPUT_TOO_LARGE", "ffprobe returned an unexpectedly large response.", path: fullPath);
         }
         catch (Exception e) when (e is IOException or InvalidOperationException)

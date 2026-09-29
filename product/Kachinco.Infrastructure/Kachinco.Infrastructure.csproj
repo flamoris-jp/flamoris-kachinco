@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="../Kachinco.Native/Kachinco.Native.csproj" />
     <ProjectReference Include="../Kachinco.Core/Kachinco.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
