@@ -28,6 +28,9 @@ extern "C" {
 #define KN_OVERFLOW INT32_C(3)
 #define KN_OUT_OF_MEMORY INT32_C(4)
 #define KN_INTERNAL_ERROR INT32_C(5)
+#define KN_IO_ERROR INT32_C(6)
+#define KN_CANCELLED INT32_C(7)
+#define KN_TIMEOUT INT32_C(8)
 
 typedef struct kn_runtime kn_runtime;
 typedef struct kn_runtime_info {
@@ -56,6 +59,14 @@ KN_API int32_t KN_CALL kn_frame_to_ticks(const kn_runtime* runtime, int64_t inde
 KN_API int32_t KN_CALL kn_frame_count(const kn_runtime* runtime, int64_t duration, int32_t numerator, int32_t denominator, int64_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_sample_to_ticks(const kn_runtime* runtime, int64_t index, int32_t sample_rate, int64_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_sample_count(const kn_runtime* runtime, int64_t duration, int32_t sample_rate, int64_t* output) KN_NOEXCEPT;
+/* Process arguments are borrowed NUL-terminated UTF-8 for the duration of start.
+   Reads never retain buffers. Dispose must cancel before racing active readers. */
+typedef struct kn_process kn_process;
+KN_API int32_t KN_CALL kn_process_start(const char* executable, const char* const* arguments, uint32_t argument_count, kn_process** output, int32_t* os_error) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_process_read(kn_process* process, uint32_t channel, uint8_t* buffer, uint32_t capacity, uint32_t timeout_ms, uint32_t* bytes_read) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_process_wait(kn_process* process, uint32_t timeout_ms, int32_t* exit_code) KN_NOEXCEPT;
+KN_API void KN_CALL kn_process_cancel(kn_process* process) KN_NOEXCEPT;
+KN_API void KN_CALL kn_process_destroy(kn_process* process) KN_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

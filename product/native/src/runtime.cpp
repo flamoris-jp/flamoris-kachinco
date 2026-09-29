@@ -62,6 +62,9 @@ const char* KN_CALL kn_status_message(int32_t status) noexcept {
     case KN_OVERFLOW: return "NATIVE_TIME_OVERFLOW";
     case KN_OUT_OF_MEMORY: return "NATIVE_OUT_OF_MEMORY";
     case KN_INTERNAL_ERROR: return "NATIVE_INTERNAL_ERROR";
+    case KN_IO_ERROR: return "NATIVE_IO_ERROR";
+    case KN_CANCELLED: return "NATIVE_CANCELLED";
+    case KN_TIMEOUT: return "NATIVE_TIMEOUT";
     default: return "NATIVE_UNKNOWN_STATUS";
     }
 }
