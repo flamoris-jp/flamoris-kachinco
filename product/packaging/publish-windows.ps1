@@ -17,4 +17,5 @@ if (-not (Test-Path $bridge) -or -not (Test-Path $core)) { throw 'Matching Core 
 if (Test-Path (Join-Path $bundle 'mcp/Kachinco.Core.dll')) { throw 'Editor authority entered bridge package.' }
 
 Copy-Item (Join-Path $repositoryRoot 'staging/windows-production.md') (Join-Path $bundle 'START-HERE.md')
+Copy-Item (Join-Path $repositoryRoot 'staging/windows-native-phase2.md') (Join-Path $bundle 'NATIVE-ACCEPTANCE.md')
 Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath (Join-Path $destination 'Kachinco-win-x64.zip') -Force

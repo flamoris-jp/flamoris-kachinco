@@ -20,7 +20,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     public const int MaximumAudioStreams = 8;
     private readonly Dictionary<long, PoolEntry<VideoStream>> videos = [];
     private readonly Dictionary<long, PoolEntry<AudioStream>> audios = [];
-    private readonly HashSet<string> randomVideoFallbacks = [];
+    private readonly NativeByteCache randomVideoFallbacks = new(0, 256);
     private readonly string executable;
     private readonly FlamorisLogger? logger;
     private readonly string role;
@@ -58,7 +58,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         string baseKey = Key(path) + $"|{width}|{height}";
-        if (randomVideoFallbacks.Contains(baseKey))
+        string fallbackKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(baseKey)));
+        if (randomVideoFallbacks.TryGet(fallbackKey, out _))
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
         RemoveExpired(videos, baseKey, stream => stream.IsOwnedBy(token));
         var selection = NativePlayback.SelectDecoder(videos.Values.Select(candidate => candidate.Stream.Candidate(candidate.Id,
@@ -79,7 +80,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             if (entry is not null && videos.Remove(entry.Id)) Close(entry.Stream, "video", entry.Id, "degraded");
-            randomVideoFallbacks.Add(baseKey);
+            randomVideoFallbacks.Put(fallbackKey, [], 0);
             logger?.Log(LogLevel.Warn, "preview.decoder", "Forward video decoder degraded to accurate random access",
                 DecoderProperties(sourceTicks, width, height, entry?.Id), exception);
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
@@ -122,6 +123,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     {
         foreach (var entry in videos.Values) Close(entry.Stream, "video", entry.Id, "dispose"); videos.Clear();
         foreach (var entry in audios.Values) Close(entry.Stream, "audio", entry.Id, "dispose"); audios.Clear();
+        randomVideoFallbacks.Dispose();
         if (ownsRandomVideoFallback && randomVideoFallback is IDisposable disposable) disposable.Dispose();
     }
     private Dictionary<string, object?> DecoderProperties(long sourceTicks, int width, int height, long? streamId = null) => new()
