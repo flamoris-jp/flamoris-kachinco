@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NativeSource>$(MSBuildThisFileDirectory)../native</NativeSource>
     <NativeBuild>$(NativeSource)/obj/$(Configuration)</NativeBuild>
     <NativeFileName Condition="'$(OS)' == 'Windows_NT'">Kachinco.Native.Runtime.dll</NativeFileName>

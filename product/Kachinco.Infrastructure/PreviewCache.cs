@@ -116,8 +116,8 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     private readonly object diagnosticsGate = new();
     private CancellationToken forwardOwner;
     private ImmutableArray<Guid> forwardClipIds = [];
-    public PreviewCache<RenderedVideoFrame> Frames { get; } = new(96 * 1024 * 1024);
-    public PreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024);
+    public NativePreviewCache<RenderedVideoFrame> Frames { get; } = new(96 * 1024 * 1024, NativePreviewPayload.Encode, NativePreviewPayload.Video);
+    public NativePreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024, NativePreviewPayload.Encode, NativePreviewPayload.Audio);
     public async ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
     {
         if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
@@ -182,7 +182,7 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     }
     public void Dispose()
     {
-        Frames.Clear(); Audio.Clear();
+        Frames.Dispose(); Audio.Dispose();
         (random as IDisposable)?.Dispose(); (video as IDisposable)?.Dispose(); (audio as IDisposable)?.Dispose();
     }
 }

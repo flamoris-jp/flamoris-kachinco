@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Flamoris.Logging;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -148,7 +149,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
 
     private abstract class StreamProcess : IDisposable
     {
-        protected readonly Process Process;
+        protected readonly NativeMediaProcess Process;
         protected readonly CancellationToken Owner;
         private readonly CancellationTokenRegistration cancellation;
         private readonly CancellationTokenSource lifetime;
@@ -159,9 +160,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         {
             owner.ThrowIfCancellationRequested(); Owner = owner;
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(owner);
-            Process = new() { StartInfo = MediaProcess.StartInfo(executable, args) };
-            Process.StartInfo.RedirectStandardOutput = true;
-            Process.Start(); cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
+            Process = NativeMediaProcess.Start(executable, args);
+            cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
         public bool IsOwnedBy(CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested;

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Kachinco.Core;
+using Kachinco.Native;
 
 namespace Kachinco.Infrastructure;
 
@@ -57,6 +58,11 @@ internal static class MediaProcess
         foreach (var arg in args) info.ArgumentList.Add(arg);
         return info;
     }
+    internal static void Kill(NativeMediaProcess process)
+    {
+        try { process.Kill(); }
+        catch (ObjectDisposedException) { }
+    }
     internal static void Kill(Process process)
     {
         try { if (!process.HasExited) process.Kill(true); }
@@ -81,9 +87,7 @@ internal static class MediaProcess
         token.ThrowIfCancellationRequested();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        using var process = new Process { StartInfo = StartInfo(executable, args) };
-        process.StartInfo.RedirectStandardOutput = true;
-        process.Start();
+        using var process = NativeMediaProcess.Start(executable, args);
         using var cancellation = timeout.Token.Register(() => Kill(process));
         var error = DrainErrorAsync(process.StandardError, timeout.Token);
         try

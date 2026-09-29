@@ -67,6 +67,19 @@ KN_API int32_t KN_CALL kn_process_read(kn_process* process, uint32_t channel, ui
 KN_API int32_t KN_CALL kn_process_wait(kn_process* process, uint32_t timeout_ms, int32_t* exit_code) KN_NOEXCEPT;
 KN_API void KN_CALL kn_process_cancel(kn_process* process) KN_NOEXCEPT;
 KN_API void KN_CALL kn_process_destroy(kn_process* process) KN_NOEXCEPT;
+typedef struct kn_cache kn_cache;
+typedef struct kn_buffer kn_buffer;
+typedef struct kn_cache_statistics { int64_t bytes, entries, hits, misses, evictions; } kn_cache_statistics;
+/* Cache byte budgets charge payload; each value may include at most 32 metadata bytes. */
+KN_API int32_t KN_CALL kn_cache_create(int64_t byte_limit, int32_t entry_limit, kn_cache** output) KN_NOEXCEPT;
+KN_API void KN_CALL kn_cache_destroy(kn_cache* cache) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_cache_put(kn_cache* cache, const char* key, const uint8_t* data, uint32_t size, int64_t charge) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_cache_get(kn_cache* cache, const char* key, kn_buffer** output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_cache_clear(kn_cache* cache) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_cache_stats(kn_cache* cache, kn_cache_statistics* output, uint32_t size) KN_NOEXCEPT;
+KN_API void KN_CALL kn_buffer_destroy(kn_buffer* buffer) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_buffer_size(const kn_buffer* buffer, uint32_t* size) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_buffer_copy(const kn_buffer* buffer, uint8_t* output, uint32_t capacity) KN_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif
