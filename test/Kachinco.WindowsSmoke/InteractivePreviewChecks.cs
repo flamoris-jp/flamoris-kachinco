@@ -33,7 +33,10 @@ internal static class InteractivePreviewChecks
                 var cold = await source.FrameAsync(context, 111 * T, quality, false, default); Require(cold.Success, "Cold scrub: " + string.Join(" / ", cold.Diagnostics));
                 double coldMs = watch.Elapsed.TotalMilliseconds; watch.Restart();
                 var warm = await source.FrameAsync(context, 111 * T, quality, false, default); double cachedMs = watch.Elapsed.TotalMilliseconds;
-                Require(ReferenceEquals(cold.Value, warm.Value), "Cached frame is reused.");
+                Require(warm.Success && cold.Value!.FrameIndex == warm.Value!.FrameIndex && cold.Value.Tick == warm.Value.Tick &&
+                    cold.Value.Width == warm.Value.Width && cold.Value.Height == warm.Value.Height &&
+                    cold.Value.Rgba8.SequenceEqual(warm.Value.Rgba8) && source.Frames.Statistics.Hits == 1 &&
+                    source.Frames.Statistics.Misses == 1, "Native cache reuses identical frame values without another decode.");
                 long bytes = 0; var cpu = Process.GetCurrentProcess().TotalProcessorTime; watch.Restart();
                 for (int i = 0; i < 60; i++)
                 {

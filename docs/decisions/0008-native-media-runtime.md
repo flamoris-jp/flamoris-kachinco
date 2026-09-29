@@ -65,7 +65,7 @@ snapshots, provenance and persistence never enter this transport serialization.
 
 Linux native execution is a glibc test-host path; closefrom spawn actions prevent
 unrelated parent file descriptors from entering codec children. Windows remains the
-supported desktop distribution. ABI 1 adds process/cache capabilities; app startup
+supported desktop distribution. ABI 1 adds process/cache/decoded-media capabilities; app startup
 rejects a stale phase-1 DLL before opening the editor.
 
 ## Validation notes

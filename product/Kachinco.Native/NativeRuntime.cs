@@ -40,7 +40,7 @@ public struct NativeMediaValue
 public sealed class NativeRuntime : IDisposable
 {
     public const uint AbiVersion = 1;
-    public const ulong RequiredCapabilities = 15;
+    public const ulong RequiredCapabilities = 31;
     private readonly NativeRuntimeHandle handle;
 
     private NativeRuntime(NativeRuntimeHandle handle) => this.handle = handle;
