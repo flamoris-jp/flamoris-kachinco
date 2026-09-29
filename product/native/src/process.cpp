@@ -107,7 +107,7 @@ int32_t KN_CALL kn_process_start(const char* executable, const char* const* argu
         SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
         std::array<owned_handle, 2> writers;
         for (size_t i = 0; i < 2; ++i) {
-            if (!CreatePipe(&process->pipes[i].value, &writers[i].value, &security, 0) ||
+            if (!CreatePipe(&process->pipes[i].value, &writers[i].value, &security, 64 * 1024) ||
                 !SetHandleInformation(process->pipes[i].value, HANDLE_FLAG_INHERIT, 0)) {
                 *os_error = static_cast<int32_t>(GetLastError()); return KN_IO_ERROR;
             }

@@ -24,6 +24,9 @@ extern "C" {
 #define KN_CAP_PROCESS UINT64_C(4)
 #define KN_CAP_CACHE UINT64_C(8)
 #define KN_CAP_DECODED_MEDIA UINT64_C(16)
+#define KN_CAP_TIMELINE UINT64_C(32)
+#define KN_CAP_COMPOSITION UINT64_C(64)
+#define KN_CAP_PLAYBACK UINT64_C(128)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -87,6 +90,63 @@ KN_API int32_t KN_CALL kn_decode_pcm(const uint8_t* data, uint32_t size, int32_t
 KN_API void KN_CALL kn_buffer_destroy(kn_buffer* buffer) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_size(const kn_buffer* buffer, uint32_t* size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_copy(const kn_buffer* buffer, uint8_t* output, uint32_t capacity) KN_NOEXCEPT;
+
+/* Straight-alpha encoded SDR, nearest pixel centers. Inputs borrowed only in call. */
+typedef struct kn_appearance {
+    double x, y, scale_x, scale_y, rotation, opacity;
+    int32_t blend, reserved;
+} kn_appearance;
+typedef struct kn_rgba { double r, g, b, a; } kn_rgba;
+KN_API int32_t KN_CALL kn_blend(kn_rgba backdrop, kn_rgba source, int32_t mode, double opacity, kn_rgba* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_composite_rows(uint8_t* output, const uint8_t* source, uint32_t size, int32_t width, int32_t height, const kn_appearance* appearance, int32_t first_row, int32_t row_count) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_mix_add(double* mix, uint32_t mix_count, const float* source, uint32_t source_count, uint32_t offset, double gain) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_mix_finish(const double* mix, float* output, uint32_t count) KN_NOEXCEPT;
+
+
+/* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting. */
+typedef struct kn_eval_item {
+    int64_t start, duration, source;
+    uint64_t id_high, id_low;
+    int32_t track, index, kind, enabled;
+    kn_appearance appearance;
+    double gain;
+    int32_t muted, track_enabled;
+} kn_eval_item;
+typedef struct kn_eval_result {
+    int32_t index, kind;
+    int64_t timeline_start, source_start, duration;
+    kn_appearance appearance;
+    double gain;
+} kn_eval_result;
+typedef struct kn_timeline kn_timeline;
+KN_API int32_t KN_CALL kn_timeline_create(int64_t duration, const kn_eval_item* items, uint32_t count, kn_timeline** output) KN_NOEXCEPT;
+KN_API void KN_CALL kn_timeline_destroy(kn_timeline* timeline) KN_NOEXCEPT;
+/* duration=0 evaluates one frame; duration>0 evaluates intersecting audio ranges. */
+KN_API int32_t KN_CALL kn_timeline_evaluate(const kn_timeline* timeline, int64_t tick, int64_t duration, kn_eval_result* output, uint32_t capacity, uint32_t* count) KN_NOEXCEPT;
+/* Future authoring seam: deterministic clip-local linear parameters; no persistence changes. */
+typedef struct kn_parameter_point { int64_t tick; double value; } kn_parameter_point;
+KN_API int32_t KN_CALL kn_parameter_at(const kn_parameter_point* points, uint32_t count, int64_t tick, double fallback, double* output) KN_NOEXCEPT;
+
+
+typedef struct kn_playback kn_playback;
+typedef struct kn_playback_ticket { int64_t generation, position, render_tick, start_sample, total_samples; } kn_playback_ticket;
+typedef struct kn_playback_step { int64_t position, video_tick, dropped; int32_t ended, present; } kn_playback_step;
+typedef struct kn_audio_step { int64_t first_sample; int32_t count, underrun, ready, resume; } kn_audio_step;
+KN_API int32_t KN_CALL kn_playback_create(kn_playback** output) KN_NOEXCEPT;
+KN_API void KN_CALL kn_playback_destroy(kn_playback* playback) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_playback_request(kn_playback* playback, int64_t duration, int32_t fps_numerator, int32_t fps_denominator, int64_t tick, int32_t play, kn_playback_ticket* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_playback_cancel(kn_playback* playback, int64_t* generation) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_playback_accept(const kn_playback* playback, int64_t generation) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_playback_clock(kn_playback* playback, int64_t generation, int64_t played_frames, int64_t* position) KN_NOEXCEPT;
+/* ready_tick=-1 means no ready video. Decisions consume at most one request. */
+KN_API int32_t KN_CALL kn_playback_video(kn_playback* playback, int64_t generation, int64_t played_frames, int32_t ready_count, int64_t ready_tick, kn_playback_step* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_playback_audio(kn_playback* playback, int64_t generation, int64_t queued_frames, kn_audio_step* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_first_sample(int64_t tick, int32_t rate, int64_t* output) KN_NOEXCEPT;
+
+
+typedef struct kn_decoder_candidate { int64_t id, used, start, last_request; int32_t consumed, eligible; } kn_decoder_candidate;
+KN_API int32_t KN_CALL kn_decoder_select(const kn_decoder_candidate* candidates, uint32_t count, int32_t video, int64_t tick, int32_t sample_count, int64_t* selected, int64_t* oldest) KN_NOEXCEPT;
+
 #ifdef __cplusplus
 }
 #endif

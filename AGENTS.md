@@ -290,3 +290,19 @@ Organization-wide repository, licensing, security, contribution, and public-rele
 - `flamoris-jp/flamoris-commons/AGENTS.md`
 
 This repository-specific `AGENTS.md` remains authoritative for product/domain rules. Where the shared policy and repository-specific rules differ, preserve the more specific product rule unless an explicit FLAMORIS-wide policy change says otherwise.
+
+## Native evaluation and playback authority (Issue #34)
+
+- ADRs 0007–0009 define the staged C++ cutover. C# EditorSession remains the only
+  persistent editing authority until #35; UI and MCP keep the same commands/history.
+- Native owns immutable timeline evaluation, shared RGBA composition/PCM mix,
+  consumed-sample playback policy, latest-wins generations and bounded decoder
+  selection. Managed async device/codec hosts and WPF caption rasterization are adapters.
+- Never restore a managed production evaluator/compositor fallback. Frozen managed
+  implementations under test are conformance oracles only.
+- Pause freezes the physical device first, cancels/joins old work and renders the
+  frozen position. Resume primes a bounded fresh queue; end displays the final frame.
+- Core now references the BCL-only Native adapter; native project snapshots never
+  mutate, serialize or become a second EditorSession.
+- Run native sanitizer contracts, managed conformance, real-codec/export, Windows
+  raster/package and shared MCP gates. Keep physical A/V acceptance explicit.

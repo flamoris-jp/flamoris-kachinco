@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../../product/Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" /></ItemGroup></Project>

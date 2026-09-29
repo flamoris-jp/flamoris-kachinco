@@ -20,7 +20,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     public const int MaximumAudioStreams = 8;
     private readonly Dictionary<long, PoolEntry<VideoStream>> videos = [];
     private readonly Dictionary<long, PoolEntry<AudioStream>> audios = [];
-    private readonly HashSet<string> randomVideoFallbacks = [];
+    private readonly NativeByteCache randomVideoFallbacks = new(0, 256);
     private readonly string executable;
     private readonly FlamorisLogger? logger;
     private readonly string role;
@@ -58,11 +58,13 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         string baseKey = Key(path) + $"|{width}|{height}";
-        if (randomVideoFallbacks.Contains(baseKey))
+        string fallbackKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(baseKey)));
+        if (randomVideoFallbacks.TryGet(fallbackKey, out _))
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
         RemoveExpired(videos, baseKey, stream => stream.IsOwnedBy(token));
-        var entry = videos.Values.Where(candidate => candidate.BaseKey == baseKey && candidate.Stream.Accepts(sourceTicks, token))
-            .OrderBy(candidate => candidate.Stream.ForwardDistance(sourceTicks)).ThenByDescending(candidate => candidate.LastUsed).FirstOrDefault();
+        var selection = NativePlayback.SelectDecoder(videos.Values.Select(candidate => candidate.Stream.Candidate(candidate.Id,
+            candidate.LastUsed, candidate.BaseKey == baseKey && candidate.Stream.IsOwnedBy(token))).ToArray(), true, sourceTicks);
+        videos.TryGetValue(selection.Selected, out var entry);
         try
         {
             if (entry is null) entry = Open();
@@ -78,7 +80,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             if (entry is not null && videos.Remove(entry.Id)) Close(entry.Stream, "video", entry.Id, "degraded");
-            randomVideoFallbacks.Add(baseKey);
+            randomVideoFallbacks.Put(fallbackKey, [], 0);
             logger?.Log(LogLevel.Warn, "preview.decoder", "Forward video decoder degraded to accurate random access",
                 DecoderProperties(sourceTicks, width, height, entry?.Id), exception);
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
@@ -100,8 +102,9 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         if (rate != 48000 || channels != 2 || count is < 1 or > 48000) throw new InvalidDataException("Invalid forward PCM request.");
         string baseKey = Key(path);
         RemoveExpired(audios, baseKey, stream => stream.IsOwnedBy(token));
-        var entry = audios.Values.Where(candidate => candidate.BaseKey == baseKey && candidate.Stream.Accepts(sourceTicks, count, token))
-            .MaxBy(candidate => candidate.LastUsed);
+        var selection = NativePlayback.SelectDecoder(audios.Values.Select(candidate => candidate.Stream.Candidate(candidate.Id,
+            candidate.LastUsed, candidate.BaseKey == baseKey && candidate.Stream.IsOwnedBy(token))).ToArray(), false, sourceTicks, count);
+        audios.TryGetValue(selection.Selected, out var entry);
         if (entry is null)
         {
             MakeRoom(audios, MaximumAudioStreams);
@@ -120,6 +123,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     {
         foreach (var entry in videos.Values) Close(entry.Stream, "video", entry.Id, "dispose"); videos.Clear();
         foreach (var entry in audios.Values) Close(entry.Stream, "audio", entry.Id, "dispose"); audios.Clear();
+        randomVideoFallbacks.Dispose();
         if (ownsRandomVideoFallback && randomVideoFallback is IDisposable disposable) disposable.Dispose();
     }
     private Dictionary<string, object?> DecoderProperties(long sourceTicks, int width, int height, long? streamId = null) => new()
@@ -136,8 +140,10 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     private void MakeRoom<T>(Dictionary<long, PoolEntry<T>> pool, int maximum) where T : StreamProcess
     {
         if (pool.Count < maximum) return;
-        var oldest = pool.MinBy(pair => pair.Value.LastUsed);
-        Close(oldest.Value.Stream, typeof(T) == typeof(VideoStream) ? "video" : "audio", oldest.Key, "lru-eviction"); pool.Remove(oldest.Key);
+        long id = NativePlayback.SelectDecoder(pool.Values.Select(entry =>
+            new NativeDecoderCandidate(entry.Id, entry.LastUsed, 0, 0, 0, 0)).ToArray(), true, 0).Oldest;
+        var oldest = pool[id];
+        Close(oldest.Stream, typeof(T) == typeof(VideoStream) ? "video" : "audio", id, "lru-eviction"); pool.Remove(id);
     }
     private sealed class PoolEntry<T>(long id, string baseKey, T stream, long lastUsed) where T : StreamProcess
     {
@@ -212,9 +218,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,showinfo=checksum=0",
                 "-fps_mode", "passthrough", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], token)
         { start = tick; this.width = width; this.height = height; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
-        public bool Accepts(long tick, CancellationToken token) => IsOwnedBy(token) &&
-            tick >= lastRequest && tick >= start && tick - start < 2 * TimelineTime.TicksPerSecond;
-        public long ForwardDistance(long tick) => tick - lastRequest;
+        public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, lastRequest, 0, eligible ? 1 : 0);
         public async Task<ImmutableArray<byte>> FrameAsync(long tick, CancellationToken token)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -277,8 +281,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         { start = tick; ErrorTask = Drain(); }
         private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime));
 
-        public bool Accepts(long tick, int count, CancellationToken token) => IsOwnedBy(token) &&
-            tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
+        public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, 0, consumed, eligible ? 1 : 0);
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
         {
             var bytes = await ReadAsync(count * 8, token, padPcmTail: true);

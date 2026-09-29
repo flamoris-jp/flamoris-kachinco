@@ -12,19 +12,42 @@ public sealed record EvaluatedFrame(Guid SequenceId, long Tick, SequenceSettings
 public sealed record AudioRangeContribution(Guid TrackId, Guid ClipId, Guid MediaAssetId,
     long TimelineStartTicks, long SourceStartTicks, long DurationTicks, double Gain);
 
-// Validates once, then keeps an immutable snapshot. Preview/export/audio share this map.
-public sealed class TimelineEvaluator
+// Immutable domain projection; native owns ordering, activity and source/parameter evaluation.
+public sealed class TimelineEvaluator : IDisposable
 {
     public Project Project { get; }
     public Sequence Sequence { get; }
-    private readonly ImmutableArray<Track> orderedTracks;
+    private readonly Kachinco.Native.NativeTimeline native;
+    private readonly (Guid TrackId, Clip? Clip, Caption? Caption)[] identities;
     private TimelineEvaluator(Project project, Sequence sequence)
     {
         Project = project; Sequence = sequence;
-        orderedTracks = [.. sequence.Tracks.Select(t => t with
-        { Clips = TimelineQueries.ListClips(t), Captions = TimelineQueries.ListCaptions(t) })];
+        var items = new List<Kachinco.Native.NativeEvaluationItem>();
+        var ids = new List<(Guid, Clip?, Caption?)>();
+        for (int trackIndex = 0; trackIndex < sequence.Tracks.Length; ++trackIndex)
+        {
+            var track = sequence.Tracks[trackIndex];
+            foreach (var clip in track.Clips)
+            {
+                var t = clip.Appearance.Transform; var id = clip.Id.ToString("N");
+                items.Add(new(clip.StartTicks, clip.DurationTicks, clip.SourceInTicks,
+                    Convert.ToUInt64(id[..16], 16), Convert.ToUInt64(id[16..], 16), trackIndex, ids.Count,
+                    (int)track.Kind, clip.Enabled ? 1 : 0,
+                    new(t.X,t.Y,t.ScaleX,t.ScaleY,t.RotationDegrees,clip.Appearance.Opacity,(int)clip.Appearance.Blend),
+                    clip.Audio.Gain, clip.Audio.Muted ? 1 : 0, track.Enabled ? 1 : 0));
+                ids.Add((track.Id, clip, null));
+            }
+            foreach (var caption in track.Captions)
+            {
+                var id = caption.Id.ToString("N");
+                items.Add(new(caption.StartTicks, caption.DurationTicks, 0,
+                    Convert.ToUInt64(id[..16],16),Convert.ToUInt64(id[16..],16), trackIndex, ids.Count, 2,
+                    caption.Enabled ? 1 : 0, new(0,0,1,1,0,1,0), 1, 0, track.Enabled ? 1 : 0));
+                ids.Add((track.Id, null, caption));
+            }
+        }
+        identities = ids.ToArray(); native = new(sequence.DurationTicks, items.ToArray());
     }
-
     public static Result<TimelineEvaluator> Create(Project project, Guid sequenceId)
     {
         var errors = ProjectValidator.Validate(project);
@@ -33,7 +56,6 @@ public sealed class TimelineEvaluator
         return sequence is null ? Result<TimelineEvaluator>.Fail(Diagnostic.Error("SEQUENCE_NOT_FOUND", "Sequence not found.", sequenceId)) :
             Result<TimelineEvaluator>.Ok(new(project, sequence));
     }
-
     public Result<EvaluatedFrame> Evaluate(long tick)
     {
         if (tick < 0 || tick >= Sequence.DurationTicks)
@@ -41,39 +63,29 @@ public sealed class TimelineEvaluator
         var video = ImmutableArray.CreateBuilder<EvaluatedVideoLayer>();
         var audio = ImmutableArray.CreateBuilder<EvaluatedAudio>();
         var captions = ImmutableArray.CreateBuilder<EvaluatedCaption>();
-        foreach (var track in orderedTracks)
+        foreach (var value in native.Evaluate(tick))
         {
-            if (!track.Enabled) continue;
-            foreach (var clip in track.Clips)
+            var id = identities[value.Index];
+            if (value.Kind == 0)
             {
-                if (!clip.Enabled || !TimelineTime.Contains(clip.StartTicks, clip.DurationTicks, tick)) continue;
-                long sourceTicks = SourceTick(clip, tick);
-                if (track.Kind == TrackKind.Video)
-                    video.Add(new(track.Id, clip.Id, clip.MediaAssetId, sourceTicks, clip.Appearance));
-                else if (track.Kind == TrackKind.Audio && !clip.Audio.Muted && clip.Audio.Gain > 0)
-                    audio.Add(new(track.Id, clip.Id, clip.MediaAssetId, sourceTicks, clip.Audio.Gain));
+                var a = value.Appearance;
+                video.Add(new(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,value.SourceStart,
+                    new(new(a.X,a.Y,a.ScaleX,a.ScaleY,a.Rotation),a.Opacity,(BlendMode)a.Blend)));
             }
-            foreach (var caption in track.Captions)
-                if (caption.Enabled && TimelineTime.Contains(caption.StartTicks, caption.DurationTicks, tick))
-                    captions.Add(new(track.Id, caption.Id, caption.Text));
+            else if (value.Kind == 1) audio.Add(new(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,value.SourceStart,value.Gain));
+            else captions.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text));
         }
-        return Result<EvaluatedFrame>.Ok(new(Sequence.Id, tick, Sequence.Settings, video.ToImmutable(), audio.ToImmutable(), captions.ToImmutable()));
+        return Result<EvaluatedFrame>.Ok(new(Sequence.Id,tick,Sequence.Settings,video.ToImmutable(),audio.ToImmutable(),captions.ToImmutable()));
     }
-
     public Result<ImmutableArray<AudioRangeContribution>> EvaluateAudioRange(long startTicks, long durationTicks)
     {
-        if (!TimelineTime.ValidRange(startTicks, durationTicks, Sequence.DurationTicks))
+        if (!TimelineTime.ValidRange(startTicks,durationTicks,Sequence.DurationTicks))
             return Result<ImmutableArray<AudioRangeContribution>>.Fail(Diagnostic.Error("INVALID_AUDIO_RANGE", "Audio range must fit the sequence.", Sequence.Id));
-        long endTicks = startTicks + durationTicks;
-        var result = ImmutableArray.CreateBuilder<AudioRangeContribution>();
-        foreach (var track in orderedTracks.Where(t => t.Enabled && t.Kind == TrackKind.Audio))
-            foreach (var clip in track.Clips.Where(c => c.Enabled && !c.Audio.Muted && c.Audio.Gain > 0))
-            {
-                long start = Math.Max(startTicks, clip.StartTicks), end = Math.Min(endTicks, clip.EndTicks);
-                if (start < end) result.Add(new(track.Id, clip.Id, clip.MediaAssetId, start, SourceTick(clip, start), end - start, clip.Audio.Gain));
-            }
-        return Result<ImmutableArray<AudioRangeContribution>>.Ok(result.ToImmutable());
+        return Result<ImmutableArray<AudioRangeContribution>>.Ok([.. native.Evaluate(startTicks,durationTicks).Select(value =>
+        {
+            var id = identities[value.Index];
+            return new AudioRangeContribution(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,value.TimelineStart,value.SourceStart,value.Duration,value.Gain);
+        })]);
     }
-
-    private static long SourceTick(Clip clip, long timelineTick) => checked(clip.SourceInTicks + (timelineTick - clip.StartTicks));
+    public void Dispose() => native.Dispose();
 }

@@ -1,0 +1,272 @@
+{
+  "cpu": "AMD EPYC 9V74, 8-vCPU quota",
+  "memory_kib": 10206508,
+  "before": [
+    {
+      "revision": "f797b4a42c4935c05b13e3af77a1d438c3157527",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 111.9955
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 1.5798
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 116.7595
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 1889.4661
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 3949.3518,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 4604.5538,
+          "bytes": 1142474
+        }
+      ]
+    },
+    {
+      "revision": "f797b4a42c4935c05b13e3af77a1d438c3157527",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 117.4119
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 2.0556
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 111.0077
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 1257.8219
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 4726.7005,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 13775.5032,
+          "bytes": 1142474
+        }
+      ]
+    },
+    {
+      "revision": "f797b4a42c4935c05b13e3af77a1d438c3157527",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 115.0256
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 1.4478
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 106.8932
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 730.1657
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 3234.0514,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 7895.2498,
+          "bytes": 1142474
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "revision": "510bd048a7e5036564fb7b11e8003b4bd73b5995",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 117.4244
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 2.302
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 105.5391
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 1106.9327
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 3225.9455,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 12338.5947,
+          "bytes": 1142474
+        }
+      ]
+    },
+    {
+      "revision": "510bd048a7e5036564fb7b11e8003b4bd73b5995",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 97.489
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 1.445
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 84.7269
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 968.6789
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 3296.7759,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 7031.7989,
+          "bytes": 1142474
+        }
+      ]
+    },
+    {
+      "revision": "510bd048a7e5036564fb7b11e8003b4bd73b5995",
+      "os": "Ubuntu 24.04.3 LTS",
+      "architecture": "X64",
+      "processors": 8,
+      "framework": ".NET 10.0.12",
+      "quality": "Quarter 480x270; export 1920x1080",
+      "fixture": "1920x1080 30fps 3s testsrc2 MOV + 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+      "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+      "results": [
+        {
+          "kind": "cold_seek",
+          "milliseconds": 98.4011
+        },
+        {
+          "kind": "cached_seek",
+          "milliseconds": 1.6853
+        },
+        {
+          "kind": "startup_frame_and_9600_pcm",
+          "milliseconds": 106.3833
+        },
+        {
+          "kind": "boundary_12_frames",
+          "milliseconds": 1815.9103
+        },
+        {
+          "kind": "sequential_180_frames_6_seconds",
+          "milliseconds": 4308.6694,
+          "cache": {
+            "Bytes": 100051200,
+            "Entries": 193,
+            "Hits": 1,
+            "Misses": 195,
+            "Evictions": 0
+          }
+        },
+        {
+          "kind": "export_30_frames_48000_stereo_samples",
+          "milliseconds": 9413.4022,
+          "bytes": 1142474
+        }
+      ]
+    }
+  ]
+}
