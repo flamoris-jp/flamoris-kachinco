@@ -9,6 +9,9 @@
 - [Project plan](project-plan.md): original long-term Clapper/Recipe vision.
 - [Windows acceptance](../staging/windows-foundation.md): manual shell checks.
 
+- [Native runtime boundary ADR](decisions/0007-native-runtime-boundary.md): ownership, ABI and portable deployment.
+- [Native media ADR](decisions/0008-native-media-runtime.md): codec processes, decoded buffers and caches.
+- [Native evaluation/playback ADR](decisions/0009-native-evaluation-playback.md): shared native runtime authority and pause correctness.
 - [Media import formats ADR](decisions/0006-media-import-formats.md): MP4/MP3/M4A, probe validation and persisted-kind compatibility.
 - [Rendering ADR](decisions/0002-production-rendering.md): shared compositor/export/playback.
 - [Live MCP migration ADR](decisions/0005-mcp-core-migration.md): Core 1.1.0, typed host, local bridge, permissions and compatibility.

@@ -59,7 +59,7 @@ int32_t KN_CALL kn_playback_request(kn_playback* p, int64_t duration, int32_t n,
     status=kn_first_sample(render,48000,&next.start); if (status != KN_OK) return status;
     status=kn_time::count(duration,48000,KN_TICKS_PER_SECOND,&next.total); if (status != KN_OK) return status;
     status=frame_index(render,n,d,&next.next_video); if (status != KN_OK) return status;
-    if (play && next.start >= next.total) { next.position=0; render=0; next.requested_tick=0; next.start=0; next.next_video=0; }
+    if (play && (next.position == duration || next.start >= next.total)) { next.position=0; render=0; next.requested_tick=0; next.start=0; next.next_video=0; }
     ++next.next_video; next.next_audio=next.start; next.play=play != 0;
     *p=next; *output={generation,next.position,render,next.start,next.total}; return KN_OK;
 }

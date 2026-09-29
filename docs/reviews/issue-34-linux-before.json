@@ -1,0 +1,44 @@
+{
+  "revision": "f797b4a42c4935c05b13e3af77a1d438c3157527",
+  "os": "Ubuntu 24.04.3 LTS",
+  "architecture": "X64",
+  "processors": 8,
+  "framework": ".NET 10.0.12",
+  "quality": "Quarter 480x270; export 1920x1080",
+  "fixture": "1920x1080 30fps 3s testsrc2 MOV \u002B 48kHz sine WAV; 220s sequence with adjacent 2s clips",
+  "note": "Real codec wall time; no physical playback/perceptual claim; same driver, fixture directory and host for both revisions",
+  "results": [
+    {
+      "kind": "cold_seek",
+      "milliseconds": 111.9955
+    },
+    {
+      "kind": "cached_seek",
+      "milliseconds": 1.5798
+    },
+    {
+      "kind": "startup_frame_and_9600_pcm",
+      "milliseconds": 116.7595
+    },
+    {
+      "kind": "boundary_12_frames",
+      "milliseconds": 1889.4661
+    },
+    {
+      "kind": "sequential_180_frames_6_seconds",
+      "milliseconds": 3949.3518,
+      "cache": {
+        "Bytes": 100051200,
+        "Entries": 193,
+        "Hits": 1,
+        "Misses": 195,
+        "Evictions": 0
+      }
+    },
+    {
+      "kind": "export_30_frames_48000_stereo_samples",
+      "milliseconds": 4604.5538,
+      "bytes": 1142474
+    }
+  ]
+}

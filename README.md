@@ -14,7 +14,7 @@ Kachinco is not intended to reproduce Premiere Pro or After Effects feature-for-
 
 The first product is deliberately narrow.
 
-- Primary implementation language: **C#**.
+- Implementation: **C++17 media/evaluation/playback runtime**, **C#/.NET 10 WPF shell and editing session** (staged migration).
 - Initial desktop target: **Windows**.
 - Project/output formats are initially limited to:
   - **1920x1080, 16:9** for normal YouTube video.
@@ -214,7 +214,7 @@ Human / ChatGPT
                      Timeline Clip
 ```
 
-The editor/application core is C#. Python is an authoring language, not the renderer itself. The renderer owns deterministic evaluation, composition, timing, blend behavior, and output.
+C++ owns the shared media, evaluation, composition and playback runtime. C# owns the WPF shell and, until the session migration, persistent editing commands. Python is an authoring language, not the renderer itself. The renderer owns deterministic evaluation, composition, timing, blend behavior, and output.
 
 Future systems such as Kinetai or AudioAnalyzer should connect through explicit integration adapters and feed normal project media/metadata/commands into Kachinco rather than bypassing the domain model.
 
@@ -250,7 +250,7 @@ For the native foundation, also install CMake supporting your Visual Studio vers
 Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
 native runtime and copies it into app/test/publish outputs. Linux headless builds
 require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
-The C# editor remains authoritative during this first native migration phase.
+C# EditorSession remains persistent editing authority through #34. Native evaluation, composition and playback policy now serve preview/export; see [ADR 0009](docs/decisions/0009-native-evaluation-playback.md).
 
 Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
 structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.

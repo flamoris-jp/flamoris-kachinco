@@ -49,7 +49,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
 
     public void SetContext(PreviewContext? value)
     {
-        if (ReferenceEquals(context, value)) return;
+        if (disposed || ReferenceEquals(context, value)) return;
         var old = context;
         long tick = ReadPositionTicks();
         if (value is not null && old is not null && playSession &&
@@ -68,7 +68,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public void Play()
     {
         if (context is null || disposed) return;
-        RequestFrame(FirstSample(PositionTicks) >= TimelineTime.SampleCount(context.Sequence.DurationTicks, 48000) ? 0 : PositionTicks, true, InteractivePreviewState.Playing);
+        RequestFrame(PositionTicks, true, InteractivePreviewState.Playing);
     }
     public void Pause()
     {
