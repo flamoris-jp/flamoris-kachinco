@@ -1,0 +1,75 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Text;
+using Kachinco.Infrastructure;
+using Kachinco.Native;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Kachinco.Tests;
+
+[TestClass]
+public sealed class NativeMediaTests
+{
+    [TestMethod]
+    public void NativeCacheMatchesExistingLruIncludingReplacementAndZeroSize()
+    {
+        var product = new PreviewCache<byte[]>(10, 2);
+        using var native = new NativeByteCache(10, 2);
+        var random = new Random(31033);
+        for (int i = 0; i < 10000; ++i)
+        {
+            string key = random.Next(5).ToString();
+            if (i % 3 == 0)
+            {
+                Assert.AreEqual(product.TryGet(key, out var expected), native.TryGet(key, out var actual));
+                if (expected is not null) CollectionAssert.AreEqual(expected, actual);
+            }
+            else
+            {
+                var bytes = new byte[random.Next(14)]; random.NextBytes(bytes);
+                product.Put(key, bytes, bytes.Length); native.Put(key, bytes, bytes.Length);
+            }
+            if (i % 31 == 0) { product.Clear(); native.Clear(); }
+            var a = product.Statistics; var b = native.Statistics;
+            Assert.AreEqual(a.Bytes, b.Bytes); Assert.AreEqual((long)a.Entries, b.Entries);
+            Assert.AreEqual(a.Hits, b.Hits); Assert.AreEqual(a.Misses, b.Misses); Assert.AreEqual(a.Evictions, b.Evictions);
+        }
+    }
+    [TestMethod]
+    public async Task NativeProcessPreservesUnicodeQuotedArgumentsAndBothPipes()
+    {
+        string python = OperatingSystem.IsWindows() ? "python" : "python3";
+        string argument = "愛乃's space \"quoted\" \\ ending\\";
+        using var process = NativeMediaProcess.Start(python,
+            ["-c", "import sys;sys.stdout.buffer.write(sys.argv[1].encode('utf-8'));sys.stderr.write('stderr');sys.exit(37)", argument]);
+        var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await process.WaitForExitAsync(deadline.Token);
+        Assert.AreEqual(argument, await stdout); Assert.AreEqual("stderr", await stderr); Assert.AreEqual(37, process.ExitCode);
+    }
+    [TestMethod]
+    public async Task NativeCancellationUnblocksReaderAndProcessFailureDoesNotReturnAHandle()
+    {
+        Assert.ThrowsExactly<Win32Exception>(() => NativeMediaProcess.Start("missing-kachinco-31033", []));
+        Assert.ThrowsExactly<ArgumentException>(() => NativeMediaProcess.Start("python", ["bad\0argument"]));
+        string python = OperatingSystem.IsWindows() ? "python" : "python3";
+        using var process = NativeMediaProcess.Start(python, ["-c", "import time;time.sleep(60)"]);
+        var reading = Task.Run(() => process.StandardOutput.ReadToEnd());
+        await Task.Delay(30); var at = Stopwatch.StartNew(); process.Kill();
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await reading.WaitAsync(TimeSpan.FromSeconds(5)));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await process.WaitForExitAsync(deadline.Token);
+        Assert.IsTrue(at.Elapsed < TimeSpan.FromSeconds(5));
+    }
+    [TestMethod]
+    public async Task NativePipesDrainBeyondOsCapacityWithoutDeadlock()
+    {
+        string python = OperatingSystem.IsWindows() ? "python" : "python3";
+        using var process = NativeMediaProcess.Start(python,
+            ["-c", "import sys;sys.stdout.write('o'*1048576);sys.stderr.write('e'*1048576)"]);
+        var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await process.WaitForExitAsync(deadline.Token);
+        Assert.AreEqual(1048576, (await stdout).Length); Assert.AreEqual(1048576, (await stderr).Length);
+    }
+}
