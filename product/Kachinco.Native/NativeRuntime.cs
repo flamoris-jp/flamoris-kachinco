@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
+
 namespace Kachinco.Native;
 
 public enum NativeStatus : int
@@ -118,7 +120,6 @@ internal static class NativeMethods
 {
     private const string Library = "Kachinco.Native.Runtime";
     [DllImport(Library, EntryPoint = "kn_abi_version", CallingConvention = CallingConvention.Cdecl)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
     internal static extern uint AbiVersion();
     [DllImport(Library, EntryPoint = "kn_status_message", CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr StatusMessage(NativeStatus status);

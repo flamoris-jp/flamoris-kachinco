@@ -55,7 +55,7 @@ evaluation or editing parity before those implementations exist.
 The dedicated managed project builds the runtime with CMake before its own build,
 and publishes/copies the library transitively to app and headless test output.
 Windows uses x64 Visual Studio Build Tools (Desktop development with C++), CMake
-3.20+, and the static MSVC runtime, avoiding a separate VC redistributable dependency.
+3.20+ supporting the installed Visual Studio version, and the static MSVC runtime, avoiding a separate VC redistributable dependency.
 Linux uses a C++17 compiler and CMake for headless conformance only. No native library
 enters the independent MCP bridge. Build directories are configuration-specific.
 
