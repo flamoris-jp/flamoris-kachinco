@@ -50,7 +50,7 @@ public sealed class NativeRuntime : IDisposable
         try
         {
             if (NativeMethods.AbiVersion() != AbiVersion)
-                throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH");
+                throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH: Native runtime is incompatible. Rebuild the complete application or extract a matching portable package.");
             var status = NativeMethods.Create(AbiVersion, out var handle);
             if (status != NativeStatus.Ok) { handle.Dispose(); Check(status); }
             var runtime = new NativeRuntime(handle);
@@ -59,7 +59,7 @@ public sealed class NativeRuntime : IDisposable
                 var info = runtime.GetInfo();
                 if (info.AbiVersion != AbiVersion || (info.Capabilities & RequiredCapabilities) != RequiredCapabilities ||
                     info.TicksPerSecond != 35_280_000)
-                    throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH");
+                    throw new NativeRuntimeException(NativeStatus.AbiMismatch, "NATIVE_ABI_MISMATCH: Native runtime is incompatible. Rebuild the complete application or extract a matching portable package.");
                 return runtime;
             }
             catch { runtime.Dispose(); throw; }

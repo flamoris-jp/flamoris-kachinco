@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(KachincoNative VERSION 1.0.0 LANGUAGES C CXX)
+if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  message(FATAL_ERROR "Native runtime supports Windows x64 and Linux/glibc test hosts")
+endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Kachinco native runtime requires a 64-bit target")
 endif()

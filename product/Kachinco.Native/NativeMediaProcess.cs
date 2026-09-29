@@ -10,6 +10,7 @@ public sealed class NativeMediaProcess : IDisposable
 {
     private readonly NativeProcessHandle handle;
     private int? exitCode;
+    private int disposed;
     public StreamReader StandardOutput { get; }
     public StreamReader StandardError { get; }
     private NativeMediaProcess(NativeProcessHandle handle)
@@ -58,7 +59,7 @@ public sealed class NativeMediaProcess : IDisposable
     public void Kill() => NativeProcessMethods.Cancel(handle);
     public void Dispose()
     {
-        if (handle.IsClosed) return;
+        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
         Kill();
         StandardOutput.Dispose(); StandardError.Dispose(); handle.Dispose();
     }
