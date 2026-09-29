@@ -6,6 +6,22 @@
 extern "C" int kn_c_header_check(void);
 #define CHECK(x) do { if (!(x)) { std::cerr << "Failed at line " << __LINE__ << ": " << #x << '\n'; std::exit(1); } } while (false)
 int main() {
+    kn_buffer* decoded = nullptr;
+    const uint8_t pixel[] = {10, 20, 30, 40};
+    CHECK(kn_decode_rgba(pixel, 4, 1, 1, &decoded) == KN_OK && decoded != nullptr);
+    kn_buffer_destroy(decoded);
+    CHECK(kn_decode_rgba(nullptr, 0, 1, 1, &decoded) == KN_END_OF_STREAM && decoded == nullptr);
+    CHECK(kn_decode_rgba(pixel, 3, 1, 1, &decoded) == KN_INVALID_MEDIA && decoded == nullptr);
+    const uint8_t pcm[] = {0, 0, 0, 63, 0, 0, 128, 190};
+    CHECK(kn_decode_pcm(pcm, 8, 2, 2, &decoded) == KN_OK);
+    uint8_t decoded_samples[16];
+    CHECK(kn_buffer_copy(decoded, decoded_samples, 16) == KN_OK);
+    CHECK(std::memcmp(pcm, decoded_samples, 8) == 0);
+    for (int i = 8; i < 16; ++i) CHECK(decoded_samples[i] == 0);
+    kn_buffer_destroy(decoded);
+    const uint8_t nan[] = {0, 0, 192, 127};
+    CHECK(kn_decode_pcm(nan, 4, 1, 1, &decoded) == KN_INVALID_MEDIA && decoded == nullptr);
+    CHECK(kn_decode_pcm(pcm, 4, 1, 2, &decoded) == KN_INVALID_MEDIA && decoded == nullptr);
     kn_cache* cache = nullptr;
     CHECK(kn_cache_create(10, 2, &cache) == KN_OK);
     const uint8_t data[] = {1, 2, 3, 4, 5};

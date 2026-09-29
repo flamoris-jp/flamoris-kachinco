@@ -31,7 +31,7 @@ int32_t KN_CALL kn_decode_pcm(const uint8_t* data, uint32_t size, int32_t sample
     if (expected > max_decoded_bytes) return KN_INVALID_ARGUMENT;
     if (size > expected || size % frame_bytes != 0) return KN_INVALID_MEDIA;
     try {
-        auto bytes = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(expected), 0);
+        auto bytes = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(expected), uint8_t{0});
         for (uint32_t i = 0; i < size; i += 4) {
             uint32_t bits = static_cast<uint32_t>(data[i]) | static_cast<uint32_t>(data[i + 1]) << 8 |
                 static_cast<uint32_t>(data[i + 2]) << 16 | static_cast<uint32_t>(data[i + 3]) << 24;

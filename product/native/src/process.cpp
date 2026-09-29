@@ -160,6 +160,8 @@ int32_t KN_CALL kn_process_start(const char* executable, const char* const* argu
         code = posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
         if (!code) code = posix_spawn_file_actions_adddup2(&actions, writers[0].value, STDOUT_FILENO);
         if (!code) code = posix_spawn_file_actions_adddup2(&actions, writers[1].value, STDERR_FILENO);
+        // Linux Product test host uses glibc: close all unrelated inherited FDs.
+        if (!code) code = posix_spawn_file_actions_addclosefrom_np(&actions, 3);
         if (!code) code = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
         if (!code) code = posix_spawnattr_setpgroup(&attributes, 0);
         if (code) { *os_error = code; return KN_IO_ERROR; }
