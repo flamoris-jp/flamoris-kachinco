@@ -65,6 +65,8 @@ const char* KN_CALL kn_status_message(int32_t status) noexcept {
     case KN_IO_ERROR: return "NATIVE_IO_ERROR";
     case KN_CANCELLED: return "NATIVE_CANCELLED";
     case KN_TIMEOUT: return "NATIVE_TIMEOUT";
+    case KN_END_OF_STREAM: return "NATIVE_END_OF_STREAM";
+    case KN_INVALID_MEDIA: return "NATIVE_INVALID_MEDIA";
     default: return "NATIVE_UNKNOWN_STATUS";
     }
 }

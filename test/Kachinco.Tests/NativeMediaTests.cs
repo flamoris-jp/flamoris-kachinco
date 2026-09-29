@@ -11,6 +11,21 @@ namespace Kachinco.Tests;
 public sealed class NativeMediaTests
 {
     [TestMethod]
+    public void NativeDecodedBuffersRejectPartialAndNonFiniteSamplesAndPadTail()
+    {
+        byte[] rgba = [1, 2, 3, 4];
+        CollectionAssert.AreEqual(rgba, NativeDecodedMedia.Rgba(rgba, 1, 1));
+        Assert.ThrowsExactly<EndOfStreamException>(() => NativeDecodedMedia.Rgba([], 1, 1));
+        Assert.ThrowsExactly<InvalidDataException>(() => NativeDecodedMedia.Rgba([1], 1, 1));
+        byte[] stereo = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(stereo, .5f);
+        System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(stereo.AsSpan(4), -.25f);
+        CollectionAssert.AreEqual(new[] { .5f, -.25f, 0f, 0f }, NativeDecodedMedia.Pcm(stereo, 2, 2));
+        Assert.ThrowsExactly<InvalidDataException>(() => NativeDecodedMedia.Pcm([0, 0, 0, 0], 1, 2));
+        System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(stereo, float.NaN);
+        Assert.ThrowsExactly<InvalidDataException>(() => NativeDecodedMedia.Pcm(stereo, 1, 2));
+    }
+    [TestMethod]
     public void NativeCacheMatchesExistingLruIncludingReplacementAndZeroSize()
     {
         var product = new PreviewCache<byte[]>(10, 2);

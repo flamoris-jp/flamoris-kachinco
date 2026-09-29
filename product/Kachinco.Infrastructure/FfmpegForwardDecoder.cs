@@ -281,12 +281,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             tick == start + TimelineTime.SampleToTicks(consumed, 48000) && consumed + count <= 96000;
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
         {
-            var bytes = await ReadAsync(count * 8, token, padPcmTail: true); var samples = new float[count * 2];
-            for (int i = 0; i < samples.Length; i++)
-            {
-                samples[i] = BitConverter.Int32BitsToSingle(System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i * 4, 4)));
-                if (!float.IsFinite(samples[i])) throw new InvalidDataException("Non-finite source PCM.");
-            }
+            var bytes = await ReadAsync(count * 8, token, padPcmTail: true);
+            var samples = NativeDecodedMedia.Pcm(bytes, count, 2);
             consumed += count; return ImmutableCollectionsMarshal.AsImmutableArray(samples);
         }
     }

@@ -7,7 +7,7 @@ namespace Kachinco.Native;
 
 public enum NativeStatus : int
 {
-    Ok = 0, InvalidArgument = 1, AbiMismatch = 2, Overflow = 3, OutOfMemory = 4, InternalError = 5, IoError = 6, Cancelled = 7, Timeout = 8
+    Ok = 0, InvalidArgument = 1, AbiMismatch = 2, Overflow = 3, OutOfMemory = 4, InternalError = 5, IoError = 6, Cancelled = 7, Timeout = 8, EndOfStream = 9, InvalidMedia = 10
 }
 
 public sealed class NativeRuntimeException(NativeStatus status, string message) : Exception(message)

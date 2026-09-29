@@ -1,4 +1,5 @@
 #include "kachinco_native.h"
+#include "buffer.hpp"
 #include <cstring>
 #include <list>
 #include <memory>
@@ -6,7 +7,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-struct kn_buffer { std::shared_ptr<const std::vector<uint8_t>> data; };
 struct cache_entry { std::string key; std::shared_ptr<const std::vector<uint8_t>> data; int64_t charge; };
 struct kn_cache {
     std::mutex gate;

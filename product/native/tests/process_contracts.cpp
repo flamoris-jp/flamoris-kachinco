@@ -46,6 +46,12 @@ int main(int argc, char** argv) {
         CHECK(out == arguments[1] && err == "stderr");
         CHECK(kn_process_wait(process, 0, &exit) == KN_OK && exit == 37);
         kn_process_destroy(process);
+#ifdef _WIN32
+        if (i == 0 || i == 4 || i == 31) {
+            DWORD count = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &count));
+            std::cout << "Handle count after iteration " << i << ": " << count << std::endl;
+        }
+#endif
     }
     const char* filling[] = {"--fill"};
     CHECK(kn_process_start(argv[0], filling, 1, &process, &os_error) == KN_OK);
@@ -67,6 +73,7 @@ int main(int argc, char** argv) {
     CHECK(std::chrono::steady_clock::now() - at < std::chrono::seconds(5));
 #ifdef _WIN32
     DWORD final_handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &final_handles));
+    std::cout << "Initial handles: " << initial_handles << ", final handles: " << final_handles << std::endl;
     CHECK(final_handles <= initial_handles + 2);
 #endif
     std::cout << "Native process quoting/streams/exit/cancellation/lifetime: PASS\n";

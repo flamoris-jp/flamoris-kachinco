@@ -89,7 +89,12 @@ public sealed class InteractiveCodecTests
             Assert.IsTrue(at.Success, string.Join(";", at.Diagnostics));
             Assert.AreEqual(boundary, at.Value!.Tick);
             Assert.IsFalse(before.Value!.Rgba8.SequenceEqual(at.Value.Rgba8), "The exact boundary must evaluate the destination clip.");
-            Assert.AreSame(at.Value, warm.Value, "The composed destination frame should use the cache on a repeated request.");
+            // Native cache owns the payload; managed projection identity is not cache authority.
+            Assert.IsTrue(warm.Success, string.Join(";", warm.Diagnostics));
+            Assert.AreEqual(at.Value.FrameIndex, warm.Value!.FrameIndex);
+            Assert.AreEqual(at.Value.Tick, warm.Value.Tick);
+            Assert.AreEqual(at.Value.Width, warm.Value.Width); Assert.AreEqual(at.Value.Height, warm.Value.Height);
+            Assert.IsTrue(at.Value.Rgba8.SequenceEqual(warm.Value.Rgba8), "Cached native pixels must be identical.");
             Assert.AreEqual(1L, source.Frames.Statistics.Hits);
             Assert.AreEqual(2L, source.Frames.Statistics.Misses);
             Assert.AreEqual(2L, forward.ProcessStarts, "Changing media opens one independent forward decoder per clip.");

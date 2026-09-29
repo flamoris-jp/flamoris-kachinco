@@ -33,6 +33,8 @@ extern "C" {
 #define KN_IO_ERROR INT32_C(6)
 #define KN_CANCELLED INT32_C(7)
 #define KN_TIMEOUT INT32_C(8)
+#define KN_END_OF_STREAM INT32_C(9)
+#define KN_INVALID_MEDIA INT32_C(10)
 
 typedef struct kn_runtime kn_runtime;
 typedef struct kn_runtime_info {
@@ -79,6 +81,8 @@ KN_API int32_t KN_CALL kn_cache_put(kn_cache* cache, const char* key, const uint
 KN_API int32_t KN_CALL kn_cache_get(kn_cache* cache, const char* key, kn_buffer** output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_cache_clear(kn_cache* cache) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_cache_stats(kn_cache* cache, kn_cache_statistics* output, uint32_t size) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_decode_rgba(const uint8_t* data, uint32_t size, int32_t width, int32_t height, kn_buffer** output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_decode_pcm(const uint8_t* data, uint32_t size, int32_t sample_count, int32_t channels, kn_buffer** output) KN_NOEXCEPT;
 KN_API void KN_CALL kn_buffer_destroy(kn_buffer* buffer) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_size(const kn_buffer* buffer, uint32_t* size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_buffer_copy(const kn_buffer* buffer, uint8_t* output, uint32_t capacity) KN_NOEXCEPT;
