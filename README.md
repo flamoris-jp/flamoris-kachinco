@@ -246,6 +246,12 @@ See [Windows production workflow and limitations](staging/windows-production.md)
 ### Build and test
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
+For the native foundation, also install CMake supporting your Visual Studio version (minimum 3.20) and Visual Studio 2022 or newer Build
+Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
+native runtime and copies it into app/test/publish outputs. Linux headless builds
+require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
+The C# editor remains authoritative during this first native migration phase.
+
 Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
 structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.
 On Windows:

@@ -10,6 +10,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Editor publish failed.' }
 & dotnet publish (Join-Path $repositoryRoot 'product/Kachinco.Mcp/Kachinco.Mcp.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $bundle 'mcp')
 if ($LASTEXITCODE -ne 0) { throw 'MCP bridge publish failed.' }
 if (-not (Test-Path (Join-Path $bundle 'Flamoris.Mcp.Wpf.dll'))) { throw 'Shared MCP UI runtime missing.' }
+if (-not (Test-Path (Join-Path $bundle 'Kachinco.Native.Runtime.dll'))) { throw 'Native runtime missing from portable package.' }
 $bridge = Join-Path $bundle 'mcp/Flamoris.Mcp.Bridge.exe'
 $core = Join-Path $bundle 'mcp/Flamoris.Mcp.Core.dll'
 if (-not (Test-Path $bridge) -or -not (Test-Path $core)) { throw 'Matching Core bridge runtime missing.' }

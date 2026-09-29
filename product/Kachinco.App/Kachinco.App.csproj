@@ -6,6 +6,7 @@
     <OutputType>WinExe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Kachinco.Native/Kachinco.Native.csproj" />
     <ProjectReference Include="../Kachinco.Core/Kachinco.Core.csproj" />
     <ProjectReference Include="../Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />
   </ItemGroup>

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Flamoris.Logging;
 using Kachinco.Infrastructure;
+using Kachinco.Native;
 
 namespace Kachinco.App;
 
@@ -21,6 +22,8 @@ public partial class App : Application
                 ["version"] = typeof(App).Assembly.GetName().Version?.ToString(),
                 ["argumentsCount"] = e.Args.Length,
             });
+            using (var runtime = NativeRuntime.Create())
+                logger.Info("app.native", "Native runtime verified", new Dictionary<string, object?> { ["abi"] = runtime.GetInfo().AbiVersion });
             base.OnStartup(e);
             MainWindow = new MainWindow(logger);
             MainWindow.Show();
@@ -28,6 +31,7 @@ public partial class App : Application
         catch (Exception exception)
         {
             logger.Error("app.startup", "Application startup failed", exception);
+            MessageBox.Show(exception.Message, "Kachinco startup failed", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
         }
     }
