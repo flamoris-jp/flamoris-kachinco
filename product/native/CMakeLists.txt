@@ -16,6 +16,8 @@ target_compile_definitions(kachinco_native PRIVATE KN_BUILD)
 set_target_properties(kachinco_native PROPERTIES OUTPUT_NAME "Kachinco.Native.Runtime" CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 if(MSVC)
   target_compile_options(kachinco_native PRIVATE /W4 /WX /EHsc /fp:strict)
+  # Runtime and linked native contracts share UTF-8 source and string literals.
+  target_compile_options(kachinco_native PUBLIC /utf-8)
 else()
   target_compile_options(kachinco_native PRIVATE -Wall -Wextra -Wpedantic -Werror -ffp-contract=off)
 endif()

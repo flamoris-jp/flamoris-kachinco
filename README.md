@@ -263,13 +263,43 @@ checklists. FFmpeg/ffprobe and Recipe Python remain external prerequisites.
 
 Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
 structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.
-On Windows:
+On Windows, confirm CMake is available before building (restart PowerShell after
+installing tools so it picks up the updated PATH):
+
+```powershell
+cmake --version
+```
+
+If the C++ toolchain is unavailable, open Visual Studio Installer, modify Build
+Tools and install **Desktop development with C++**, including the MSVC x64/x86
+build tools and a Windows SDK. You can check `cl` in **Developer PowerShell for
+VS 2022** or the matching version. A Visual Studio CMake generator can detect the
+installed toolchain even when `cl` is not on a regular PowerShell PATH.
+
+Build from the repository root:
 
 ```powershell
 dotnet build Kachinco.slnx -c Release
 dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release
 dotnet run --project product/Kachinco.App/Kachinco.App.csproj
 ```
+
+If CMake configuration previously failed before the C++ toolchain was installed,
+its cached configuration may still prevent detection (`CMAKE_C_COMPILER not set`
+or `CMAKE_CXX_COMPILER not set`). From the repository root, remove only the
+native Release build directory and retry:
+
+```powershell
+if (Test-Path .\product\native\obj\Release) {
+    Remove-Item -Recurse -Force .\product\native\obj\Release
+}
+dotnet build Kachinco.slnx -c Release
+```
+
+For Debug builds, use `product/native/obj/Debug` instead. These directories contain
+generated native build files; the source files remain in `product/native/src`.
+MSVC builds explicitly use UTF-8 for source and execution strings, including
+native test targets, so Unicode literals do not depend on the Windows code page.
 
 The headless test project runs without WPF or private media; real codec tests
 require FFmpeg/ffprobe and Recipe tests require Python 3.
