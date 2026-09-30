@@ -61,7 +61,9 @@ json encode_file(const json& p) {
 json decode_file(const std::string& raw) {
     auto first=parse(raw,false);
     if(!first.is_object()||!first.contains("schemaVersion")||!first.at("schemaVersion").is_number_integer()) throw rejected{error("INVALID_ENVELOPE","An integer schemaVersion is required.")};
-    auto schema=i32(first.at("schemaVersion"));
+    int32_t schema;
+    try { schema=i32(first.at("schemaVersion")); }
+    catch(...) { throw rejected{error("INVALID_ENVELOPE","An integer schemaVersion is required.")}; }
     if(schema!=1&&schema!=2) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
     auto root=parse(raw);
     if(schema==1) fields(root,{"format","schemaVersion","timebase","project"}); else fields(root,{"format","schemaVersion","timebase","project","authoring","generatedAssets"});

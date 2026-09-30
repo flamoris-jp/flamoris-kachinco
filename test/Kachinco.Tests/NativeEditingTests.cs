@@ -116,7 +116,7 @@ public sealed class NativeEditingTests
         Assert.IsTrue(ProjectJson.Deserialize(old).Success);Assert.IsTrue(ManagedProjectJsonOracle.Deserialize(current).Success);
         var v1=JsonNode.Parse(old)!;v1["schemaVersion"]=1;v1.AsObject().Remove("authoring");v1.AsObject().Remove("generatedAssets");
         Assert.IsTrue(ProjectJson.Deserialize(v1.ToJsonString()).Success);
-        string[] inputs=[old,current,v1.ToJsonString(),"{}","null","[]","{","{\"schemaVersion\":99}",old.Replace("\"schemaVersion\": 2","\"schemaVersion\": 2,\"schemaVersion\": 2"),old.Replace("\"35280000\"","35280000"),old.Replace("\"Mov\"","0")];
+        string[] inputs=[old,current,v1.ToJsonString(),"{}","null","[]","{","{\"schemaVersion\":99}","{\"schemaVersion\":2147483648}",old.Replace("\"schemaVersion\": 2","\"schemaVersion\": 2,\"schemaVersion\": 2"),old.Replace("\"35280000\"","35280000"),old.Replace("\"Mov\"","0")];
         foreach(var input in inputs)
         {
             var a=ProjectJson.Deserialize(input);var b=ManagedProjectJsonOracle.Deserialize(input);
