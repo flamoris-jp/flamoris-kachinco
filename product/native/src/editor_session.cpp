@@ -5,9 +5,13 @@
 #include <memory>
 #include <vector>
 using kn_editor::json;
+struct history_entry {
+    json backward,forward;
+};
+using history_ptr=std::shared_ptr<const history_entry>;
 struct editor_state {
     std::shared_ptr<const json> project=std::make_shared<const json>(nullptr);
-    std::vector<std::shared_ptr<const json>> undo,redo;
+    std::vector<history_ptr> undo,redo;
     int64_t revision=0,document_generation=0;
 };
 struct kn_editor_session {
@@ -21,7 +25,7 @@ struct kn_editor_session {
 namespace {
 json fail(int64_t revision,const std::string& code,const std::string& message) {return {{"success",false},{"revision",revision},{"diagnostics",json::array({kn_editor::error(code,message)})}};}
 json result(int64_t revision,const json& diagnostics) {return {{"success",diagnostics.empty()},{"revision",revision},{"diagnostics",diagnostics}};}
-void push(std::vector<std::shared_ptr<const json>>& values,const std::shared_ptr<const json>& value,int32_t limit) {values.push_back(value);if(values.size()>static_cast<size_t>(limit)) values.erase(values.begin());}
+void push(std::vector<history_ptr>& values,const history_ptr& value,int32_t limit) {values.push_back(value);if(values.size()>static_cast<size_t>(limit)) values.erase(values.begin());}
 json identity(const json& p) {return p.is_null()?json(nullptr):p.at("id");}
 void buffer(const json& response,kn_buffer** output) {
     auto text=response.dump(); if(text.size()>128*1024*1024) throw std::length_error("response");
@@ -45,7 +49,7 @@ json prepare(kn_editor_session& session,const json& request) {
         if(dry) return result(revision,json::array());
     }
     else if(op=="replace") {candidate=request.at("project");auto errors=candidate.is_null()?json::array():validate(candidate);if(!errors.empty()) return result(revision,errors);}
-    else if(op=="undo"||op=="redo") {auto& from=op=="undo"?state.undo:state.redo;if(from.empty()) return fail(revision,"HISTORY_EMPTY","No history entry available.");candidate=*from.back();}
+    else if(op=="undo"||op=="redo") {auto& from=op=="undo"?state.undo:state.redo;if(from.empty()) return fail(revision,"HISTORY_EMPTY","No history entry available.");candidate=state.project->patch(op=="undo"?from.back()->backward:from.back()->forward);}
     else return fail(revision,"INVALID_BATCH","Batch is required.");
     if(revision==INT64_MAX) return fail(revision,"REVISION_OVERFLOW","Start a new session.");
     if(session.transaction==INT64_MAX) return fail(revision,"REVISION_OVERFLOW","Start a new session.");
@@ -53,8 +57,11 @@ json prepare(kn_editor_session& session,const json& request) {
     bool changed=op=="replace"||identity(candidate)!=identity(*state.project);
     if(changed) { if(state.document_generation==INT64_MAX) return fail(revision,"REVISION_OVERFLOW","Start a new session."); ++next->document_generation; }
     if(op=="replace") {next->undo.clear();next->redo.clear();}
-    else if(op=="execute") {push(next->undo,state.project,session.history_limit);next->redo.clear();}
-    else {auto& from=op=="undo"?next->undo:next->redo;auto& to=op=="undo"?next->redo:next->undo;push(to,state.project,session.history_limit);from.pop_back();}
+    // Keep only reversible deltas in history. Unchanged captions, recipes and media
+    // are not retained once per revision. Preparation still owns a full candidate;
+    // neither the candidate nor history becomes visible until the commit swap.
+    else if(op=="execute") {auto entry=std::make_shared<const history_entry>(history_entry{json::diff(candidate,*state.project),json::diff(*state.project,candidate)});push(next->undo,entry,session.history_limit);next->redo.clear();}
+    else {auto& from=op=="undo"?next->undo:next->redo;auto& to=op=="undo"?next->redo:next->undo;push(to,from.back(),session.history_limit);from.pop_back();}
     next->project=std::make_shared<const json>(std::move(candidate));next->revision=revision+1;
     auto response=result(revision,json::array());response["transactionId"]=++session.transaction;response["documentChanged"]=changed;session.pending=std::move(next);return response;
 }
