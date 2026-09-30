@@ -183,6 +183,7 @@ json apply(json p,const json& request) {
     else if(type=="UpdateClapper"||type=="DeleteClapper"||type=="UpdateRecipe") {
         bool clapper=type!="UpdateRecipe"; auto& values=s[clapper?"clappers":"recipes"];
         const json& value=field(c,clapper?"clapper":"recipe");
+        if(type!="DeleteClapper"&&value.is_null()&&values.empty()) reject(clapper?"CLAPPER_NOT_FOUND":"RECIPE_NOT_FOUND",clapper?"Clapper not found.":"Recipe not found.");
         if(type!="DeleteClapper"&&value.is_null()) reject(clapper?"INVALID_CLAPPER":"INVALID_RECIPE",clapper?"Clapper required.":"Recipe required.");
         auto index=find(values,type=="DeleteClapper"?c.at("clapperId"):value.at("id"),clapper?"CLAPPER_NOT_FOUND":"RECIPE_NOT_FOUND",clapper?"Clapper not found.":"Recipe not found.",false);
         if(type=="DeleteClapper") values.erase(values.begin()+static_cast<json::difference_type>(index));

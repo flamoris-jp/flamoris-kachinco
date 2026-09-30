@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Kachinco.Native;
 
 namespace Kachinco.Core;
@@ -11,11 +12,23 @@ public static class NativeProjectCodec
     internal static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        IgnoreReadOnlyProperties = true,
+        TypeInfoResolver = CreateResolver(),
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         MaxDepth = 64,
         Converters = { new ImmutableWireConverterFactory() }
     };
+    private static IJsonTypeInfoResolver CreateResolver()
+    {
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(info =>
+        {
+            if (info.Type == typeof(Clip))
+                foreach (var property in info.Properties.Where(p => p.Name is "endTicks" or "sourceOutTicks").ToArray()) info.Properties.Remove(property);
+            if (info.Type == typeof(FrameRate))
+                foreach (var property in info.Properties.Where(p => p.Name == "isValid").ToArray()) info.Properties.Remove(property);
+        });
+        return resolver;
+    }
     internal static JsonElement Element(object? value) => value is null ? JsonSerializer.SerializeToElement<object?>(null, Options) :
         JsonSerializer.SerializeToElement(value, value.GetType(), Options);
     internal static JsonElement Request(object value) => JsonSerializer.Deserialize<JsonElement>(
@@ -29,6 +42,11 @@ public static class NativeProjectCodec
     public static Result<Project> Deserialize(string? text)
     {
         var result = Request(new { action = "deserialize", text });
+        return new(result.GetProperty("value").Deserialize<Project>(Options), Diagnostics(result));
+    }
+    internal static Result<Project> ProjectCommands(Project project, params EditCommand[] commands)
+    {
+        var result = Request(new { action = "project", project = Element(project), commands = commands.Select(c => new { type = c.GetType().Name, value = Element(c) }).ToArray() });
         return new(result.GetProperty("value").Deserialize<Project>(Options), Diagnostics(result));
     }
     internal static ImmutableArray<Diagnostic> Validate(Project? project) => Diagnostics(Request(new { action = "validate", project = Element(project) }));

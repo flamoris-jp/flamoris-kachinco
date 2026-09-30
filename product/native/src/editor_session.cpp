@@ -72,6 +72,12 @@ int32_t KN_CALL kn_editor_request(kn_editor_session* session,const uint8_t* data
     try {
         const auto request=kn_editor::parse(std::string(reinterpret_cast<const char*>(data),size));
         auto action=request.at("action").get<std::string>();
+        if(action=="project") {
+            json candidate=request.at("project"),errors=json::array();
+            try {for(const auto& command:request.at("commands")) {candidate=kn_editor::apply(std::move(candidate),command);errors=kn_editor::validate(candidate);if(!errors.empty())break;}}
+            catch(const kn_editor::rejected& e){errors.push_back(e.diagnostic);}catch(const std::overflow_error&){errors.push_back(kn_editor::error("TIME_OVERFLOW","Time arithmetic exceeds the supported integer range."));}
+            buffer({{"value",errors.empty()?candidate:json(nullptr)},{"diagnostics",errors}},output);return KN_OK;
+        }
         if(action=="validate") {buffer({{"diagnostics",kn_editor::validate(request.at("project"))}},output);return KN_OK;}
         if(action=="serialize"||action=="deserialize") {
             json value=nullptr,errors=json::array();

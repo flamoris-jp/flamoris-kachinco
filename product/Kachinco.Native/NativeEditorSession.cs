@@ -23,7 +23,7 @@ public sealed class NativeEditorSession : IDisposable
             NativeEditorMethods.Request(handle, data, checked((uint)data.Length), out buffer);
         using (buffer)
         {
-            NativeMediaProcess.Check(status);
+            if (status != NativeStatus.Ok) throw new NativeRuntimeException(status, NativeRuntime.StatusMessage(status));
             NativeMediaProcess.Check(NativeCacheMethods.Size(buffer, out uint size));
             byte[] response = new byte[checked((int)size)];
             NativeMediaProcess.Check(NativeCacheMethods.Copy(buffer, response, size));
