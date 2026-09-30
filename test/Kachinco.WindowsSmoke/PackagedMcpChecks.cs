@@ -378,7 +378,9 @@ internal static partial class PackagedMcpChecks
                     if (main is null) return false;
                     control = main.FindFirst(TreeScope.Descendants,
                         new PropertyCondition(AutomationElement.AutomationIdProperty, id));
-                    return control is not null && (!enabled || control.Current.IsEnabled);
+                    if (control is null) return false;
+                    _ = control.Current.ProcessId; // Force a liveness read before returning a UIA element.
+                    return !enabled || control.Current.IsEnabled;
                 }
                 catch (ElementNotAvailableException)
                 {
@@ -429,7 +431,6 @@ internal static partial class PackagedMcpChecks
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
     private static async Task<string> Connection(int processId)
     {
-        var main = AutomationElement.FromHandle(Process.GetProcessById(processId).MainWindowHandle);
         var opening = Menu(processId, "McpMenu", "McpSettingsMenu");
         AutomationElement? edit = null;
         try
