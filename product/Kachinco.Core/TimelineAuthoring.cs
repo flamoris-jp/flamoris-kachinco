@@ -80,8 +80,7 @@ public static class TimelineSnapping
     public static long QuantizeToFrame(long ticks, FrameRate frameRate)
     {
         if (ticks < 0 || !frameRate.IsValid) throw new ArgumentOutOfRangeException(nameof(ticks));
-        long frameIndex = TimelineTime.RoundHalfUp((BigInteger)ticks * frameRate.Numerator,
-            (BigInteger)TimelineTime.TicksPerSecond * frameRate.Denominator);
+        long frameIndex = TimelineTime.TicksToFrame(ticks, frameRate);
         return TimelineTime.FrameToTicks(frameIndex, frameRate);
     }
 }

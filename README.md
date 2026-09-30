@@ -14,7 +14,7 @@ Kachinco is not intended to reproduce Premiere Pro or After Effects feature-for-
 
 The first product is deliberately narrow.
 
-- Implementation: **C++17 media/evaluation/playback runtime**, **C#/.NET 10 WPF shell and editing session** (staged migration).
+- Implementation: **C++17 editor/media/evaluation/playback engine**, **C#/.NET 10 WPF shell and desktop/MCP adapters**.
 - Initial desktop target: **Windows**.
 - Project/output formats are initially limited to:
   - **1920x1080, 16:9** for normal YouTube video.
@@ -220,14 +220,16 @@ Future systems such as Kinetai or AudioAnalyzer should connect through explicit 
 
 ## Repository status
 
-**The Issue #5 production slice is implemented on the feature branch for review.**
+**The production slice and native engine migration are implemented on reviewed main.**
+See the final migration audit and post-migration Windows acceptance checklist;
+automated coverage does not claim physical A/V signoff.
 It extends the reviewed Phase 0/1 foundation with:
 
 - full-length media-bin drops, atomic sequence extension, timeline-local navigation;
 - shared MOV/MP4 and WAV/MP3/M4A decoding, Normal/Screen RGBA composition and stereo audio mixing;
 - render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
 - SRT round trips, caption editing and shared outlined Japanese text rendering;
-- Flamoris.Mcp.Core 1.1.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
+- Flamoris.Mcp.Core 1.2.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
 - named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
 - alpha MOV Recipe clips with source/output hashes and explicit regeneration;
 - self-contained Windows portable publishing and automated Windows raster checks.
@@ -246,11 +248,18 @@ See [Windows production workflow and limitations](staging/windows-production.md)
 ### Build and test
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
-For the native foundation, also install CMake supporting your Visual Studio version (minimum 3.20) and Visual Studio 2022 or newer Build
+For the native engine, also install CMake supporting your Visual Studio version (minimum 3.20) and Visual Studio 2022 or newer Build
 Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
 native runtime and copies it into app/test/publish outputs. Linux headless builds
 require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
-C# EditorSession remains persistent editing authority through #34. Native evaluation, composition and playback policy now serve preview/export; see [ADR 0009](docs/decisions/0009-native-evaluation-playback.md).
+One native EditorSession owns commands, validation, history and v1/v2 persistence.
+C# exposes immutable queries and desktop/MCP adapters; canonical time and shared
+preview/export evaluation/composition are native. See [ADR 0010](docs/decisions/0010-native-editing-authority.md)
+and the [final audit](docs/reviews/issue-36-native-audit.md).
+Publish on Windows with `./product/packaging/publish-windows.ps1`; extract the
+complete matching ZIP. Missing/incompatible native components fail startup with
+an actionable diagnostic. Packages include BUILD-INFO.txt, licenses and acceptance
+checklists. FFmpeg/ffprobe and Recipe Python remain external prerequisites.
 
 Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
 structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.

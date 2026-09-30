@@ -40,7 +40,7 @@ int32_t KN_CALL kn_runtime_get_info(const kn_runtime* runtime, kn_runtime_info* 
     if (!output || output_size != sizeof(*output)) return KN_INVALID_ARGUMENT;
     *output = {};
     if (!runtime) return KN_INVALID_ARGUMENT;
-    *output = {runtime->abi, 0, KN_CAP_TIME | KN_CAP_VALUE | KN_CAP_PROCESS | KN_CAP_CACHE | KN_CAP_DECODED_MEDIA | KN_CAP_TIMELINE | KN_CAP_COMPOSITION | KN_CAP_PLAYBACK | KN_CAP_EDITOR | KN_CAP_PROJECT_CODEC, KN_TICKS_PER_SECOND};
+    *output = {runtime->abi, 0, KN_CAP_TIME | KN_CAP_VALUE | KN_CAP_PROCESS | KN_CAP_CACHE | KN_CAP_DECODED_MEDIA | KN_CAP_TIMELINE | KN_CAP_COMPOSITION | KN_CAP_PLAYBACK | KN_CAP_EDITOR | KN_CAP_PROJECT_CODEC | KN_CAP_TIME_QUERIES, KN_TICKS_PER_SECOND};
     return KN_OK;
 }
 int32_t KN_CALL kn_value_roundtrip(const kn_runtime* runtime, const kn_media_value* input, uint32_t input_size, kn_media_value* output, uint32_t output_size) noexcept {
@@ -50,11 +50,24 @@ int32_t KN_CALL kn_value_roundtrip(const kn_runtime* runtime, const kn_media_val
     *output = *input;
     return KN_OK;
 }
+int32_t KN_CALL kn_frame_rate_is_valid(const kn_runtime* runtime, int32_t numerator, int32_t denominator, int32_t* output) noexcept {
+    if (!output) return KN_INVALID_ARGUMENT;
+    *output = 0;
+    if (!runtime) return KN_INVALID_ARGUMENT;
+    *output = valid_fps(numerator, denominator) ? 1 : 0;
+    return KN_OK;
+}
 int32_t KN_CALL kn_frame_to_ticks(const kn_runtime* runtime, int64_t index, int32_t numerator, int32_t denominator, int64_t* output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;
     *output = 0;
     if (!runtime || index < 0 || !valid_fps(numerator, denominator)) return KN_INVALID_ARGUMENT;
     return rounded(index, static_cast<uint64_t>(KN_TICKS_PER_SECOND) * static_cast<uint32_t>(denominator), static_cast<uint32_t>(numerator), output);
+}
+int32_t KN_CALL kn_ticks_to_frame(const kn_runtime* runtime, int64_t tick, int32_t numerator, int32_t denominator, int64_t* output) noexcept {
+    if (!output) return KN_INVALID_ARGUMENT;
+    *output = 0;
+    if (!runtime || tick < 0 || !valid_fps(numerator, denominator)) return KN_INVALID_ARGUMENT;
+    return rounded(tick, static_cast<uint32_t>(numerator), static_cast<uint64_t>(KN_TICKS_PER_SECOND) * static_cast<uint32_t>(denominator), output);
 }
 int32_t KN_CALL kn_frame_count(const kn_runtime* runtime, int64_t duration, int32_t numerator, int32_t denominator, int64_t* output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;

@@ -58,7 +58,7 @@ including fallback sinks.
 Routine command/query detail stays at `debug`. Major lifecycle events use
 `info`; recoverable transport, permission and revision conflicts use `warn`;
 failed operations and unexpected exceptions use `error`.
-Core 1.1.0 MCP diagnostics use its curated `info` boundary events with transport,
+Core 1.2.0 MCP diagnostics use its curated `info` boundary events with transport,
 outcome, tool name and duration only; stale guards appear as `stale_revision`.
 Application-local transport diagnostics and request/exception logging were removed.
 

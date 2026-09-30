@@ -1,6 +1,7 @@
 # ADR 0007: staged native runtime and C ABI
 
-Status: proposed for Issue #32; accepted when its PR is merged.
+Status: accepted in merged #32. Phase-specific authority statements below are
+historical staging context, superseded by ADRs 0010–0011 for the final engine.
 
 ## Authority and migration order
 

@@ -81,8 +81,7 @@ public partial class MainWindow
         if (sequence is null) return;
         playback.Pause();
         var fps = sequence.Settings.FrameRate;
-        long frame = TimelineTime.RoundHalfUp((System.Numerics.BigInteger)Timeline.PlayheadTicks * fps.Numerator,
-            (System.Numerics.BigInteger)TimelineTime.TicksPerSecond * fps.Denominator);
+        long frame = TimelineTime.TicksToFrame(Timeline.PlayheadTicks, fps);
         frame = Math.Clamp(frame + direction, 0, Math.Max(0, TimelineTime.FrameCount(sequence.DurationTicks, fps) - 1));
         Timeline.SetCursorTicks(TimelineTime.FrameToTicks(frame, fps));
     }

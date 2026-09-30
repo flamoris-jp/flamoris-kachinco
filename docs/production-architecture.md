@@ -31,7 +31,7 @@ video and WAV/MP3/M4A audio through the existing probe/command pipeline. Persist
 Mov/Wav kind tokens now identify video/audio editing paths, without schema changes.
 The historical MOV/WAV-only foundation sections below retain their original scope.
 
-## Native runtime cutover (Issues #32–#34)
+## Native runtime cutover (Issues #32–#36)
 
 ADRs [0007](decisions/0007-native-runtime-boundary.md),
 [0008](decisions/0008-native-media-runtime.md) and
@@ -43,17 +43,22 @@ selection. Managed adapters execute async I/O and project values into domain/UI
 records. WPF supplies caption rasterization and physical Windows audio-device I/O.
 Both preview and export call the same native evaluator/compositor/mixer.
 
-C# EditorSession remains the sole persistent editing authority until #35. Project
-v1/v2, stable IDs, revision guards, history and the UI/MCP command path are unchanged.
-The managed domain/time input adapters remain in Core; Core references Native's
-BCL-only C ABI adapter. Native snapshots do not mutate or serialize projects.
-Test-only frozen managed evaluators/renderers are parity oracles, never fallbacks.
+ADRs [0010](decisions/0010-native-editing-authority.md) and
+[0011](decisions/0011-native-cutover-cleanup.md) complete the cutover: one native
+EditorSession owns project mutation/validation, expected revisions, history and
+document generations. Native owns v1/v2 schema conversion and canonical rational
+frame/sample conversions. The C# facade publishes immutable queries and dispatches
+the same typed commands for UI/MCP; ProjectFileStore supplies bounded atomic I/O.
+Decimal input/display and transient authoring geometry remain managed projections.
+Frozen managed editing/codec/time/evaluation/render code is test-only conformance
+evidence, never a fallback. Native evaluation snapshots remain derived, separate
+from the committed native editor session. See the [final audit](reviews/issue-36-native-audit.md).
 
 | Current boundary | Responsibility | Dependencies |
 | --- | --- | --- |
-| `product/native` | C++17 runtime and C ABI | OS process APIs, C++ standard library |
+| `product/native` | C++17 editor/time/schema/media/evaluation/render/playback authority and C ABI | OS process APIs, C++ standard library, vendored nlohmann/json |
 | `product/Kachinco.Native` | SafeHandle/PInvoke value and lifecycle adapters | BCL, native runtime |
-| `product/Kachinco.Core` | Immutable domain, editing/session, validation, time input and native evaluation projection | Native |
+| `product/Kachinco.Core` | Immutable wire/query records, command/session/codec facade, input/display and native evaluation projection | Native |
 | `product/Kachinco.Infrastructure` | Async media/FFmpeg protocol, cache projection, device-host playback, persistence and MCP | Core, Native |
 | `product/Kachinco.App` | WPF presentation, caption raster and Windows audio device | Core, Infrastructure |
 

@@ -36,11 +36,11 @@ public struct NativeMediaValue
     public int FpsDenominator;
 }
 
-/// <summary>Owns a native ABI context, not an editor session. Time methods are parity candidates.</summary>
+/// <summary>Owns a native ABI context, not an editor session. Time methods are the canonical production conversions.</summary>
 public sealed class NativeRuntime : IDisposable
 {
     public const uint AbiVersion = 1;
-    public const ulong RequiredCapabilities = 1023;
+    public const ulong RequiredCapabilities = 2047;
     private readonly NativeRuntimeHandle handle;
 
     private NativeRuntime(NativeRuntimeHandle handle) => this.handle = handle;
@@ -81,9 +81,19 @@ public sealed class NativeRuntime : IDisposable
         Check(NativeMethods.RoundTrip(handle, in value, size, out var output, size));
         return output;
     }
+    public bool IsValidFrameRate(int numerator, int denominator)
+    {
+        Check(NativeMethods.IsValidFrameRate(handle, numerator, denominator, out int output));
+        return output != 0;
+    }
     public long FrameToTicks(long index, int numerator, int denominator)
     {
         Check(NativeMethods.FrameToTicks(handle, index, numerator, denominator, out long output));
+        return output;
+    }
+    public long TicksToFrame(long tick, int numerator, int denominator)
+    {
+        Check(NativeMethods.TicksToFrame(handle, tick, numerator, denominator, out long output));
         return output;
     }
     public long FrameCount(long duration, int numerator, int denominator)
@@ -131,8 +141,12 @@ internal static class NativeMethods
     internal static extern NativeStatus GetInfo(NativeRuntimeHandle handle, out NativeRuntimeInfo output, uint size);
     [DllImport(Library, EntryPoint = "kn_value_roundtrip", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeStatus RoundTrip(NativeRuntimeHandle handle, in NativeMediaValue input, uint inputSize, out NativeMediaValue output, uint outputSize);
+    [DllImport(Library, EntryPoint = "kn_frame_rate_is_valid", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeStatus IsValidFrameRate(NativeRuntimeHandle handle, int numerator, int denominator, out int output);
     [DllImport(Library, EntryPoint = "kn_frame_to_ticks", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeStatus FrameToTicks(NativeRuntimeHandle handle, long index, int numerator, int denominator, out long output);
+    [DllImport(Library, EntryPoint = "kn_ticks_to_frame", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeStatus TicksToFrame(NativeRuntimeHandle handle, long tick, int numerator, int denominator, out long output);
     [DllImport(Library, EntryPoint = "kn_frame_count", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeStatus FrameCount(NativeRuntimeHandle handle, long duration, int numerator, int denominator, out long output);
     [DllImport(Library, EntryPoint = "kn_sample_to_ticks", CallingConvention = CallingConvention.Cdecl)]

@@ -17,6 +17,16 @@ internal static partial class PackagedMcpChecks
     {
         string editor = Path.Combine(bundle, "Kachinco.App.exe"), bridge = Path.Combine(bundle, "mcp", "Flamoris.Mcp.Bridge.exe");
         Check(File.Exists(editor) && File.Exists(bridge), "Published executables missing.");
+        foreach (string required in new[] { "Kachinco.Native.dll", "Kachinco.Native.Runtime.dll", "recipe-worker.py",
+            "licenses/Kachinco-LICENSE", "licenses/nlohmann-json-LICENSE.MIT", "NATIVE-ACCEPTANCE.md" })
+            Check(File.Exists(Path.Combine(bundle, required)), "Required portable component missing: " + required);
+        var identity = File.ReadAllLines(Path.Combine(bundle, "BUILD-INFO.txt"));
+        Check(identity.Contains("native-abi=1") && identity.Contains("required-capabilities=2047") &&
+            identity.Contains("ticks-per-second=35280000") && identity.Contains("platform=win-x64") &&
+            identity.Any(v => v.StartsWith("commit=", StringComparison.Ordinal) && v.Length == 47 &&
+                v[7..].All(Uri.IsHexDigit)), "Portable build identity is incomplete.");
+        foreach (string engine in new[] { "Kachinco.Native.dll", "Kachinco.Native.Runtime.dll", "Kachinco.Infrastructure.dll" })
+            Check(!File.Exists(Path.Combine(bundle, "mcp", engine)), "Native editor engine entered bridge package.");
         Check(File.Exists(Path.Combine(bundle, "mcp", "Flamoris.Mcp.Core.dll")) &&
             !File.Exists(Path.Combine(bundle, "mcp", "Kachinco.Core.dll")), "Bridge must contain Core infrastructure only, never editor authority.");
         Check(!Directory.GetFiles(bundle, "*", SearchOption.AllDirectories).Any(p =>
@@ -116,9 +126,12 @@ internal static partial class PackagedMcpChecks
                 await ExpectDisconnected(connection);
             }
             await OldPipeRejected(stoppedPipe);
-            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: false);
-            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: true);
-            await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
+            for (int cycle = 0; cycle < 2; ++cycle)
+            {
+                await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: false);
+                await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: true);
+                await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
+            }
             await SameFileReopen(main, process.Id, bridge);
             await Menu(main, "McpMenu", "McpEditMenu");
             string eofPipe = await Connection(process.Id);
@@ -342,8 +355,12 @@ internal static partial class PackagedMcpChecks
     {
         bool connect = parent == "McpMenu" && child is "McpReadMenu" or "McpReadOnlyMenu" or "McpEditMenu";
         ((ExpandCollapsePattern)Find(root, parent).GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
-        if (!connect) { await Invoke(Find(root, child)); return; }
-        var opening = Invoke(Find(root, "McpConnectMenu"));
+        // Closing the permission dialog re-enables the owner before async attach
+        // completes. A disabled Settings/Connect item must never be invoked.
+        string target = connect ? "McpConnectMenu" : child;
+        await Until(() => Find(root, target).Current.IsEnabled);
+        if (!connect) { await Invoke(Find(root, target)); return; }
+        var opening = Invoke(Find(root, target));
         int pid = root.Current.ProcessId;
         AutomationElement? permission = null;
         await Until(() => (permission = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
@@ -356,6 +373,8 @@ internal static partial class PackagedMcpChecks
             new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
             new PropertyCondition(AutomationElement.AutomationIdProperty, "McpAccept")));
         await Invoke(accept!); await opening;
+        // The popup menu is closed by the modal dialog. The next Menu call
+        // expands it and waits for its target control's enabled state.
         await Until(() => root.Current.IsEnabled);
     }
     private static bool VisibleText(AutomationElement root, string text) => root.FindAll(TreeScope.Descendants,
@@ -367,9 +386,14 @@ internal static partial class PackagedMcpChecks
         AutomationElement? edit = null;
         try
         {
-            await Until(() => (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
-                new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
-                    new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null);
+            await Until(() => {
+                // Preserve the actual invocation failure instead of reporting a
+                // misleading missing-control timeout after a disabled menu click.
+                if (opening.IsFaulted || opening.IsCanceled) opening.GetAwaiter().GetResult();
+                return (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+                    new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                        new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null;
+            });
         }
         catch (TimeoutException)
         {

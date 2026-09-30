@@ -1,6 +1,7 @@
 # Shared editing API and live MCP adapter
 
-The C# API remains the sole persistent editing authority. The live named-pipe MCP
+The managed API is a facade over the sole native EditorSession editing authority
+(ADRs 0010–0011). UI and MCP share its commands/revisions/history. The live named-pipe MCP
 adapter and stdio bridge are described in [ADR 0005](decisions/0005-mcp-core-migration.md).
 Persistent file JSON remains a separate versioned boundary.
 
@@ -131,7 +132,7 @@ for Undo. Paths refer to the machine running Kachinco, not the MCP client's host
 
 ## Scoped live access (Issues #13 / #19)
 
-`Flamoris.Mcp.Core` 1.1.0 supplies official SDK 2.2.0 protocol handling, a
+`Flamoris.Mcp.Core` 1.2.0 supplies official SDK 2.2.0 protocol handling, a
 same-user/local-only named pipe, transient 256-bit capability, Read only / Edit
 permissions, request limits, cancellation, diagnostics and status projection.
 `KachincoMcpHost` marshals onto the WPF dispatcher. There is one EditorSession,
@@ -180,7 +181,7 @@ Clients must check domain `success` as well as MCP `isError`: Core's `isError`
 represents boundary failures, whose structured/text content contains
 `{ "error": { "code": "stale_revision" } }` (or other Core error codes).
 No application-local JSON-RPC error mapping or protocol negotiation remains.
-Core 1.1.0 uses official C# SDK 2.2.0's modern 2026-07-28 and legacy initialization.
+Core 1.2.0 uses official C# SDK 2.2.0's modern 2026-07-28 and legacy initialization.
 
 ### Permission and lifetime
 

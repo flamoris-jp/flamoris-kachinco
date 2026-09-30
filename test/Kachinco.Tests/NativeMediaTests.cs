@@ -28,7 +28,7 @@ public sealed class NativeMediaTests
     [TestMethod]
     public void NativeCacheMatchesExistingLruIncludingReplacementAndZeroSize()
     {
-        var product = new PreviewCache<byte[]>(10, 2);
+        var product = new PresentationObjectCache<byte[]>(10, 2);
         using var native = new NativeByteCache(10, 2);
         var random = new Random(31033);
         for (int i = 0; i < 10000; ++i)

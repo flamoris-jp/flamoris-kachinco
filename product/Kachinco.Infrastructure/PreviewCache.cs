@@ -9,8 +9,9 @@ namespace Kachinco.Infrastructure;
 public enum PreviewQuality { Full = 1, Half = 2, Quarter = 4 }
 public sealed record CacheStatistics(long Bytes, int Entries, long Hits, long Misses, long Evictions);
 
-// Owned immutable values only. Entry and byte bounds both apply, including zero-size values.
-public sealed class PreviewCache<T>(long byteLimit, int entryLimit = 256)
+// WPF-owned immutable presentation objects only; decoded frame/PCM authority is native.
+// Entry and byte bounds both apply, including zero-size values.
+public sealed class PresentationObjectCache<T>(long byteLimit, int entryLimit = 256)
 {
     private readonly object gate = byteLimit >= 0 && entryLimit >= 0 ? new() : throw new ArgumentOutOfRangeException(nameof(byteLimit));
     private readonly Dictionary<string, LinkedListNode<(string Key, T Value, long Size)>> entries = [];

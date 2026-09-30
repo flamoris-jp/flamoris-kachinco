@@ -1,14 +1,17 @@
 # Native phase 2: physical Windows A/V acceptance
 
-Use the portable ZIP attached to the exact reviewed #34 workflow run. Extract it
+Use the portable ZIP attached to the exact reviewed #36 workflow run (or a
+manual Windows portable package run on merged main). Record that build SHA. Extract it
 to a fresh directory, put external FFmpeg/ffprobe on PATH, and launch Kachinco.App.exe.
 The ZIP contains the matching native DLL; do not mix files from another build.
 
 Automated native/managed tests establish timing, pixels, bounded work, cancellation,
 pause stale-result rejection and export structure. They cannot establish audible
 continuity, perceived A/V sync or responsiveness on a physical Windows output device.
-Issue #34 requires this remaining evidence before its merge; #28 stays open until
-the reported physical clip-boundary pause behavior is confirmed.
+The owner deferred #34 physical acceptance until the full #31 migration completes
+on 2026-09-30 JST. This checklist remains unperformed and does not block the
+authorized architecture cutover. #28 stays open until physical clip-boundary
+pause behavior is confirmed.
 
 ## Focused check
 
@@ -35,3 +38,22 @@ alone does not demonstrate A/V synchronization.
 Status: not performed in the Linux work environment. Do not treat the test-only
 simulated device clock or a CI `native_playback_unavailable` record as physical signoff.
 Issues #29 (Inspector) and #30 (automation UI/domain/persistence) are outside this work.
+
+## Final native editor workflow
+
+7. Import video/audio, insert/move/trim/split clips, add captions and save/reopen
+   v2. Open a v1 copy and verify migrated Clappers/Recipes/provenance. Undo/Redo
+   must restore complete content and stable IDs across save/reopen editing.
+8. Connect an external MCP client with Edit permission: commit one multi-command
+   batch, verify it visibly, Undo in UI, Redo through MCP. A stale revision and
+   failed batch must leave project/history unchanged. Downgrade, New, Open, Undo
+   project creation and Stop must revoke old credentials; explicitly reconnect
+   before editing the new document.
+9. Check timeline pointer placement and Inspector at 100%, 150% and 200% DPI in
+   landscape/portrait layouts. Record #29 separately; this migration does not
+   deliver Inspector redesign or #30 animation editing.
+
+Report each item as pass/fail/unperformed, with the build identity in BUILD-INFO.txt.
+The package is self-contained for .NET, but FFmpeg/ffprobe and Recipe Python remain
+explicit external prerequisites; neither executable is bundled. CI checks real
+codec/export and published MCP paths, not the sound of a physical audio device.

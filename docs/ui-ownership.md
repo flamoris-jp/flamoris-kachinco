@@ -5,7 +5,8 @@ it does not introduce an MVVM framework or change session authority.
 
 ## One editing authority
 
-`MainWindow` owns one `EditorSession`. Views, dialog adapters and MCP read immutable
+`MainWindow` owns one managed `EditorSession` facade over the authoritative native
+editor handle (ADRs 0010–0011). Views, dialog adapters and MCP read immutable
 snapshots and commit typed commands through `EditorSession.Execute(EditBatch)`.
 Open/New use the explicit `ReplaceProject` lifecycle. Undo/Redo, revision checks,
 document tokens and MCP revocation remain attached to that same session.

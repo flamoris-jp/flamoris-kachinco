@@ -1,12 +1,11 @@
 using System.Numerics;
+using Kachinco.Native;
 
 namespace Kachinco.Core;
 
 public readonly record struct FrameRate(int Numerator, int Denominator)
 {
-    public bool IsValid => Numerator > 0 && Denominator > 0 &&
-        Numerator <= (long)Denominator * 240 && Numerator >= Denominator &&
-        BigInteger.GreatestCommonDivisor(Numerator, Denominator) == 1;
+    public bool IsValid => TimelineTime.Native.IsValidFrameRate(Numerator, Denominator);
 
     public static FrameRate Create(int numerator, int denominator)
     {
@@ -35,36 +34,27 @@ public static class TimelineTime
         return checked((long)((2 * numerator + denominator) / (2 * denominator)));
     }
 
-    public static long FrameToTicks(long frameIndex, FrameRate fps)
+    // One process-wide stateless ABI context, held by SafeHandle until process exit.
+    private static readonly Lazy<NativeRuntime> runtime = new(NativeRuntime.Create);
+    internal static NativeRuntime Native => runtime.Value;
+    private static long Convert(Func<long> operation, string parameter)
     {
-        if (frameIndex < 0 || !fps.IsValid) throw new ArgumentOutOfRangeException(nameof(frameIndex));
-        return RoundHalfUp((BigInteger)frameIndex * TicksPerSecond * fps.Denominator, fps.Numerator);
+        try { return operation(); }
+        catch (NativeRuntimeException ex) when (ex.Status == NativeStatus.InvalidArgument)
+        { throw new ArgumentOutOfRangeException(parameter); }
+        catch (NativeRuntimeException ex) when (ex.Status == NativeStatus.Overflow)
+        { throw new OverflowException(ex.Message, ex); }
     }
-
-    // Number of n >= 0 with roundHalfUp(n * T * den / num) < duration.
-    public static long FrameCount(long durationTicks, FrameRate fps)
-    {
-        if (durationTicks < 0 || !fps.IsValid) throw new ArgumentOutOfRangeException(nameof(durationTicks));
-        if (durationTicks == 0) return 0;
-        var numerator = ((BigInteger)2 * durationTicks - 1) * fps.Numerator;
-        var denominator = (BigInteger)2 * TicksPerSecond * fps.Denominator;
-        return checked((long)((numerator + denominator - 1) / denominator));
-    }
-
-    public static long SampleToTicks(long sampleIndex, int sampleRate)
-    {
-        if (sampleIndex < 0 || sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleIndex));
-        return RoundHalfUp((BigInteger)sampleIndex * TicksPerSecond, sampleRate);
-    }
-
-    public static long SampleCount(long durationTicks, int sampleRate)
-    {
-        if (durationTicks < 0 || sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(durationTicks));
-        if (durationTicks == 0) return 0;
-        var n = ((BigInteger)2 * durationTicks - 1) * sampleRate;
-        var d = (BigInteger)2 * TicksPerSecond;
-        return checked((long)((n + d - 1) / d));
-    }
+    public static long FrameToTicks(long frameIndex, FrameRate fps) =>
+        Convert(() => Native.FrameToTicks(frameIndex, fps.Numerator, fps.Denominator), nameof(frameIndex));
+    public static long TicksToFrame(long tick, FrameRate fps) =>
+        Convert(() => Native.TicksToFrame(tick, fps.Numerator, fps.Denominator), nameof(tick));
+    public static long FrameCount(long durationTicks, FrameRate fps) =>
+        Convert(() => Native.FrameCount(durationTicks, fps.Numerator, fps.Denominator), nameof(durationTicks));
+    public static long SampleToTicks(long sampleIndex, int sampleRate) =>
+        Convert(() => Native.SampleToTicks(sampleIndex, sampleRate), nameof(sampleIndex));
+    public static long SampleCount(long durationTicks, int sampleRate) =>
+        Convert(() => Native.SampleCount(durationTicks, sampleRate), nameof(durationTicks));
 
     public static bool ValidRange(long start, long duration, long limit = long.MaxValue) =>
         start >= 0 && duration > 0 && start <= limit && duration <= limit - start;

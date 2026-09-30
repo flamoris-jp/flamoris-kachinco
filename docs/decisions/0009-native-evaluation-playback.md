@@ -1,6 +1,7 @@
 # ADR 0009: shared native evaluation, composition and playback policy
 
-Status: proposed for #34; accepted only after parity and review.
+Status: accepted in merged #34. Phase-specific authority statements below are
+historical staging context, superseded by ADRs 0010–0011 for the final engine.
 
 ## Authority and boundary
 

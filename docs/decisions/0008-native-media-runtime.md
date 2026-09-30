@@ -1,6 +1,7 @@
 # ADR 0008: native media resource ownership
 
-Status: proposed for #33; accepted when its PR is merged.
+Status: accepted in merged #33. Phase-specific authority statements below are
+historical staging context, superseded by ADRs 0010–0011 for the final engine.
 
 ## Scope and staging
 

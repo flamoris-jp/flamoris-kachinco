@@ -23,7 +23,11 @@ public partial class App : Application
                 ["argumentsCount"] = e.Args.Length,
             });
             using (var runtime = NativeRuntime.Create())
-                logger.Info("app.native", "Native runtime verified", new Dictionary<string, object?> { ["abi"] = runtime.GetInfo().AbiVersion });
+            {
+                var info = runtime.GetInfo();
+                logger.Info("app.native", "Native runtime verified", new Dictionary<string, object?>
+                { ["abi"] = info.AbiVersion, ["capabilities"] = info.Capabilities, ["ticksPerSecond"] = info.TicksPerSecond });
+            }
             base.OnStartup(e);
             MainWindow = new MainWindow(logger);
             MainWindow.Show();
