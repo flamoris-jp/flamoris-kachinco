@@ -48,8 +48,9 @@ internal static partial class PackagedMcpChecks
                 if (process.MainWindowHandle == 0) return false;
                 window = AutomationElement.FromHandle(process.MainWindowHandle); return window is not null; });
             var main = window!;
-            await Menu(main, "FileMenu", "NewLandscapeMenu");
-            await Menu(main, "McpMenu", "McpEditMenu");
+            int processId = process.Id;
+            await Menu(processId, "FileMenu", "NewLandscapeMenu");
+            await Menu(processId, "McpMenu", "McpEditMenu");
             string pipe = await Connection(process.Id);
             await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
@@ -79,7 +80,7 @@ internal static partial class PackagedMcpChecks
                     new { type = "AddTrack", sequenceId, trackId = Guid.NewGuid(), name = "Must roll back", kind = "Video" },
                     new { type = "DeleteClip", sequenceId, clipId = Guid.NewGuid() } } });
                 Check(!rollback.GetProperty("success").GetBoolean() && (await Query(client)).GetProperty("revision").GetString() == revision, "Atomic rollback failed.");
-                await Menu(main, "SequenceMenu", "AddVideoTrackMenu");
+                await Menu(processId, "SequenceMenu", "AddVideoTrackMenu");
                 state = await Query(client); Check(state.GetProperty("revision").GetString() != revision, "UI edit not visible to MCP.");
                 int uiTrackCount = TrackCount(state);
                 var undone = await Call(client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
@@ -89,7 +90,7 @@ internal static partial class PackagedMcpChecks
                 Check(redone.GetProperty("success").GetBoolean() && TrackCount(await Query(client)) == uiTrackCount, "MCP Redo did not restore the UI edit.");
                 await FileDialogsBlockMcpEdit(main, process.Id, client, sequenceId);
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
-                await Menu(main, "McpMenu", "McpReadOnlyMenu");
+                await Menu(processId, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);
             }
             Console.WriteLine("Permission downgrade closed existing client: PASS");
@@ -106,14 +107,14 @@ internal static partial class PackagedMcpChecks
                 catch (Exception) { denied = true; }
                 Check(denied, "Read-only direct history call accepted.");
                 // Exercise document replacement through the ordinary New menu and confirmation.
-                var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
+                var replacing = Menu(processId, "FileMenu", "NewLandscapeMenu");
                 await ConfirmDiscard(process.Id);
                 await replacing;
                 await ExpectDisconnected(connection);
             }
             Console.WriteLine("Read-only direct-call rejection and New revocation: PASS");
             await OldPipeRejected(readPipe);
-            await Menu(main, "McpMenu", "McpEditMenu");
+            await Menu(processId, "McpMenu", "McpEditMenu");
             string stoppedPipe = await Connection(process.Id);
             Guid reconnectId;
             await using (var first = await Connect(bridge, stoppedPipe)) reconnectId = ProjectId(await Query(first));
@@ -122,7 +123,7 @@ internal static partial class PackagedMcpChecks
             {
                 var client = connection.Client;
                 await Query(client);
-                await Menu(main, "McpMenu", "McpStopMenu");
+                await Menu(processId, "McpMenu", "McpStopMenu");
                 await ExpectDisconnected(connection);
             }
             await OldPipeRejected(stoppedPipe);
@@ -133,7 +134,7 @@ internal static partial class PackagedMcpChecks
                 await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
             }
             await SameFileReopen(main, process.Id, bridge);
-            await Menu(main, "McpMenu", "McpEditMenu");
+            await Menu(processId, "McpMenu", "McpEditMenu");
             string eofPipe = await Connection(process.Id);
             await BridgeInputEof(bridge, eofPipe);
             await BridgeEof(bridge, eofPipe, process);
@@ -163,7 +164,7 @@ internal static partial class PackagedMcpChecks
                 "MCP edit was not rejected as busy during " + phase);
         }
 
-        var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+        var opening = Menu(processId, "FileMenu", "OpenProjectMenu");
         var yes = await DiscardConfirmation(processId);
         await AssertBusy("Open discard confirmation");
         await Invoke(yes);
@@ -172,7 +173,7 @@ internal static partial class PackagedMcpChecks
         await Invoke(Find(openDialog, "2")); // Cancel without changing the current Project.
         await opening;
 
-        var saving = Menu(main, "FileMenu", "SaveProjectMenu");
+        var saving = Menu(processId, "FileMenu", "SaveProjectMenu");
         var saveDialog = await FileDialog(processId, saving, saveAs: true);
         await AssertBusy("Save file picker");
         await Invoke(Find(saveDialog, "2"));
@@ -211,9 +212,9 @@ internal static partial class PackagedMcpChecks
     }
     private static async Task DocumentLoss(AutomationElement main, int processId, string bridge, bool readOnly, bool mcpUndo)
     {
-        var replacing = Menu(main, "FileMenu", "NewLandscapeMenu");
+        var replacing = Menu(processId, "FileMenu", "NewLandscapeMenu");
         await ConfirmDiscard(processId); await replacing;
-        await Menu(main, "McpMenu", readOnly ? "McpReadOnlyMenu" : "McpEditMenu");
+        await Menu(processId, "McpMenu", readOnly ? "McpReadOnlyMenu" : "McpEditMenu");
         string pipe = await Connection(processId);
         await using var connection = new RevokedClient(await Connect(bridge, pipe));
         var state = await Query(connection.Client); var originalId = ProjectId(state);
@@ -228,9 +229,9 @@ internal static partial class PackagedMcpChecks
         await Until(() => HistoryIs(main, undo: false, redo: true));
         await ExpectDisconnected(connection);
         await OldPipeRejected(pipe);
-        var mcpMenu = (ExpandCollapsePattern)Find(main, "McpMenu").GetCurrentPattern(ExpandCollapsePattern.Pattern);
+        var mcpMenu = (ExpandCollapsePattern)(await MainControl(processId, "McpMenu")).GetCurrentPattern(ExpandCollapsePattern.Pattern);
         mcpMenu.Expand();
-        Check(!Find(main, "McpConnectMenu").Current.IsEnabled, "Document loss retained connect availability.");
+        Check(!(await MainControl(processId, "McpConnectMenu")).Current.IsEnabled, "Document loss retained connect availability.");
         mcpMenu.Collapse();
         // Human Redo is preserved, without resurrecting the revoked client or address.
         await Invoke(Find(main, "RedoButton"));
@@ -241,7 +242,7 @@ internal static partial class PackagedMcpChecks
         await Invoke(Find(main, "AddLandscapeSequenceButton"));
         await Until(() => HistoryIs(main, undo: true, redo: false));
         await ExpectDisconnected(connection); await OldPipeRejected(pipe);
-        await Menu(main, "McpMenu", "McpEditMenu");
+        await Menu(processId, "McpMenu", "McpEditMenu");
         string freshPipe = await Connection(processId);
         Check(freshPipe != pipe, "New document reused old grant address.");
         await using (var fresh = new RevokedClient(await Connect(bridge, freshPipe)))
@@ -257,7 +258,7 @@ internal static partial class PackagedMcpChecks
             catch (ModelContextProtocol.McpException) { denied = true; }
             Check(denied, "Old client edited the new document with its current revision.");
             Check((await Call(fresh.Client, "edit_batch", args)).GetProperty("success").GetBoolean(), "Explicit re-enable did not allow B editing.");
-            await Menu(main, "McpMenu", "McpStopMenu"); await ExpectDisconnected(fresh);
+            await Menu(processId, "McpMenu", "McpStopMenu"); await ExpectDisconnected(fresh);
         }
         Console.WriteLine($"Project creation Undo ({(readOnly ? "Read only" : "Edit")}, {(mcpUndo ? "MCP" : "UI")}) -> null -> human Redo -> implicit B; old query/edit/address denied; fresh grant edits B: PASS");
     }
@@ -279,25 +280,25 @@ internal static partial class PackagedMcpChecks
         string path = Path.Combine(Path.GetTempPath(), "kachinco-reopen-" + Guid.NewGuid().ToString("N") + ".fkproj");
         try
         {
-            await Menu(main, "McpMenu", "McpReadOnlyMenu");
+            await Menu(processId, "McpMenu", "McpReadOnlyMenu");
             string pipe = await Connection(processId);
             Guid id;
             await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
                 var state = await Query(connection.Client); id = ProjectId(state);
                 await File.WriteAllTextAsync(path, state.GetProperty("project").GetRawText());
-                var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+                var opening = Menu(processId, "FileMenu", "OpenProjectMenu");
                 await ConfirmDiscard(processId); await ChooseProjectFile(processId, path); await opening;
                 await ExpectDisconnected(connection);
             }
             await OldPipeRejected(pipe);
             // The file is now clean; opening the exact same file has no discard prompt.
-            await Menu(main, "McpMenu", "McpReadOnlyMenu");
+            await Menu(processId, "McpMenu", "McpReadOnlyMenu");
             pipe = await Connection(processId);
             await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
                 Check(ProjectId(await Query(connection.Client)) == id, "Open changed persistent identity.");
-                var opening = Menu(main, "FileMenu", "OpenProjectMenu");
+                var opening = Menu(processId, "FileMenu", "OpenProjectMenu");
                 await ChooseProjectFile(processId, path); await opening;
                 await ExpectDisconnected(connection);
             }
@@ -351,38 +352,85 @@ internal static partial class PackagedMcpChecks
     private static AutomationElement Find(AutomationElement root, string id) => root.FindFirst(TreeScope.Descendants,
         new PropertyCondition(AutomationElement.AutomationIdProperty, id)) ?? throw new Exception("Missing UI control: " + id);
     private static Task Invoke(AutomationElement element) => Task.Run(() => ((InvokePattern)element.GetCurrentPattern(InvokePattern.Pattern)).Invoke());
-    private static async Task Menu(AutomationElement root, string parent, string child)
+    private static AutomationElement? CurrentMainWindow(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            process.Refresh();
+            if (process.HasExited) throw new Exception("Published editor exited.");
+            if (process.MainWindowHandle == 0) return null;
+            return AutomationElement.FromHandle(process.MainWindowHandle);
+        }
+        catch (ElementNotAvailableException) { return null; }
+        catch (ArgumentException ex) { throw new Exception("Published editor exited.", ex); }
+    }
+    private static async Task<AutomationElement> MainControl(int processId, string id, bool enabled = false)
+    {
+        AutomationElement? control = null;
+        try
+        {
+            await Until(() =>
+            {
+                try
+                {
+                    var main = CurrentMainWindow(processId);
+                    if (main is null) return false;
+                    control = main.FindFirst(TreeScope.Descendants,
+                        new PropertyCondition(AutomationElement.AutomationIdProperty, id));
+                    return control is not null && (!enabled || control.Current.IsEnabled);
+                }
+                catch (ElementNotAvailableException)
+                {
+                    control = null;
+                    return false;
+                }
+            });
+        }
+        catch (TimeoutException ex)
+        {
+            string state = enabled ? "present and enabled" : "present";
+            throw new TimeoutException($"Editor UI control '{id}' did not become {state} within {Limit.TotalSeconds:0} seconds.", ex);
+        }
+        return control!;
+    }
+    private static async Task Menu(int processId, string parent, string child)
     {
         bool connect = parent == "McpMenu" && child is "McpReadMenu" or "McpReadOnlyMenu" or "McpEditMenu";
-        ((ExpandCollapsePattern)Find(root, parent).GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
-        // Closing the permission dialog re-enables the owner before async attach
-        // completes. A disabled Settings/Connect item must never be invoked.
+        var owner = await MainControl(processId, parent);
+        ((ExpandCollapsePattern)owner.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
+        // Closing/revoking MCP UI can temporarily rebuild the WPF UIA tree.
+        // Reacquire the current main window and controls while bounded by Limit;
+        // genuine missing or disabled controls still fail with an explicit timeout.
         string target = connect ? "McpConnectMenu" : child;
-        await Until(() => Find(root, target).Current.IsEnabled);
-        if (!connect) { await Invoke(Find(root, target)); return; }
-        var opening = Invoke(Find(root, target));
-        int pid = root.Current.ProcessId;
+        var targetControl = await MainControl(processId, target, enabled: true);
+        if (!connect) { await Invoke(targetControl); return; }
+        var opening = Invoke(targetControl);
         AutomationElement? permission = null;
         await Until(() => (permission = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
-            new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
+            new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
                 new PropertyCondition(AutomationElement.AutomationIdProperty, "McpPermission")))) is not null);
         ((ExpandCollapsePattern)permission!.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
         var items = permission.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
         ((SelectionItemPattern)items[child == "McpEditMenu" ? 1 : 0].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
         var accept = AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
-            new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
+            new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
             new PropertyCondition(AutomationElement.AutomationIdProperty, "McpAccept")));
         await Invoke(accept!); await opening;
         // The popup menu is closed by the modal dialog. The next Menu call
         // expands it and waits for its target control's enabled state.
-        await Until(() => root.Current.IsEnabled);
+        await Until(() =>
+        {
+            try { return CurrentMainWindow(processId)?.Current.IsEnabled == true; }
+            catch (ElementNotAvailableException) { return false; }
+        });
     }
     private static bool VisibleText(AutomationElement root, string text) => root.FindAll(TreeScope.Descendants,
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
     private static async Task<string> Connection(int processId)
     {
         var main = AutomationElement.FromHandle(Process.GetProcessById(processId).MainWindowHandle);
-        var opening = Menu(main, "McpMenu", "McpSettingsMenu");
+        var opening = Menu(processId, "McpMenu", "McpSettingsMenu");
         AutomationElement? edit = null;
         try
         {
