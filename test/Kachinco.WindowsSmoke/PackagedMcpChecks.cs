@@ -373,8 +373,9 @@ internal static partial class PackagedMcpChecks
             new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
             new PropertyCondition(AutomationElement.AutomationIdProperty, "McpAccept")));
         await Invoke(accept!); await opening;
-        await Until(() => root.Current.IsEnabled && Find(root, "McpSettingsMenu").Current.IsEnabled &&
-            Find(root, "McpConnectMenu").Current.IsEnabled);
+        // The popup menu is closed by the modal dialog. The next Menu call
+        // expands it and waits for its target control's enabled state.
+        await Until(() => root.Current.IsEnabled);
     }
     private static bool VisibleText(AutomationElement root, string text) => root.FindAll(TreeScope.Descendants,
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
