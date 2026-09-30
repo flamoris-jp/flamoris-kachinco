@@ -67,6 +67,8 @@ jobs:
         run: ./product/packaging/publish-windows.ps1
       - uses: actions/upload-artifact@v4
         with:
+          # The repository currently caps retention at 3 days. Preserve the
+          # reviewed ZIP for later physical acceptance; 14 is the requested limit.
           name: Kachinco-win-x64
           path: artifacts/windows/Kachinco-win-x64.zip
           retention-days: 14

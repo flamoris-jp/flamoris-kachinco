@@ -47,7 +47,9 @@ require the new capability, so stale DLLs fail application startup handshake.
 Portable packaging checks matching native adapter/runtime, Recipe worker, shared
 MCP runtime and engine-free bridge; includes build identity and MIT JSON license.
 FFmpeg/ffprobe and Python remain external, explicit prerequisites. Native package
-retention is 14 days for post-migration physical testing.
+workflow requests 14-day retention for post-migration physical testing. The
+repository currently caps Actions artifacts at 3 days; preserve the exact reviewed
+ZIP before expiry or run the manual package workflow on reviewed main.
 
 ## Verification and remaining acceptance
 
