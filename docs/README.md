@@ -14,7 +14,7 @@
 - [Native evaluation/playback ADR](decisions/0009-native-evaluation-playback.md): shared native runtime authority and pause correctness.
 - [Media import formats ADR](decisions/0006-media-import-formats.md): MP4/MP3/M4A, probe validation and persisted-kind compatibility.
 - [Rendering ADR](decisions/0002-production-rendering.md): shared compositor/export/playback.
-- [Live MCP migration ADR](decisions/0005-mcp-core-migration.md): Core 1.1.0, typed host, local bridge, permissions and compatibility.
+- [Live MCP migration ADR](decisions/0005-mcp-core-migration.md): historical Core 1.1.0, typed host, local bridge, permissions and compatibility.
 - [Original Live MCP ADR](decisions/0003-live-mcp.md): historical scoped attachment design.
 - [Authoring v2 ADR](decisions/0004-authoring-v2.md): migration, Clappers, Recipes and provenance.
 - [Production Windows workflow](../staging/windows-production.md): prerequisites and acceptance.
@@ -26,3 +26,8 @@
 ## Historical review and measurement evidence
 
 - [Review index](reviews/README.md): preserved Issue #7/#9/#13 self-reviews and performance evidence. These records do not supersede current contracts.
+
+- [Native editor/project codec ADR](decisions/0010-native-editing-authority.md): shared UI/MCP native editing authority.
+- [Final cutover ADR](decisions/0011-native-cutover-cleanup.md): canonical time, retained adapters and deployment.
+- [Native migration final audit](reviews/issue-36-native-audit.md): authority mapping, verification and remaining physical acceptance.
+- [Post-migration Windows acceptance](../staging/windows-native-phase2.md): final bundle and physical A/V workflow.

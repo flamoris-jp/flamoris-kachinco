@@ -248,7 +248,7 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Use .NET 10, WPF only in `product/Kachinco.App`, and headless Core/Infrastructure. Physical boundaries follow section 3.
 - Canonical time is 35,280,000 ticks/second. Use `TimelineTime` for all conversions, reduced rational FPS, and half-open ranges. Never copy 2D's timebase into this product.
 - All editing goes through `EditorSession.Execute(EditBatch)`; `ReplaceProject` is explicit Open/New lifecycle, not an editing shortcut. Use immutable snapshots and explicit expected revisions for concurrent clients.
-- Keep `ProjectFormatV1` DTOs separate from Core records. Required fields, decimal-string ticks, version dispatch and unknown-field rejection are compatibility contracts. Changes require a schema decision and regression tests.
+- Native project codec owns frozen v1 input migration and v2 output. Core records are immutable wire/query projections. Required fields, decimal-string ticks, version dispatch and unknown-field rejection remain compatibility contracts; changes require a schema decision and regression tests.
 - Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` now encodes rendered RGBA/PCM; it must never evaluate clip placement itself.
 - Issue #5 adds the bounded production slice documented in ADRs 0002–0004 and `staging/windows-production.md`; do not infer unrestricted Python, real-time preview or external integrations.
 - Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
@@ -291,10 +291,14 @@ Organization-wide repository, licensing, security, contribution, and public-rele
 
 This repository-specific `AGENTS.md` remains authoritative for product/domain rules. Where the shared policy and repository-specific rules differ, preserve the more specific product rule unless an explicit FLAMORIS-wide policy change says otherwise.
 
-## Native evaluation and playback authority (Issue #34)
+## Native editor, evaluation and playback authority (Issues #31–#36)
 
-- ADRs 0007–0009 define the staged C++ cutover. C# EditorSession remains the only
-  persistent editing authority until #35; UI and MCP keep the same commands/history.
+- ADRs 0007–0011 define the completed C++ cutover. One native EditorSession owns
+  mutation/validation, project codec, revisions and bounded history. C# EditorSession
+  is the shared UI/MCP facade over that handle, never a candidate mutation engine.
+- TimelineTime delegates canonical rational frame/sample conversions and reduced
+  FPS validation to native. Managed decimal input/display and UI geometry remain
+  projections; never restore a parallel BigInteger frame/sample authority.
 - Native owns immutable timeline evaluation, shared RGBA composition/PCM mix,
   consumed-sample playback policy, latest-wins generations and bounded decoder
   selection. Managed async device/codec hosts and WPF caption rasterization are adapters.
@@ -302,7 +306,10 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
   implementations under test are conformance oracles only.
 - Pause freezes the physical device first, cancels/joins old work and renders the
   frozen position. Resume primes a bounded fresh queue; end displays the final frame.
-- Core now references the BCL-only Native adapter; native project snapshots never
-  mutate, serialize or become a second EditorSession.
+- Core references the BCL-only Native adapter. Evaluation snapshots are immutable
+  derived views of the native editor, never a second editing/session authority.
+  ProjectFileStore retains bounded filesystem I/O; schema conversion is native.
+- Frozen managed implementations live only under test. WPF bitmap object caches
+  are presentation ownership; decoded frame/audio caches are native.
 - Run native sanitizer contracts, managed conformance, real-codec/export, Windows
   raster/package and shared MCP gates. Keep physical A/V acceptance explicit.

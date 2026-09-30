@@ -1,7 +1,8 @@
 # Production roadmap
 
 `project-plan.md` preserves the long-term vision. `main` is the reviewed baseline;
-Issues #5–#9 implement the following production slice; Issue #9 is pending PR review.
+Issues #5–#9 implemented the production slice; #31–#36 complete the native engine
+cutover. Physical Windows acceptance remains separate by owner direction.
 
 | Phase | Current implementation | Evidence / remaining acceptance |
 | --- | --- | --- |
@@ -20,3 +21,17 @@ No phase status here implies completed human visual acceptance. Use
 [`staging/windows-production.md`](../staging/windows-production.md) for that checklist.
 The first Recipe proof supports at most 10 seconds. Final export decodes independently per requested frame/block. Interactive Play amortizes
 codec startup with bounded forward streams; no universal real-time performance claim is made.
+
+## Native migration milestone
+
+#32 ABI, #33 media/cache, #34 evaluation/playback and #35 editor/project codec
+cutovers are merged. #36 removes unused managed codecs, delegates canonical time
+and completes packaging/architecture audit. One native engine is required; there
+is no managed production fallback. The managed shell retains WPF, async desktop/
+codec/filesystem integration, MCP transport and the restricted Recipe worker.
+
+The owner requested physical Windows A/V checks after migration completion.
+Use the final #36 portable bundle and [native checklist](../staging/windows-native-phase2.md).
+#28 remains open pending clip-boundary pause evidence; #29 Inspector and #30
+automation UI/domain/persistence are independent follow-up features. The native
+automation evaluation seam does not deliver editable/persisted animation curves.

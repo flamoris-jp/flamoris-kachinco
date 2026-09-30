@@ -34,7 +34,8 @@
   Ruler/red-playhead drag updates the viewer; `フレーム更新` requests the current frame.
   Full / 1/2 / 1/4 is transient preview resolution. No whole-sequence preview MP4 is made.
 - The actual output-device sample position drives playback. Scrub seeks silently and pauses;
-  pause/resume retains the device queue, stop resets to zero. Affected edits locally re-prime;
+  pause freezes the consumed position and joins old work; resume primes a fresh bounded queue,
+  and stop resets to zero. Affected edits locally re-prime;
   unrelated cached video survives audio edits. Missing media/device/decode failures are visible.
 - File > export creates H.264/AAC MP4. Progress window supports cancellation.
   Existing output is replaced only after successful encoding; source paths cannot
@@ -84,7 +85,7 @@ particles(count=24, x=100, y=200, vx=80, vy=-20, size=5)
   適用する直前に失効するため、その時点でrevision競合しても接続は無効になります。
 - 接続先はWindowsの同一ユーザー／昇格境界に制限し、サーバーのWindows APIに
   remote-client rejectionを指定します。LANやクラウドから直接接続する機能ではありません。
-- Core 1.1.0 / official C# SDK 2.2.0を使用します。呼び出しは `input` と `guard`
+- Core 1.2.0 / official C# SDK 2.2.0を使用します。呼び出しは `input` と `guard`
   を持つCore標準形式に変更されています。`mcp.context` でruntime/document/revisionを
   確認してください。Int64は十進文字列、時間は35,280,000 ticks/secondです。
   stale guardや応答消失時は再照会し、勝手に再実行しないでください。
