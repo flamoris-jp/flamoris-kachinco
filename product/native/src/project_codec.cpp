@@ -27,13 +27,22 @@ static json optional_i32(const json& v) { return v.is_null()?json(nullptr):json(
 static json optional_guid(const json& v) { return v.is_null()?json(nullptr):json(guid(v)); }
 static double number(const json& v) { if(!v.is_number()) throw std::invalid_argument("number"); return v.get<double>(); }
 static int64_t ticks(const json& v) {
-    auto s=text(v); if(s.empty()) throw std::invalid_argument("tick"); bool plus=s[0]=='+'; const char* begin=s.data()+(plus?1:0); if(begin==s.data()+s.size()) throw std::invalid_argument("tick");
+    auto s=text(v); if(s.empty()) throw std::invalid_argument("tick"); bool plus=s[0]=='+'; const char* begin=s.data()+(plus?1:0); if(begin==s.data()+s.size()||(plus&&*begin=='-')) throw std::invalid_argument("tick");
     int64_t n=0; auto r=std::from_chars(begin,s.data()+s.size(),n); if(r.ec!=std::errc()||r.ptr!=s.data()+s.size()) throw std::invalid_argument("tick"); return n;
 }
 static const std::vector<std::string> media={"Mov","Wav"},track={"Video","Audio","Subtitle"},blend={"Normal","Screen"},geometry={"Point","Rectangle"};
 static int enum_value(const json& v,const std::vector<std::string>& names) {
     auto name=text(v); for(char& c:name) if(c>='A'&&c<='Z') c=static_cast<char>(c+32);
-    for(size_t i=0;i<names.size();++i) {auto expected=names[i]; for(char& c:expected) if(c>='A'&&c<='Z') c=static_cast<char>(c+32); if(name==expected) return static_cast<int>(i);}
+    int result=0;size_t start=0;
+    while(start<name.size()) {
+        auto comma=name.find(',',start);auto token=name.substr(start,comma==std::string::npos?std::string::npos:comma-start);
+        auto first=token.find_first_not_of(" \t\r\n"),last=token.find_last_not_of(" \t\r\n");if(first==std::string::npos) throw std::invalid_argument("enum");token=token.substr(first,last-first+1);
+        bool found=false;
+        for(size_t i=0;i<names.size();++i) {auto expected=names[i];for(char& c:expected) if(c>='A'&&c<='Z') c=static_cast<char>(c+32);if(token==expected) {result|=static_cast<int>(i);found=true;break;}}
+        if(!found) throw std::invalid_argument("enum");
+        if(comma==std::string::npos)return result;
+        start=comma+1;
+    }
     throw std::invalid_argument("enum");
 }
 static json sorted(json values,bool timed=false) {
@@ -105,6 +114,7 @@ json decode_file(const std::string& raw) {
         seen.clear();
         for(const auto& g:generated) {
             fields(g,{"mediaAssetId","recipeId","recipeRevision","sourceSha256","outputSha256"});auto id=guid(g.at("mediaAssetId"));if(!seen.insert(id).second) throw std::invalid_argument("generated");auto a=std::find_if(p["assets"].begin(),p["assets"].end(),[&](const json& v){return v.at("id")==id;});if(a==p["assets"].end()) throw std::invalid_argument("asset");
+            for(const char* k:{"sourceSha256","outputSha256"}) if(!g.at(k).is_null()) (void)text(g.at(k));
             (*a)["provenance"]={{"recipeId",guid(g.at("recipeId"))},{"recipeRevision",i32(g.at("recipeRevision"))},{"sourceSha256",g.at("sourceSha256")},{"outputSha256",g.at("outputSha256")}};
         }
     }

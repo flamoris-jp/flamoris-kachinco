@@ -21,8 +21,11 @@ int64_t add(int64_t a,int64_t b) {
 bool valid_range(int64_t s,int64_t d,int64_t limit) { return s>=0&&d>0&&s<=limit&&d<=limit-s; }
 std::string guid(const json& v) {
     if (!v.is_string()) throw std::invalid_argument("guid");
-    std::string s=v.get<std::string>();
-    if(s.size()==38&&(s.front()=='{'||s.front()=='(')) s=s.substr(1,36);
+    const std::string s=v.get<std::string>();
+    // Project JSON uses System.Text.Json's strict D-format GUID contract.
+    if(s.size()!=36) throw std::invalid_argument("guid");
+    for(size_t i=0;i<s.size();++i)
+        if((i==8||i==13||i==18||i==23)!=(s[i]=='-')) throw std::invalid_argument("guid");
     std::string result;
     for(char c:s) { if(c=='-') continue; if(c>='A'&&c<='F') c=static_cast<char>(c-'A'+'a'); if(!((c>='0'&&c<='9')||(c>='a'&&c<='f'))) throw std::invalid_argument("guid"); result+=c; }
     if(result.size()!=32) throw std::invalid_argument("guid");
@@ -187,7 +190,7 @@ json apply(json p,const json& request) {
         if(type!="DeleteClapper"&&value.is_null()) reject(clapper?"INVALID_CLAPPER":"INVALID_RECIPE",clapper?"Clapper required.":"Recipe required.");
         auto index=find(values,type=="DeleteClapper"?c.at("clapperId"):value.at("id"),clapper?"CLAPPER_NOT_FOUND":"RECIPE_NOT_FOUND",clapper?"Clapper not found.":"Recipe not found.",false);
         if(type=="DeleteClapper") values.erase(values.begin()+static_cast<json::difference_type>(index));
-        else { if(!clapper&&integer(value.at("revision"))!=integer(values[index].at("revision"))+1) reject("RECIPE_REVISION_CONFLICT","Recipe revision must advance once."); values[index]=value; }
+        else { if(!clapper&&integer(value.at("revision"))!=(integer(values[index].at("revision"))==INT32_MAX?INT32_MIN:integer(values[index].at("revision"))+1)) reject("RECIPE_REVISION_CONFLICT","Recipe revision must advance once."); values[index]=value; }
     }
     else if(type=="InsertClip"||type=="SetTrackEnabled"||type=="ReorderTrack"||type=="AddCaption") {
         auto index=find(s.at("tracks"),c.at("trackId"),"TRACK_NOT_FOUND","Track not found.");

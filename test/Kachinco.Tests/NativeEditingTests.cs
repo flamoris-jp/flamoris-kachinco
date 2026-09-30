@@ -83,6 +83,19 @@ public sealed class NativeEditingTests
         if(a.Project is not null) Assert.IsTrue(JsonNode.DeepEquals(JsonNode.Parse(ManagedProjectJsonOracle.Serialize(b.Project!).Value!),JsonNode.Parse(ProjectJson.Serialize(a.Project).Value!)), $"project step {step}");
     }
     [TestMethod]
+    public void RecipeRevisionOverflowKeepsTheReviewedRejectionAndState()
+    {
+        var p = new Fixture().Project;
+        var clapper = new Clapper(Fixture.Id(31), "cue", 0, Fixture.T, null, null, null, "");
+        var recipe = new Recipe(Fixture.Id(32), clapper.Id, "source", int.MaxValue, 0, "1", "1");
+        p = p with { Sequences = [p.Sequences[0] with { Clappers = [clapper], Recipes = [recipe] }] };
+        using var native = new EditorSession(); var managed = new ManagedSessionOracle();
+        native.ReplaceProject(p); managed.ReplaceProject(p);
+        var batch = new EditBatch([new UpdateRecipe(Fixture.Id(2), recipe with { Revision = int.MinValue })]);
+        CollectionAssert.AreEqual(managed.Execute(batch).Diagnostics.ToArray(), native.Execute(batch).Diagnostics.ToArray());
+        Compare(native.GetProject(), managed.GetProject(), 0);
+    }
+    [TestMethod]
     public void CancellationAndDocumentRevocationOccurBeforeCommit()
     {
         using var session = new EditorSession();var initial=new Fixture().Project;session.ReplaceProject(initial);
@@ -116,7 +129,7 @@ public sealed class NativeEditingTests
         Assert.IsTrue(ProjectJson.Deserialize(old).Success);Assert.IsTrue(ManagedProjectJsonOracle.Deserialize(current).Success);
         var v1=JsonNode.Parse(old)!;v1["schemaVersion"]=1;v1.AsObject().Remove("authoring");v1.AsObject().Remove("generatedAssets");
         Assert.IsTrue(ProjectJson.Deserialize(v1.ToJsonString()).Success);
-        string[] inputs=[old,current,v1.ToJsonString(),"{}","null","[]","{","{\"schemaVersion\":99}","{\"schemaVersion\":2147483648}",old.Replace("\"schemaVersion\": 2","\"schemaVersion\": 2,\"schemaVersion\": 2"),old.Replace("\"35280000\"","35280000"),old.Replace("\"Mov\"","0")];
+        string[] inputs=[old,current,v1.ToJsonString(),old.Replace("\"Mov\"","\" mov \""),old.Replace("\"Mov\"","\"Mov, Wav\""),old.Replace(Fixture.Id(1).ToString(),Fixture.Id(1).ToString("X")),old.Replace(Fixture.Id(1).ToString(),Fixture.Id(1).ToString("N")),"{}","null","[]","{","{\"schemaVersion\":99}","{\"schemaVersion\":2147483648}",old.Replace("\"schemaVersion\": 2","\"schemaVersion\": 2,\"schemaVersion\": 2"),old.Replace("\"35280000\"","35280000"),old.Replace("\"Mov\"","0")];
         foreach(var input in inputs)
         {
             var a=ProjectJson.Deserialize(input);var b=ManagedProjectJsonOracle.Deserialize(input);
