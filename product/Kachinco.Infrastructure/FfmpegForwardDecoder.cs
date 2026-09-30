@@ -70,7 +70,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             if (entry is null) entry = Open();
             entry.LastUsed = NextAccess();
             try { return await entry.Stream.FrameAsync(sourceTicks, token); }
-            catch (MediaEndOfStreamException)
+            catch (IOException exception) when (exception is MediaEndOfStreamException or ForwardWindowExhaustedException)
             {
                 Close(entry.Stream, "video", entry.Id, "window-ended"); videos.Remove(entry.Id); entry = Open();
                 return await entry.Stream.FrameAsync(sourceTicks, token);
@@ -201,6 +201,11 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             Process.Dispose(); lifetime.Dispose();
         }
     }
+    // A bounded stream ran out of its frame budget; the media itself has not failed.
+    private sealed class ForwardWindowExhaustedException : IOException
+    {
+        public ForwardWindowExhaustedException() : base("Forward decode window ended.") { }
+    }
     private sealed class VideoStream : StreamProcess
     {
         private readonly long start;
@@ -230,7 +235,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             lastRequest = tick;
             while (last.IsDefault || lastPts < target)
             {
-                if (frames >= 64) throw new EndOfStreamException("Forward decode window ended.");
+                if (frames >= 64) throw new ForwardWindowExhaustedException();
                 var bytes = await ReadAsync(size, timeout.Token);
                 long pts = await timestamps.Reader.ReadAsync(timeout.Token);
                 if (pts <= lastPts) throw new InvalidDataException("Non-monotonic source video timestamps.");
