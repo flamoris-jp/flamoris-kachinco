@@ -90,7 +90,8 @@ public sealed class EditorUxTests
         var batch = EditorStartup.Import(before, asset, Guid.NewGuid(), "ignored");
         Assert.IsTrue(f.Session.Execute(batch).Success);
         Assert.AreEqual(before.Project!.Id, f.Project.Id);
-        CollectionAssert.AreEqual(before.Project.Sequences.ToArray(), f.Project.Sequences.ToArray());
+        // Native snapshots preserve domain values, not managed array reference identity.
+        Assert.AreEqual(ProjectJson.Serialize(before.Project with { Assets = f.Project.Assets }).Value, ProjectJson.Serialize(f.Project).Value);
         Assert.IsFalse(f.Session.Execute(batch).Success);
         Assert.AreEqual(EditorGuidance.Edit, EditorStartup.Guidance(f.Project, f.Project.Sequences[0]));
     }
