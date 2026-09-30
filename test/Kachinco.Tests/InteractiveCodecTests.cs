@@ -32,6 +32,46 @@ public sealed class InteractiveCodecTests
         finally { Directory.Delete(dir, true); }
     }
 
+    [DataTestMethod]
+    [DataRow(30, 75, 2)]
+    [DataRow(60, 135, 3)]
+    [DataRow(120, 145, 3)]
+    public async Task ForwardVideoRollsOverBoundedWindowsWithoutRandomFallback(int fps, int frames, int minimumStarts)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-rollover-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        try
+        {
+            string path = Path.Combine(dir, "source.mov");
+            await Run(["-f", "lavfi", "-i", $"testsrc2=s=64x36:r={fps}:d=4", "-c:v", "qtrle", path]);
+            using var forward = new FfmpegForwardDecoder(randomVideoFallback: new UnexpectedRandomFallback());
+            using var owner = new CancellationTokenSource();
+            var random = new FfmpegMediaDecoder();
+            for (int frame = 0; frame < frames; frame++)
+            {
+                long tick = TimelineTime.FrameToTicks(frame, new(fps, 1));
+                var actual = await forward.VideoAsync(path, tick, 64, 36, owner.Token);
+                Assert.AreEqual(64 * 36 * 4, actual.Length, $"frame {frame} at {fps} fps");
+                if (frame == 0 || frame == 63 || frame == 64 || frame == 127 || frame == 128 || frame == frames - 1)
+                {
+                    var expected = await random.VideoAsync(path, tick, 64, 36, default);
+                    CollectionAssert.AreEqual(expected.ToArray(), actual.ToArray(), $"frame {frame} at {fps} fps");
+                }
+                Assert.IsTrue(forward.ActiveVideoStreams <= FfmpegForwardDecoder.MaximumVideoStreams);
+            }
+            Assert.IsTrue(forward.ProcessStarts >= minimumStarts, "Bounded windows must reopen as the stream advances.");
+            Assert.IsTrue(forward.ProcessStarts <= minimumStarts + 1, "Normal playback must not start a process per frame.");
+            Assert.AreEqual(1, forward.ActiveVideoStreams);
+
+            // A fresh playback token owns a fresh bounded stream; cancellation must still stop it.
+            using var renewed = new CancellationTokenSource();
+            await forward.VideoAsync(path, 0, 64, 36, renewed.Token);
+            Assert.AreEqual(1, forward.ActiveVideoStreams);
+            renewed.Cancel();
+            await Assert.ThrowsAsync<OperationCanceledException>(() => forward.VideoAsync(path, 0, 64, 36, renewed.Token));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     [TestMethod]
     public async Task RendererHoldsTheLastDecodableFrameAcrossAShortContainerTail()
     {
@@ -294,6 +334,13 @@ public sealed class InteractiveCodecTests
             }
         }
         finally { File.Delete(path); }
+    }
+    private sealed class UnexpectedRandomFallback : IMediaDecoder
+    {
+        public Task<ImmutableArray<byte>> VideoAsync(string path, long tick, int width, int height, CancellationToken token) =>
+            throw new AssertFailedException($"Healthy forward video unexpectedly fell back at {tick}.");
+        public Task<ImmutableArray<float>> AudioAsync(string path, long tick, int count, int rate, int channels, CancellationToken token) =>
+            throw new AssertFailedException("Unexpected audio fallback.");
     }
     private sealed class SolidDecoder : IMediaDecoder
     {
