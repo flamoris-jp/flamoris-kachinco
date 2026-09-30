@@ -126,9 +126,12 @@ internal static partial class PackagedMcpChecks
                 await ExpectDisconnected(connection);
             }
             await OldPipeRejected(stoppedPipe);
-            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: false);
-            await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: true);
-            await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
+            for (int cycle = 0; cycle < 2; ++cycle)
+            {
+                await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: false);
+                await DocumentLoss(main, process.Id, bridge, readOnly: false, mcpUndo: true);
+                await DocumentLoss(main, process.Id, bridge, readOnly: true, mcpUndo: false);
+            }
             await SameFileReopen(main, process.Id, bridge);
             await Menu(main, "McpMenu", "McpEditMenu");
             string eofPipe = await Connection(process.Id);
@@ -352,8 +355,12 @@ internal static partial class PackagedMcpChecks
     {
         bool connect = parent == "McpMenu" && child is "McpReadMenu" or "McpReadOnlyMenu" or "McpEditMenu";
         ((ExpandCollapsePattern)Find(root, parent).GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
-        if (!connect) { await Invoke(Find(root, child)); return; }
-        var opening = Invoke(Find(root, "McpConnectMenu"));
+        // Closing the permission dialog re-enables the owner before async attach
+        // completes. A disabled Settings/Connect item must never be invoked.
+        string target = connect ? "McpConnectMenu" : child;
+        await Until(() => Find(root, target).Current.IsEnabled);
+        if (!connect) { await Invoke(Find(root, target)); return; }
+        var opening = Invoke(Find(root, target));
         int pid = root.Current.ProcessId;
         AutomationElement? permission = null;
         await Until(() => (permission = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
@@ -366,7 +373,8 @@ internal static partial class PackagedMcpChecks
             new PropertyCondition(AutomationElement.ProcessIdProperty, pid),
             new PropertyCondition(AutomationElement.AutomationIdProperty, "McpAccept")));
         await Invoke(accept!); await opening;
-        await Until(() => root.Current.IsEnabled);
+        await Until(() => root.Current.IsEnabled && Find(root, "McpSettingsMenu").Current.IsEnabled &&
+            Find(root, "McpConnectMenu").Current.IsEnabled);
     }
     private static bool VisibleText(AutomationElement root, string text) => root.FindAll(TreeScope.Descendants,
         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text)).Cast<AutomationElement>().Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
@@ -377,9 +385,14 @@ internal static partial class PackagedMcpChecks
         AutomationElement? edit = null;
         try
         {
-            await Until(() => (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
-                new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
-                    new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null);
+            await Until(() => {
+                // Preserve the actual invocation failure instead of reporting a
+                // misleading missing-control timeout after a disabled menu click.
+                if (opening.IsFaulted || opening.IsCanceled) opening.GetAwaiter().GetResult();
+                return (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+                    new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                        new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null;
+            });
         }
         catch (TimeoutException)
         {

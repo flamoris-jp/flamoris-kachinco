@@ -60,9 +60,14 @@ package startup and published external MCP transactions/history/revocation.
 The final PR review records exact commit/run IDs and results; a green earlier phase
 is not substituted for the final gate.
 
-#35 run 36654269015 passed all packaged lifecycle cases after an earlier settings
-reconnection timeout. Its cause was not confirmed; attachment/UI diagnostic logs
-remain enabled and the final run must exercise that complete path again.
+#35 run 36654269015 and #36 run 36655472936 passed packaged lifecycle cases,
+but run 36656495083 reproduced a settings timeout. Diagnostics showed only the
+main window, with no settings dialog and no attachment exception. The UI test
+waited for modal owner re-enablement, which precedes async attachment completion;
+shared MCP disables Settings/Connect while busy. The harness now waits for those
+controls to become enabled before invocation, propagates invocation failures and
+repeats every document-loss/recreation case twice with all access/history checks.
+Attachment/UI diagnostics remain enabled; the final gate must pass this path.
 
 No embedded libav, GPU/hardware acceleration or C++ WPF rewrite is claimed. No
 universal real-time performance claim follows from #34 fixture measurements.
