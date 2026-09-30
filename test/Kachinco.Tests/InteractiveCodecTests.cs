@@ -32,7 +32,7 @@ public sealed class InteractiveCodecTests
         finally { Directory.Delete(dir, true); }
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(30, 75, 2)]
     [DataRow(60, 135, 3)]
     [DataRow(120, 145, 3)]
