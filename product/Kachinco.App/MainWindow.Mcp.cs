@@ -35,7 +35,13 @@ public partial class MainWindow
             () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))),
             new McpOptions(), new McpDiagnostics(logger));
         try { return new(boundary, await boundary.EnableAsync(permission)); }
-        catch { boundary.Dispose(); throw; }
+        catch (Exception exception)
+        {
+            logger.Error("mcp.attach", "MCP attachment failed", exception,
+                new Dictionary<string, object?> { ["revision"] = session.GetProject().Revision,
+                    ["hasProject"] = session.GetProject().Project is not null });
+            boundary.Dispose(); throw;
+        }
     }
     private void UpdateMcpStatus() { mcpUi?.Refresh(); mcpUi?.NotifyHostReady(); }
     private void RevokeMcp() => mcpUi?.Invalidate();
