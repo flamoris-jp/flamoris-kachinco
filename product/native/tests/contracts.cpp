@@ -58,7 +58,7 @@ int main() {
         CHECK(kn_runtime_create(1, &runtime) == KN_OK && runtime != nullptr);
         kn_runtime_info info{};
         CHECK(kn_runtime_get_info(runtime, &info, sizeof(info)) == KN_OK);
-        CHECK(info.abi_version == 1 && info.capabilities == 255 && info.ticks_per_second == KN_TICKS_PER_SECOND);
+        CHECK(info.abi_version == 1 && info.capabilities == 1023 && info.ticks_per_second == KN_TICKS_PER_SECOND);
         info.abi_version = 42;
         CHECK(kn_runtime_get_info(runtime, &info, 1) == KN_INVALID_ARGUMENT && info.abi_version == 42);
         CHECK(kn_runtime_get_info(nullptr, &info, sizeof(info)) == KN_INVALID_ARGUMENT && info.abi_version == 0);

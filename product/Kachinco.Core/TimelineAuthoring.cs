@@ -134,8 +134,9 @@ public static class TimelineEditPlanner
         var add = new AddTrack(sequenceId, newTrackId, name, kind);
         var reorder = new ReorderTrack(sequenceId, newTrackId, index);
         // Pure planning uses the same command semantics as the eventual atomic session transaction.
-        var projected = CommandApplier.Apply(CommandApplier.Apply(project, add), reorder);
-        var placement = Place(projected, sequenceId, mediaId, newTrackId, clipId, startTicks, revision);
+        var projected = NativeProjectCodec.ProjectCommands(project, add, reorder);
+        if (!projected.Success) return new(null, projected.Diagnostics);
+        var placement = Place(projected.Value!, sequenceId, mediaId, newTrackId, clipId, startTicks, revision);
         return placement.Success ? Result<EditBatch>.Ok(new([add, reorder, .. placement.Value!.Commands], revision)) : placement;
     }
     public static bool Overlaps(Track track, long start, long duration, Guid? excluded = null) =>

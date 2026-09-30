@@ -365,9 +365,20 @@ internal static partial class PackagedMcpChecks
         var main = AutomationElement.FromHandle(Process.GetProcessById(processId).MainWindowHandle);
         var opening = Menu(main, "McpMenu", "McpSettingsMenu");
         AutomationElement? edit = null;
-        await Until(() => (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
-            new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
-                new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null);
+        try
+        {
+            await Until(() => (edit = AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+                new AndCondition(new PropertyCondition(AutomationElement.ProcessIdProperty, processId),
+                    new PropertyCondition(AutomationElement.AutomationIdProperty, "McpConnection")))) is not null);
+        }
+        catch (TimeoutException)
+        {
+            var windows = AutomationElement.RootElement.FindAll(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ProcessIdProperty, processId));
+            var visible = windows.Cast<AutomationElement>().Where(e => e.Current.ControlType == ControlType.Text)
+                .Select(e => e.Current.Name).Where(n => !string.IsNullOrEmpty(n)).ToArray();
+            throw new TimeoutException("MCP settings connection missing. Visible labels: " + string.Join(" / ", visible));
+        }
         using var json = JsonDocument.Parse(((ValuePattern)edit!.GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
         var root = json.RootElement.GetProperty("mcpServers").GetProperty("flamoris-kachinco");
         string pipe = root.GetProperty("args")[1].GetString()!;

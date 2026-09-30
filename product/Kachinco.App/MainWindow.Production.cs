@@ -33,6 +33,7 @@ public partial class MainWindow
             playback.Dispose();
             await playback.Completion;
             previewSource.Dispose();
+            session.Dispose();
         };
     }
     private void RefreshInteractiveContext()

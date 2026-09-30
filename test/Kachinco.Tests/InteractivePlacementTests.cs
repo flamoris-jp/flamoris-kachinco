@@ -27,8 +27,8 @@ public sealed class InteractivePlacementTests
                 Assert.AreEqual(lanes[row].TrackId is null ? TimelineTrackGeometry.CreationRowHeight : TimelineTrackGeometry.DefaultRowHeight, geometry.Row(row).Height);
             }
             Assert.AreEqual(video ? "V2" : "A2", after.Project.Sequences[0].Tracks.First(t => t.Id == id).Name);
-            Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(before.Project, f.Session.GetProject().Project);
-            Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(after.Project, f.Session.GetProject().Project);
+            Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(ProjectJson.Serialize(before.Project!).Value, ProjectJson.Serialize(f.Session.GetProject().Project!).Value);
+            Assert.IsTrue(f.Session.Redo().Success); Assert.AreEqual(ProjectJson.Serialize(after.Project!).Value, ProjectJson.Serialize(f.Session.GetProject().Project!).Value);
             var json = ProjectJson.Serialize(after.Project).Value!; var opened = ProjectJson.Deserialize(json);
             Assert.IsTrue(opened.Success); Assert.IsTrue(opened.Value!.Sequences[0].Tracks.Any(t => t.Id == id && t.Clips.Single().Id == clip));
         }

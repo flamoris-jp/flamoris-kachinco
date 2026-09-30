@@ -40,7 +40,7 @@ int32_t KN_CALL kn_runtime_get_info(const kn_runtime* runtime, kn_runtime_info* 
     if (!output || output_size != sizeof(*output)) return KN_INVALID_ARGUMENT;
     *output = {};
     if (!runtime) return KN_INVALID_ARGUMENT;
-    *output = {runtime->abi, 0, KN_CAP_TIME | KN_CAP_VALUE | KN_CAP_PROCESS | KN_CAP_CACHE | KN_CAP_DECODED_MEDIA | KN_CAP_TIMELINE | KN_CAP_COMPOSITION | KN_CAP_PLAYBACK, KN_TICKS_PER_SECOND};
+    *output = {runtime->abi, 0, KN_CAP_TIME | KN_CAP_VALUE | KN_CAP_PROCESS | KN_CAP_CACHE | KN_CAP_DECODED_MEDIA | KN_CAP_TIMELINE | KN_CAP_COMPOSITION | KN_CAP_PLAYBACK | KN_CAP_EDITOR | KN_CAP_PROJECT_CODEC, KN_TICKS_PER_SECOND};
     return KN_OK;
 }
 int32_t KN_CALL kn_value_roundtrip(const kn_runtime* runtime, const kn_media_value* input, uint32_t input_size, kn_media_value* output, uint32_t output_size) noexcept {
