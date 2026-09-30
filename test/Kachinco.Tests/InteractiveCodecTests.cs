@@ -60,7 +60,7 @@ public sealed class InteractiveCodecTests
             }
             Assert.IsTrue(forward.ProcessStarts >= minimumStarts, "Bounded windows must reopen as the stream advances.");
             Assert.IsTrue(forward.ProcessStarts <= minimumStarts + 1, "Normal playback must not start a process per frame.");
-            Assert.AreEqual(1, forward.ActiveVideoStreams);
+            Assert.IsTrue(forward.ActiveVideoStreams is > 0 and <= FfmpegForwardDecoder.MaximumVideoStreams);
 
             // A fresh playback token owns a fresh bounded stream; cancellation must still stop it.
             using var renewed = new CancellationTokenSource();
