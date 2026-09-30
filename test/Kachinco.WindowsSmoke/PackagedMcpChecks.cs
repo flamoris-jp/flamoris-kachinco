@@ -17,6 +17,16 @@ internal static partial class PackagedMcpChecks
     {
         string editor = Path.Combine(bundle, "Kachinco.App.exe"), bridge = Path.Combine(bundle, "mcp", "Flamoris.Mcp.Bridge.exe");
         Check(File.Exists(editor) && File.Exists(bridge), "Published executables missing.");
+        foreach (string required in new[] { "Kachinco.Native.dll", "Kachinco.Native.Runtime.dll", "recipe-worker.py",
+            "licenses/Kachinco-LICENSE", "licenses/nlohmann-json-LICENSE.MIT", "NATIVE-ACCEPTANCE.md" })
+            Check(File.Exists(Path.Combine(bundle, required)), "Required portable component missing: " + required);
+        var identity = File.ReadAllLines(Path.Combine(bundle, "BUILD-INFO.txt"));
+        Check(identity.Contains("native-abi=1") && identity.Contains("required-capabilities=2047") &&
+            identity.Contains("ticks-per-second=35280000") && identity.Contains("platform=win-x64") &&
+            identity.Any(v => v.StartsWith("commit=", StringComparison.Ordinal) && v.Length == 47 &&
+                v[7..].All(Uri.IsHexDigit)), "Portable build identity is incomplete.");
+        foreach (string engine in new[] { "Kachinco.Native.dll", "Kachinco.Native.Runtime.dll", "Kachinco.Infrastructure.dll" })
+            Check(!File.Exists(Path.Combine(bundle, "mcp", engine)), "Native editor engine entered bridge package.");
         Check(File.Exists(Path.Combine(bundle, "mcp", "Flamoris.Mcp.Core.dll")) &&
             !File.Exists(Path.Combine(bundle, "mcp", "Kachinco.Core.dll")), "Bridge must contain Core infrastructure only, never editor authority.");
         Check(!Directory.GetFiles(bundle, "*", SearchOption.AllDirectories).Any(p =>
