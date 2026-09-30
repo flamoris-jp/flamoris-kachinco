@@ -21,8 +21,8 @@ internal static partial class PackagedMcpChecks
             await Until(() => { process.Refresh(); Check(!process.HasExited, "Published editor exited during media acceptance.");
                 if (process.MainWindowHandle == 0) return false;
                 main = AutomationElement.FromHandle(process.MainWindowHandle); return main is not null; });
-            await Menu(main!, "FileMenu", "NewLandscapeMenu");
-            await Menu(main!, "McpMenu", "McpReadOnlyMenu");
+            await Menu(process.Id, "FileMenu", "NewLandscapeMenu");
+            await Menu(process.Id, "McpMenu", "McpReadOnlyMenu");
             string pipe = await Connection(process.Id);
             await using var connection = new RevokedClient(await Connect(Path.Combine(bundle, "mcp", "Flamoris.Mcp.Bridge.exe"), pipe));
             int count = 0;
