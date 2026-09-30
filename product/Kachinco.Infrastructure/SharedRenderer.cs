@@ -19,8 +19,7 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
         var scaled = frame with { Settings = frame.Settings with { Width = frame.Settings.Width / divisor, Height = frame.Settings.Height / divisor },
             VideoLayers = [.. frame.VideoLayers.Select(l => l with { Appearance = l.Appearance with {
                 Transform = l.Appearance.Transform with { X = l.Appearance.Transform.X / divisor, Y = l.Appearance.Transform.Y / divisor } } })] };
-        return RenderAsync(project, scaled, TimelineTime.RoundHalfUp((System.Numerics.BigInteger)frame.Tick * frame.Settings.FrameRate.Numerator,
-            (System.Numerics.BigInteger)TimelineTime.TicksPerSecond * frame.Settings.FrameRate.Denominator), token);
+        return RenderAsync(project, scaled, TimelineTime.TicksToFrame(frame.Tick, frame.Settings.FrameRate), token);
     }
     public async ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long frameIndex, CancellationToken cancellationToken)
     {

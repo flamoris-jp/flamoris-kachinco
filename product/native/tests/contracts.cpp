@@ -58,7 +58,7 @@ int main() {
         CHECK(kn_runtime_create(1, &runtime) == KN_OK && runtime != nullptr);
         kn_runtime_info info{};
         CHECK(kn_runtime_get_info(runtime, &info, sizeof(info)) == KN_OK);
-        CHECK(info.abi_version == 1 && info.capabilities == 1023 && info.ticks_per_second == KN_TICKS_PER_SECOND);
+        CHECK(info.abi_version == 1 && info.capabilities == 2047 && info.ticks_per_second == KN_TICKS_PER_SECOND);
         info.abi_version = 42;
         CHECK(kn_runtime_get_info(runtime, &info, 1) == KN_INVALID_ARGUMENT && info.abi_version == 42);
         CHECK(kn_runtime_get_info(nullptr, &info, sizeof(info)) == KN_INVALID_ARGUMENT && info.abi_version == 0);
@@ -70,7 +70,17 @@ int main() {
         kn_runtime_destroy(runtime);
     }
     CHECK(kn_runtime_create(1, &runtime) == KN_OK);
+    int32_t valid = -1;
+    CHECK(kn_frame_rate_is_valid(runtime, 30000, 1001, &valid) == KN_OK && valid == 1);
+    CHECK(kn_frame_rate_is_valid(runtime, 60, 2, &valid) == KN_OK && valid == 0);
+    CHECK(kn_frame_rate_is_valid(nullptr, 30, 1, &valid) == KN_INVALID_ARGUMENT && valid == 0);
+    CHECK(kn_frame_rate_is_valid(runtime, 30, 1, nullptr) == KN_INVALID_ARGUMENT);
     int64_t ticks = -1;
+    CHECK(kn_ticks_to_frame(runtime, 588000, 30, 1, &ticks) == KN_OK && ticks == 1);
+    CHECK(kn_ticks_to_frame(runtime, -1, 30, 1, &ticks) == KN_INVALID_ARGUMENT && ticks == 0);
+    CHECK(kn_ticks_to_frame(runtime, 1, 60, 2, &ticks) == KN_INVALID_ARGUMENT);
+    CHECK(kn_ticks_to_frame(nullptr, 1, 30, 1, &ticks) == KN_INVALID_ARGUMENT);
+    CHECK(kn_ticks_to_frame(runtime, 1, 30, 1, nullptr) == KN_INVALID_ARGUMENT);
     CHECK(kn_frame_to_ticks(runtime, 30000, 30000, 1001, &ticks) == KN_OK && ticks == INT64_C(35315280000));
     CHECK(kn_frame_to_ticks(runtime, INT64_MAX, 1, 1, &ticks) == KN_OVERFLOW && ticks == 0);
     CHECK(kn_frame_to_ticks(runtime, 1, 60, 2, &ticks) == KN_INVALID_ARGUMENT && ticks == 0);

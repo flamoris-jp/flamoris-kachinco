@@ -10,7 +10,7 @@ public sealed class PreviewCacheTests
     [TestMethod]
     public void LruHasHardByteAndEntryBoundsAndRefreshesRecency()
     {
-        var cache = new PreviewCache<string>(10, 2);
+        var cache = new PresentationObjectCache<string>(10, 2);
         cache.Put("a", "A", 5); cache.Put("b", "B", 5); Assert.IsTrue(cache.TryGet("a", out _));
         cache.Put("c", "C", 5); Assert.IsFalse(cache.TryGet("b", out _)); Assert.IsTrue(cache.TryGet("a", out _));
         cache.Put("big", "oversize", 11); Assert.AreEqual(10L, cache.Statistics.Bytes);

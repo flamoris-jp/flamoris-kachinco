@@ -12,7 +12,7 @@ namespace Kachinco.App;
 public partial class TimelineSurface
 {
     private readonly MediaVisualizationService visualizer = new();
-    private readonly PreviewCache<VisualEntry> mediaVisuals = new(16 * 1024 * 1024, 256);
+    private readonly PresentationObjectCache<VisualEntry> mediaVisuals = new(16 * 1024 * 1024, 256);
     private readonly Dictionary<string, VisualWork> visualPlan = [];
     private readonly Dictionary<string, CancellationTokenSource> visualActive = [];
     private readonly Queue<VisualWork> visualPending = new();

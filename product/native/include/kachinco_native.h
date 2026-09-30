@@ -29,6 +29,7 @@ extern "C" {
 #define KN_CAP_PLAYBACK UINT64_C(128)
 #define KN_CAP_EDITOR UINT64_C(256)
 #define KN_CAP_PROJECT_CODEC UINT64_C(512)
+#define KN_CAP_TIME_QUERIES UINT64_C(1024)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -65,7 +66,9 @@ KN_API int32_t KN_CALL kn_runtime_create(uint32_t requested_abi, kn_runtime** ou
 KN_API void KN_CALL kn_runtime_destroy(kn_runtime* runtime) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_runtime_get_info(const kn_runtime* runtime, kn_runtime_info* output, uint32_t output_size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_value_roundtrip(const kn_runtime* runtime, const kn_media_value* input, uint32_t input_size, kn_media_value* output, uint32_t output_size) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_frame_rate_is_valid(const kn_runtime* runtime, int32_t numerator, int32_t denominator, int32_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_frame_to_ticks(const kn_runtime* runtime, int64_t index, int32_t numerator, int32_t denominator, int64_t* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_ticks_to_frame(const kn_runtime* runtime, int64_t tick, int32_t numerator, int32_t denominator, int64_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_frame_count(const kn_runtime* runtime, int64_t duration, int32_t numerator, int32_t denominator, int64_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_sample_to_ticks(const kn_runtime* runtime, int64_t index, int32_t sample_rate, int64_t* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_sample_count(const kn_runtime* runtime, int64_t duration, int32_t sample_rate, int64_t* output) KN_NOEXCEPT;

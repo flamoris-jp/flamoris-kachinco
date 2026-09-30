@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Kachinco.Core;
+using Kachinco.Tests.Oracles;
 using Kachinco.Native;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -23,7 +24,7 @@ public sealed class NativeRuntimeTests
         Assert.AreEqual(value, runtime.RoundTrip(value));
     }
 
-    // Both candidates consume the same inputs; expected values always come from Product.
+    // Expected values come from the frozen BigInteger implementation, never the native adapter.
     private static void Parity(Func<long> product, Func<long> native)
     {
         long expected;
@@ -42,7 +43,7 @@ public sealed class NativeRuntimeTests
     }
 
     [TestMethod]
-    public void TimeCandidatesMatchProductAtBoundariesAndSeededInputs()
+    public void CanonicalTimeMatchesFrozenOracleAtBoundariesAndSeededInputs()
     {
         using var runtime = NativeRuntime.Create();
         FrameRate[] rates = [new(1, 1), new(24, 1), new(30, 1), new(240, 1), new(24000, 1001),
@@ -52,16 +53,19 @@ public sealed class NativeRuntimeTests
         var random = new Random(31032);
         var values = boundaries.Concat(Enumerable.Range(0, 200).Select(_ => random.NextInt64(0, long.MaxValue))).ToArray();
         foreach (var fps in rates)
+        {
+            Assert.AreEqual(new OracleFrameRate(fps.Numerator, fps.Denominator).IsValid, fps.IsValid);
             foreach (long value in values)
             {
-                Parity(() => TimelineTime.FrameToTicks(value, fps), () => runtime.FrameToTicks(value, fps.Numerator, fps.Denominator));
-                Parity(() => TimelineTime.FrameCount(value, fps), () => runtime.FrameCount(value, fps.Numerator, fps.Denominator));
+                Parity(() => ManagedTimelineTimeOracle.FrameToTicks(value, new OracleFrameRate(fps.Numerator, fps.Denominator)), () => runtime.FrameToTicks(value, fps.Numerator, fps.Denominator));
+                Parity(() => ManagedTimelineTimeOracle.FrameCount(value, new OracleFrameRate(fps.Numerator, fps.Denominator)), () => runtime.FrameCount(value, fps.Numerator, fps.Denominator));
             }
+        }
         foreach (int rate in new[] { -1, 0, 1, 44100, 48000, 35280000, 70560000, int.MaxValue })
             foreach (long value in values)
             {
-                Parity(() => TimelineTime.SampleToTicks(value, rate), () => runtime.SampleToTicks(value, rate));
-                Parity(() => TimelineTime.SampleCount(value, rate), () => runtime.SampleCount(value, rate));
+                Parity(() => ManagedTimelineTimeOracle.SampleToTicks(value, rate), () => runtime.SampleToTicks(value, rate));
+                Parity(() => ManagedTimelineTimeOracle.SampleCount(value, rate), () => runtime.SampleCount(value, rate));
             }
     }
 
@@ -71,9 +75,33 @@ public sealed class NativeRuntimeTests
         using var runtime = NativeRuntime.Create();
         foreach (var fps in new[] { new FrameRate(30, 1), new FrameRate(30000, 1001), new FrameRate(73, 3) })
             for (long index = 1; index <= 300; ++index)
-                foreach (long duration in new[] { TimelineTime.FrameToTicks(index, fps) - 1,
-                    TimelineTime.FrameToTicks(index, fps), TimelineTime.FrameToTicks(index, fps) + 1 })
-                    Parity(() => TimelineTime.FrameCount(duration, fps), () => runtime.FrameCount(duration, fps.Numerator, fps.Denominator));
+                foreach (long duration in new[] { ManagedTimelineTimeOracle.FrameToTicks(index, new OracleFrameRate(fps.Numerator, fps.Denominator)) - 1,
+                    ManagedTimelineTimeOracle.FrameToTicks(index, new OracleFrameRate(fps.Numerator, fps.Denominator)), ManagedTimelineTimeOracle.FrameToTicks(index, new OracleFrameRate(fps.Numerator, fps.Denominator)) + 1 })
+                    Parity(() => ManagedTimelineTimeOracle.FrameCount(duration, new OracleFrameRate(fps.Numerator, fps.Denominator)), () => runtime.FrameCount(duration, fps.Numerator, fps.Denominator));
+    }
+
+    [TestMethod]
+    public void ManagedFacadePreservesCanonicalValuesAndExceptionTypes()
+    {
+        static (long Value, Type? Error) Outcome(Func<long> call)
+        { try { return (call(), null); } catch (Exception ex) { return (0, ex.GetType()); } }
+        foreach (var fps in new[] { new FrameRate(30, 1), new FrameRate(30000, 1001), new FrameRate(60, 2), new FrameRate(0, 1) })
+            foreach (long v in new[] { -1L, 0, 1, 588000, 35280000, long.MaxValue })
+            {
+                var old = new OracleFrameRate(fps.Numerator, fps.Denominator);
+                Assert.AreEqual(Outcome(() => ManagedTimelineTimeOracle.FrameToTicks(v, old)), Outcome(() => TimelineTime.FrameToTicks(v, fps)));
+                Assert.AreEqual(Outcome(() => ManagedTimelineTimeOracle.FrameCount(v, old)), Outcome(() => TimelineTime.FrameCount(v, fps)));
+                Assert.AreEqual(Outcome(() => {
+                    if (v < 0 || !old.IsValid) throw new ArgumentOutOfRangeException();
+                    return ManagedTimelineTimeOracle.RoundHalfUp((System.Numerics.BigInteger)v * old.Numerator,
+                        (System.Numerics.BigInteger)ManagedTimelineTimeOracle.TicksPerSecond * old.Denominator);
+                }), Outcome(() => TimelineTime.TicksToFrame(v, fps)));
+                foreach (int rate in new[] { 0, 44100, 48000, int.MaxValue })
+                {
+                    Assert.AreEqual(Outcome(() => ManagedTimelineTimeOracle.SampleToTicks(v, rate)), Outcome(() => TimelineTime.SampleToTicks(v, rate)));
+                    Assert.AreEqual(Outcome(() => ManagedTimelineTimeOracle.SampleCount(v, rate)), Outcome(() => TimelineTime.SampleCount(v, rate)));
+                }
+            }
     }
 
     [TestMethod]
