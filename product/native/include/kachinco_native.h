@@ -27,6 +27,8 @@ extern "C" {
 #define KN_CAP_TIMELINE UINT64_C(32)
 #define KN_CAP_COMPOSITION UINT64_C(64)
 #define KN_CAP_PLAYBACK UINT64_C(128)
+#define KN_CAP_EDITOR UINT64_C(256)
+#define KN_CAP_PROJECT_CODEC UINT64_C(512)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -77,6 +79,7 @@ KN_API void KN_CALL kn_process_cancel(kn_process* process) KN_NOEXCEPT;
 KN_API void KN_CALL kn_process_destroy(kn_process* process) KN_NOEXCEPT;
 typedef struct kn_cache kn_cache;
 typedef struct kn_buffer kn_buffer;
+typedef struct kn_editor_session kn_editor_session;
 typedef struct kn_cache_statistics { int64_t bytes, entries, hits, misses, evictions; } kn_cache_statistics;
 /* Cache byte budgets charge payload; each value may include at most 32 metadata bytes. */
 KN_API int32_t KN_CALL kn_cache_create(int64_t byte_limit, int32_t entry_limit, kn_cache** output) KN_NOEXCEPT;
@@ -146,6 +149,11 @@ KN_API int32_t KN_CALL kn_first_sample(int64_t tick, int32_t rate, int64_t* outp
 
 typedef struct kn_decoder_candidate { int64_t id, used, start, last_request; int32_t consumed, eligible; } kn_decoder_candidate;
 KN_API int32_t KN_CALL kn_decoder_select(const kn_decoder_candidate* candidates, uint32_t count, int32_t video, int64_t tick, int32_t sample_count, int64_t* selected, int64_t* oldest) KN_NOEXCEPT;
+
+/* Typed editing/persistence wire: bounded UTF-8 request, owned response buffer. */
+KN_API int32_t KN_CALL kn_editor_create(int32_t history_limit, kn_editor_session** output) KN_NOEXCEPT;
+KN_API void KN_CALL kn_editor_destroy(kn_editor_session* session) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_editor_request(kn_editor_session* session, const uint8_t* data, uint32_t size, kn_buffer** output) KN_NOEXCEPT;
 
 #ifdef __cplusplus
 }
