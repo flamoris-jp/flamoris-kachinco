@@ -475,6 +475,14 @@ public partial class TimelineSurface : UserControl
 
     private void TimelineSurface_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (drag is null && selectedClipId is { } clipId &&
+            (e.Key == Key.Apps || e.Key == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift))
+        {
+            var grid = TimelineCanvas.Children.OfType<Grid>().FirstOrDefault(g => Equals(g.Tag, clipId));
+            if (grid?.ContextMenu is { } menu)
+            { menu.PlacementTarget = grid; menu.IsOpen = true; e.Handled = true; }
+            return;
+        }
         if (e.Key != Key.Escape || drag is null) return;
         drag.Thumb.CancelDrag();
         e.Handled = true;
@@ -555,6 +563,13 @@ public partial class TimelineSurface : UserControl
         selectedClipId = clipId;
         ClipSelectionChanged?.Invoke(this, new(clipId));
         if (rebuild) Rebuild();
+        else
+            foreach (var grid in TimelineCanvas.Children.OfType<Grid>())
+                if (grid.Tag is Guid id && grid.Children.OfType<Border>().FirstOrDefault() is { } border)
+                {
+                    border.BorderBrush = id == clipId ? Brushes.White : new SolidColorBrush(Color.FromRgb(145, 175, 202));
+                    border.BorderThickness = id == clipId ? new(2) : new(1);
+                }
     }
 
     private void Viewport_SizeChanged(object sender, SizeChangedEventArgs e) => Rebuild();

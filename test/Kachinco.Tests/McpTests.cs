@@ -14,12 +14,12 @@ public sealed class McpTests
         Assert.IsTrue(f.Edit(new SplitClip(f.SequenceId, f.ClipId, 3 * Fixture.T, b),
             new SplitClip(f.SequenceId, b, 5 * Fixture.T, c)).Success);
         using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
-        var original = ProjectJson.Serialize(f.Project).Value;
+        var original = NativeProjectCodec.Serialize(f.Project).Value;
         var snapshot = f.Session.GetProject();
         var plan = TimelineEditPlanner.Reorder(f.Project, f.SequenceId, c, b, snapshot.Revision).Value!;
         Assert.IsTrue((await h.Human(() => f.Session.Execute(plan.Batch))).Success);
         Assert.IsFalse((await h.Call(grant, "undo", guard: h.Guard())).IsError);
-        Assert.AreEqual(original, ProjectJson.Serialize(f.Project).Value);
+        Assert.AreEqual(original, NativeProjectCodec.Serialize(f.Project).Value);
         Assert.IsFalse((await h.Call(grant, "redo", guard: h.Guard())).IsError);
         CollectionAssert.AreEqual(new[] { f.ClipId, c, b }, TimelineQueries.ListClips(f.Project.Sequences[0].Tracks[0]).Select(x => x.Id).ToArray());
         Assert.IsTrue((await h.Human(() => f.Session.Undo())).Success);
@@ -28,7 +28,7 @@ public sealed class McpTests
         Assert.IsFalse(result.IsError); Assert.IsTrue(result.Value!.Value.GetProperty("success").GetBoolean());
         CollectionAssert.AreEqual(new[] { b, c, f.ClipId }, TimelineQueries.ListClips(f.Project.Sequences[0].Tracks[0]).Select(x => x.Id).ToArray());
         Assert.IsTrue((await h.Human(() => f.Session.Undo())).Success);
-        Assert.AreEqual(original, ProjectJson.Serialize(f.Project).Value);
+        Assert.AreEqual(original, NativeProjectCodec.Serialize(f.Project).Value);
     }
 
     [TestMethod]

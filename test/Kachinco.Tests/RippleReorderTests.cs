@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Kachinco.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -130,6 +131,26 @@ public sealed class RippleReorderTests
         var cross = TimelineEditPlanner.Move(f.Project, f.SequenceId, Ids[2], other, 0);
         Assert.IsTrue(cross.Success); Assert.IsTrue(f.Edit(cross.Value!).Success);
         Assert.IsFalse(TimelineEditPlanner.Move(f.Project, f.SequenceId, Ids[0], f.AudioTrackId, 0).Success);
+    }
+
+    [TestMethod]
+    public void ReorderUsesExactTicksNearInt64LimitAndInAudioRuns()
+    {
+        var f = Create(); using var session = f.Session;
+        var p = f.Project; var seq = p.Sequences[0];
+        long anchor = long.MaxValue - 20;
+        var clips = seq.Tracks[0].Clips.Take(4).Select((c, i) => c with {
+            StartTicks = anchor + new long[] { 0, 3, 8, 10 }[i],
+            DurationTicks = new long[] { 3, 5, 2, 4 }[i], MediaAssetId = f.WavId }).ToImmutableArray();
+        var audio = seq.Tracks[1] with { Clips = clips };
+        p = p with { Sequences = [seq with { DurationTicks = long.MaxValue,
+            Tracks = [seq.Tracks[0] with { Clips = [] }, audio, seq.Tracks[2]] }] };
+        Assert.IsTrue(session.ReplaceProject(p).Success);
+        var plan = TimelineEditPlanner.Reorder(f.Project, seq.Id, Ids[2], Ids[1]);
+        Assert.IsTrue(plan.Success); Assert.IsTrue(session.Execute(plan.Value!.Batch).Success);
+        var ordered = TimelineQueries.ListClips(f.Project.Sequences[0].Tracks[1]);
+        CollectionAssert.AreEqual(new[] { anchor, anchor + 3, anchor + 5, anchor + 10 }, ordered.Select(c => c.StartTicks).ToArray());
+        Assert.AreEqual(long.MaxValue, f.Project.Sequences[0].DurationTicks);
     }
 
     [TestMethod]
