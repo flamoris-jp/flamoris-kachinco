@@ -4,6 +4,8 @@ using Kachinco.Core;
 using Kachinco.Infrastructure;
 
 // Same driver can be copied into the pre-cutover checkout. Generated public fixtures only.
+if (args.Length == 4 && args[0] == "--preview")
+{ await PreviewBench.Run(args[1], args[2], args[3]); return; }
 if(args.Length!=3)throw new ArgumentException("fixture directory, output JSON, revision label required");
 string dir=Path.GetFullPath(args[0]);Directory.CreateDirectory(dir);
 string mov=Path.Combine(dir,"source.mov"),wav=Path.Combine(dir,"source.wav");

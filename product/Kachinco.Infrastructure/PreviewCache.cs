@@ -153,6 +153,7 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
                 var properties = FrameProperties(frame.Value!, quality);
                 properties["videoPreparation"] = VideoPerformance.Statistics;
                 properties["cacheBytes"] = Frames.Statistics.Bytes;
+                properties["forward"] = forward;
                 logger.Info("preview.performance", "Preview video preparation metrics", properties);
             }
         }
@@ -178,11 +179,18 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
         {
             AudioPerformance.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds, cacheHit);
             if (logger is not null && AudioPerformance.ShouldReport())
+            {
+                long start = TimelineTime.SampleToTicks(firstSample, 48000);
+                long end = Math.Min(context.Sequence.DurationTicks, TimelineTime.SampleToTicks(firstSample + count, 48000));
+                var layers = context.Evaluator.EvaluateAudioRange(start, end - start).Value;
                 logger.Info("preview.performance", "Preview audio preparation metrics", new Dictionary<string, object?>
                 {
                     ["sequenceId"] = context.Sequence.Id, ["firstSample"] = firstSample, ["sampleCount"] = count,
+                    ["timelineTick"] = start, ["clipIds"] = string.Join(",", layers.Select(l => l.ClipId)),
+                    ["mediaAssetIds"] = string.Join(",", layers.Select(l => l.MediaAssetId)),
                     ["audioPreparation"] = AudioPerformance.Statistics, ["cacheBytes"] = Audio.Statistics.Bytes,
                 });
+            }
         }
     }
     private void LogContributors(EvaluatedFrame frame, bool forward, CancellationToken token, bool cacheHit)

@@ -171,20 +171,80 @@ public sealed class InteractivePreviewTests
         Assert.AreEqual(TimelineTime.FrameToTicks(239,new(30,1)),p.Frame!.Tick);
     }
     internal static PreviewContext Context(Fixture f) => PreviewContext.Create(f.Session.GetProject(), f.SequenceId).Value!;
+    [TestMethod]
+    public void ReadyVideoPresentsWhileTheNextDecodeIsBlockedAndProducerSlotsAreBounded()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var device = new Device();
+        long oneFrame = TimelineTime.FrameToTicks(1, new(30, 1));
+        var source = new Source { HoldFromTick = 2 * oneFrame };
+        using var p = new InteractivePreview(source, () => device);
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        p.Play(); pump.Until(() => source.Pending is not null);
+        Assert.AreEqual(1, p.ReadyVideoFrames);
+        var blocked = source.Pending!;
+        device.Advance(1600);
+        pump.Until(() => p.Frame?.Tick == oneFrame);
+        Assert.IsFalse(blocked.Task.IsCompleted, "Presentation must not await the producer's next decode.");
+        Assert.AreEqual(oneFrame, p.ReadPositionTicks());
+        Assert.IsTrue(device.Running);
+        source.HoldFromTick = long.MaxValue; blocked.SetResult(Frame(2 * oneFrame));
+        pump.Until(() => p.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        Assert.IsTrue(p.MaximumVideoFrames <= InteractivePreview.ForwardVideoFrames);
+        int requests = source.Video.Count;
+        for (int i = 0; i < 20; i++) { pump.Drain(); Thread.Sleep(1); }
+        Assert.AreEqual(requests, source.Video.Count, "Full ready queue must apply producer backpressure.");
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
+    public void QualitySwitchJoinsBlockedProducerAndOnlyPublishesTheNewSession()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var devices = new List<Device>();
+        long oneFrame = TimelineTime.FrameToTicks(1, new(30, 1));
+        var source = new Source { HoldFromTick = 2 * oneFrame };
+        using var p = new InteractivePreview(source, () => { var d = new Device(); devices.Add(d); return d; });
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        p.Play(); pump.Until(() => source.Pending is not null);
+        var old = source.Pending!; devices[0].Advance(1600);
+        p.SetQuality(PreviewQuality.Quarter);
+        Assert.IsFalse(devices[0].Running); Assert.IsTrue(source.Token.IsCancellationRequested);
+        Assert.AreEqual(1, devices.Count, "New session cannot race a cancelled producer.");
+        source.HoldFromTick = long.MaxValue; old.SetResult(Frame(0));
+        pump.Until(() => devices.Count == 2 && p.State == InteractivePreviewState.Playing);
+        Assert.IsTrue(devices[0].Disposed); Assert.AreEqual(oneFrame, p.Frame!.Tick);
+        Assert.AreEqual(PreviewQuality.Quarter, source.LastQuality);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
+    public void ForwardProducerFailureClearsPresentationAndJoinsAudio()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var device = new Device();
+        var source = new Source { FailFromTick = TimelineTime.FrameToTicks(2, new(30, 1)) };
+        using var p = new InteractivePreview(source, () => device);
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted); p.Play();
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.AreEqual(InteractivePreviewState.Failed, p.State);
+        Assert.IsNull(p.Frame); Assert.IsNull(p.Presentation); Assert.IsTrue(device.Disposed);
+        StringAssert.Contains(p.Error!, "missing media");
+    }
+
     private static Result<RenderedVideoFrame> Frame(long tick) => Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [1, 2, 3, 255]));
     private sealed class Source : IInteractivePreviewSource
     {
         public readonly List<long> Video = [], Audio = [];
         public readonly List<(long Tick, Guid ClipId, Guid MediaAssetId, long SourceTick)> Contributors = [];
         public bool Hold, Fail, AudioFail, AudioHold;
+        public long HoldFromTick = long.MaxValue, FailFromTick = long.MaxValue;
+        public PreviewQuality LastQuality;
         public TaskCompletionSource<Result<RenderedAudioBlock>>? PendingAudio; public Result<RenderedAudioBlock>? HeldAudio; public CancellationToken Token; public TaskCompletionSource<Result<RenderedVideoFrame>>? Pending;
         public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext c, long tick, PreviewQuality q, bool forward, CancellationToken token)
         {
-            Video.Add(tick); Token = token;
+            Video.Add(tick); Token = token; LastQuality = q;
             var layer = c.Evaluator.Evaluate(tick).Value!.VideoLayers.LastOrDefault();
             if (layer is not null) Contributors.Add((tick, layer.ClipId, layer.MediaAssetId, layer.SourceTicks));
-            if (Hold) { Pending = new(); return new(Pending.Task); } // Deliberately ignores cancellation: stale rejection must still work.
-            return ValueTask.FromResult(Fail ? Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MISSING", "missing media")) : Frame(tick));
+            if (Hold || forward && tick >= HoldFromTick) { Pending = new(); return new(Pending.Task); } // Deliberately ignores cancellation: stale rejection must still work.
+            return ValueTask.FromResult(Fail || forward && tick >= FailFromTick ? Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MISSING", "missing media")) : Frame(tick));
         }
         public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext c, long first, int count, CancellationToken token)
         {

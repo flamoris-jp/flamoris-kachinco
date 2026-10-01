@@ -51,7 +51,8 @@ internal static class InteractivePreviewChecks
                 }
                 evidence.Add(new { kind = "decode_throughput_not_device_playback", quality = quality.ToString(), coldScrubMs = coldMs, cachedScrubMs = cachedMs,
                     frames = 60, elapsedMs = watch.Elapsed.TotalMilliseconds, hostCpuMs = (Process.GetCurrentProcess().TotalProcessorTime - cpu).TotalMilliseconds,
-                    sampledHostAndFfmpegPeakBytes = bytes, cache = source.Frames.Statistics, videoProcesses = video.ProcessStarts, audioProcesses = audio.ProcessStarts });
+                    sampledHostAndFfmpegPeakBytes = bytes, cache = source.Frames.Statistics, videoProcesses = video.ProcessStarts, audioProcesses = audio.ProcessStarts,
+                    videoPreparation = source.VideoPerformance.Statistics, audioPreparation = source.AudioPerformance.Statistics });
                 Require(source.Frames.Statistics.Bytes <= 96 * 1024 * 1024 && source.Audio.Statistics.Bytes <= 8 * 1024 * 1024, "Cache byte bounds.");
                 foreach (decimal duration in new[] { 8m, 219.6m })
                 {
@@ -101,12 +102,13 @@ internal static class InteractivePreviewChecks
                         await Until(() => controller.ReadPositionTicks() >= 6 * T || controller.State == InteractivePreviewState.Failed);
                         Require(controller.State != InteractivePreviewState.Failed, controller.Error ?? "Playback failed.");
                         evidence.Add(new { kind = "native_device_playback", quality = quality.ToString(), duration, firstFrameMs = firstFrame,
-                            firstConsumedAudioMs = firstAudio, elapsedMs = watch.Elapsed.TotalMilliseconds, controller.DroppedVideoFrames, controller.Underruns });
+                            firstConsumedAudioMs = firstAudio, elapsedMs = watch.Elapsed.TotalMilliseconds, controller.DroppedVideoFrames, controller.Underruns,
+                            controller.MaximumVideoFrames, conversion = controller.ConversionPerformance.Statistics });
                     }
                     controller.Dispose(); await controller.Completion;
                 }
             }
-            await ViewerAndStrip(main, mov, wav);
+            await ViewerAndStrip(main, mov, wav, evidence);
         }
         finally
         {
@@ -117,7 +119,7 @@ internal static class InteractivePreviewChecks
             Directory.Delete(dir, true);
         }
     }
-    private static async Task ViewerAndStrip(MainWindow main, string mov, string wav)
+    private static async Task ViewerAndStrip(MainWindow main, string mov, string wav, List<object> evidence)
     {
         var fixture = Create(mov, wav, 219.6m, 0);
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -130,6 +132,7 @@ internal static class InteractivePreviewChecks
         var viewer = (Image)main.FindName("PreviewImage");
         var controller = (InteractivePreview)typeof(MainWindow).GetField("playback", flags)!.GetValue(main)!;
         await controller.Completion; Require(viewer.Source is BitmapSource, "Viewer receives initial evaluated frame.");
+        Require(Pixels((BitmapSource)viewer.Source).SequenceEqual(controller.Presentation!.Bgra8), "WPF receives the prepared BGRA pixels.");
         byte[] before = Pixels((BitmapSource)viewer.Source);
         timeline.SetCursorTicks(T); await controller.Completion;
         Require(controller.Frame?.Tick == T && viewer.Source is BitmapSource, "Playhead change must request the exact timeline time.");
@@ -147,6 +150,8 @@ internal static class InteractivePreviewChecks
         }
         await Until(() => timeline.VisualizationWorkers == 0);
         Require(timeline.VisualizationCache.Bytes <= 16 * 1024 * 1024, "Thumbnail cache is bounded.");
+        evidence.Add(new { kind = "WPF_latest_scrub_presentation", quality = controller.Quality.ToString(),
+            conversion = controller.ConversionPerformance.Statistics, presentation = controller.PresentationPerformance.Statistics });
         controller.Dispose(); await controller.Completion; timeline.DisposeVisualizations();
         Console.WriteLine("WPF viewer playhead -> evaluated MOV pixels, latest scrub, thumbnail strip/work bounds: PASS");
     }
