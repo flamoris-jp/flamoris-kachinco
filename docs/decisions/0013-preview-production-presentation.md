@@ -28,3 +28,13 @@ Fixed-size 128-request timing windows report recent p95 plus lifetime average/ma
 Logs aggregate at most once per second per video/audio/controller category, with a
 final session summary. Presentation conversion and WritePixels are measured separately.
 Windows physical Full/Half/Quarter A/V acceptance remains explicitly pending.
+
+Same-driver measurements also isolated packet polling as a dominant preparation
+cost. Forward video/PCM blocks now use one bounded worker with native blocking
+pipe reads, not managed two-millisecond polling per packet. The host registers
+both owner cancellation and a 30-second deadline to terminate the owned writer,
+which unblocks the read. POSIX waits on pipe readiness; Windows reads directly.
+Each call still borrows a pinned slice only for its duration. General process
+stream readers keep their existing bounded-time interface. Capability 2048 covers
+the new presentation and worker-read entry points; older DLLs fail the startup
+capability check without an ABI layout change.

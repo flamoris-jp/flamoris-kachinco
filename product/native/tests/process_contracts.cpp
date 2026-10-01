@@ -11,12 +11,13 @@
 #include <windows.h>
 #endif
 #define CHECK(x) do { if (!(x)) { std::cerr << "Failed at line " << __LINE__ << ": " << #x << '\n'; std::exit(1); } } while (false)
-std::string drain(kn_process* process, uint32_t channel) {
+std::string drain(kn_process* process, uint32_t channel, bool wait=false) {
     std::string output;
     std::array<uint8_t, 8192> bytes{};
     for (;;) {
         uint32_t count = 0;
-        CHECK(kn_process_read(process, channel, bytes.data(), static_cast<uint32_t>(bytes.size()), 10000, &count) == KN_OK);
+        CHECK((wait ? kn_process_read_wait(process, channel, bytes.data(), static_cast<uint32_t>(bytes.size()), &count) :
+            kn_process_read(process, channel, bytes.data(), static_cast<uint32_t>(bytes.size()), 10000, &count)) == KN_OK);
         if (!count) return output;
         output.append(reinterpret_cast<char*>(bytes.data()), count);
         CHECK(output.size() <= 2 * 1024 * 1024);
@@ -41,7 +42,7 @@ int main(int argc, char** argv) {
         CHECK(kn_process_start(argv[0], arguments, 2, &process, &os_error) == KN_OK);
         std::string out, err;
         std::thread reader([&] { err = drain(process, 1); });
-        out = drain(process, 0); reader.join();
+        out = drain(process, 0, true); reader.join();
         int32_t exit = 0; CHECK(kn_process_wait(process, 10000, &exit) == KN_OK && exit == 37);
         CHECK(out == arguments[1] && err == "stderr");
         CHECK(kn_process_wait(process, 0, &exit) == KN_OK && exit == 37);
@@ -60,7 +61,7 @@ int main(int argc, char** argv) {
     CHECK(kn_process_start(argv[0], filling, 1, &process, &os_error) == KN_OK);
     std::string out, err;
     std::thread reader([&] { err = drain(process, 1); });
-    out = drain(process, 0); reader.join();
+    out = drain(process, 0, true); reader.join();
     CHECK(out == std::string(1024 * 1024, 'o') && err == std::string(1024 * 1024, 'e'));
     kn_process_destroy(process);
     const char* waiting[] = {"--wait"};
@@ -73,6 +74,14 @@ int main(int argc, char** argv) {
     kn_process_cancel(process); blocked.join();
     CHECK(read_result == KN_CANCELLED);
     kn_process_destroy(process); kn_process_destroy(nullptr);
+    CHECK(std::chrono::steady_clock::now() - at < std::chrono::seconds(5));
+    CHECK(kn_process_start(argv[0], waiting, 1, &process, &os_error) == KN_OK);
+    at = std::chrono::steady_clock::now(); read_result = KN_OK;
+    std::thread blocked_wait([&] { uint8_t byte; uint32_t count; read_result = kn_process_read_wait(process, 0, &byte, 1, &count); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    kn_process_cancel(process); blocked_wait.join();
+    CHECK(read_result == KN_CANCELLED);
+    kn_process_destroy(process);
     CHECK(std::chrono::steady_clock::now() - at < std::chrono::seconds(5));
 #ifdef _WIN32
     DWORD final_handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &final_handles));

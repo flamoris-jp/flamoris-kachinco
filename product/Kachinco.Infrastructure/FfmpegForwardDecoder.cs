@@ -176,19 +176,15 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, Lifetime);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
             using var kill = timeout.Token.Register(() => MediaProcess.Kill(Process));
-            byte[] data = new byte[size]; int offset = 0;
-            while (offset < size)
+            byte[] data = new byte[size];
+            int offset = await Process.ReadOutputBlockAsync(data, timeout.Token);
+            if (offset < size)
             {
-                int read = await Process.StandardOutput.BaseStream.ReadAsync(data.AsMemory(offset), timeout.Token);
-                if (read == 0)
-                {
                     await Process.WaitForExitAsync(timeout.Token); await ErrorTask;
                     if (Process.ExitCode != 0) throw new InvalidDataException("FFmpeg forward decode failed: " + Error);
                     if (padPcmTail && offset % 8 == 0) return data; // Match independent decoder: final missing PCM samples are silence.
                     if (offset == 0) throw new MediaEndOfStreamException("Source has no frame at the requested time.");
                     throw new InvalidDataException("Incomplete decoded frame/PCM block.");
-                }
-                offset += read;
             }
             return data;
         }

@@ -87,4 +87,28 @@ public sealed class NativeMediaTests
         await process.WaitForExitAsync(deadline.Token);
         Assert.AreEqual(1048576, (await stdout).Length); Assert.AreEqual(1048576, (await stderr).Length);
     }
+    [TestMethod]
+    public async Task BoundedOutputBlocksDrainPacketsPreserveShortEofAndCancelTheOwnedWriter()
+    {
+        string python = OperatingSystem.IsWindows() ? "python" : "python3";
+        using (var process = NativeMediaProcess.Start(python,
+            ["-c", "import sys;sys.stdout.buffer.write(b'o'*1048576);sys.stderr.write('e'*1048576)"]))
+        {
+            var stderr = process.StandardError.ReadToEndAsync();
+            var bytes = new byte[1048584];
+            int read = await process.ReadOutputBlockAsync(bytes).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.AreEqual(1048576, read); Assert.IsTrue(bytes.AsSpan(0, read).ToArray().All(b => b == (byte)'o'));
+            Assert.AreEqual(0, bytes[^1]); Assert.AreEqual(1048576, (await stderr).Length);
+            await process.WaitForExitAsync(); Assert.AreEqual(0, process.ExitCode);
+        }
+        using (var process = NativeMediaProcess.Start(python, ["-c", "import time;time.sleep(60)"]))
+        {
+            using var cancellation = new CancellationTokenSource();
+            var blocked = process.ReadOutputBlockAsync(new byte[8], cancellation.Token);
+            cancellation.Cancel();
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await blocked.WaitAsync(TimeSpan.FromSeconds(5)));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await process.WaitForExitAsync(deadline.Token);
+        }
+    }
 }

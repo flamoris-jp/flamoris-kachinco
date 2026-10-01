@@ -223,6 +223,32 @@ int32_t KN_CALL kn_process_read(kn_process* process, uint32_t channel, uint8_t* 
         return KN_CANCELLED;
     } catch (...) { return KN_INTERNAL_ERROR; }
 }
+int32_t KN_CALL kn_process_read_wait(kn_process* process, uint32_t channel, uint8_t* buffer, uint32_t capacity, uint32_t* bytes_read) noexcept {
+    if (!bytes_read) return KN_INVALID_ARGUMENT;
+    *bytes_read=0;
+    if (!process || channel > 1 || !buffer || !capacity || capacity > 64*1024*1024) return KN_INVALID_ARGUMENT;
+    try {
+        std::lock_guard<std::mutex> lock(process->readers[channel]);
+        while (!process->cancelled.load()) {
+#ifdef _WIN32
+            DWORD count=0;
+            if (!ReadFile(process->pipes[channel].value,buffer,capacity,&count,nullptr)) {
+                if (process->cancelled.load()) return KN_CANCELLED;
+                return GetLastError() == ERROR_BROKEN_PIPE ? KN_OK : KN_IO_ERROR;
+            }
+            if (process->cancelled.load()) return KN_CANCELLED;
+            *bytes_read=count; return KN_OK;
+#else
+            const ssize_t count=read(process->pipes[channel].value,buffer,capacity);
+            if (count >= 0) { *bytes_read=static_cast<uint32_t>(count); return KN_OK; }
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return KN_IO_ERROR;
+            pollfd pipe={process->pipes[channel].value,POLLIN,0};
+            if (poll(&pipe,1,20) < 0 && errno != EINTR) return KN_IO_ERROR;
+#endif
+        }
+        return KN_CANCELLED;
+    } catch (...) { return KN_INTERNAL_ERROR; }
+}
 int32_t KN_CALL kn_process_wait(kn_process* process, uint32_t timeout_ms, int32_t* exit_code) noexcept {
     if (!exit_code) return KN_INVALID_ARGUMENT;
     *exit_code = 0;

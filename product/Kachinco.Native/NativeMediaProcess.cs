@@ -57,6 +57,33 @@ public sealed class NativeMediaProcess : IDisposable
         while (!HasExited) { token.ThrowIfCancellationRequested(); await Task.Delay(2, token).ConfigureAwait(false); }
     }
     public void Kill() => NativeProcessMethods.Cancel(handle);
+    // One worker per bounded frame/PCM block. No timer/Task roundtrip for each pipe packet.
+    // This is a sole-reader operation; do not mix with StandardOutput reads concurrently.
+    public async Task<int> ReadOutputBlockAsync(Memory<byte> buffer, CancellationToken token = default)
+    {
+        if (buffer.Length > 256 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(buffer));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        using var cancellation = deadline.Token.Register(Kill);
+        return await Task.Run(() =>
+        {
+            int offset = 0;
+            while (offset < buffer.Length)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                using var pinned = buffer[offset..].Pin();
+                unsafe
+                {
+                    Check(NativeProcessMethods.ReadWait(handle, 0, (IntPtr)pinned.Pointer,
+                        (uint)Math.Min(buffer.Length - offset, 64 * 1024 * 1024), out uint read));
+                    deadline.Token.ThrowIfCancellationRequested();
+                    if (read == 0) break;
+                    offset += checked((int)read);
+                }
+            }
+            return offset;
+        }, deadline.Token).ConfigureAwait(false);
+    }
     public void Dispose()
     {
         if (Interlocked.Exchange(ref disposed, 1) != 0) return;
@@ -131,6 +158,8 @@ internal static class NativeProcessMethods
         [In] IntPtr[] arguments, uint count, out NativeProcessHandle output, out int osError);
     [DllImport(Library, EntryPoint = "kn_process_read", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeStatus Read(NativeProcessHandle handle, uint channel, IntPtr buffer, uint capacity, uint timeout, out uint read);
+    [DllImport(Library, EntryPoint = "kn_process_read_wait", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern NativeStatus ReadWait(NativeProcessHandle handle, uint channel, IntPtr buffer, uint capacity, out uint read);
     [DllImport(Library, EntryPoint = "kn_process_wait", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeStatus Wait(NativeProcessHandle handle, uint timeout, out int exitCode);
     [DllImport(Library, EntryPoint = "kn_process_cancel", CallingConvention = CallingConvention.Cdecl)]

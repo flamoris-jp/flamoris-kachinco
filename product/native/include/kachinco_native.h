@@ -78,6 +78,9 @@ KN_API int32_t KN_CALL kn_sample_count(const kn_runtime* runtime, int64_t durati
 typedef struct kn_process kn_process;
 KN_API int32_t KN_CALL kn_process_start(const char* executable, const char* const* arguments, uint32_t argument_count, kn_process** output, int32_t* os_error) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_process_read(kn_process* process, uint32_t channel, uint8_t* buffer, uint32_t capacity, uint32_t timeout_ms, uint32_t* bytes_read) KN_NOEXCEPT;
+/* Worker-only blocking pipe read. Host deadline/cancellation must call process_cancel;
+   terminating the owned writer unblocks the OS read. No callback or retained buffer. */
+KN_API int32_t KN_CALL kn_process_read_wait(kn_process* process, uint32_t channel, uint8_t* buffer, uint32_t capacity, uint32_t* bytes_read) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_process_wait(kn_process* process, uint32_t timeout_ms, int32_t* exit_code) KN_NOEXCEPT;
 KN_API void KN_CALL kn_process_cancel(kn_process* process) KN_NOEXCEPT;
 KN_API void KN_CALL kn_process_destroy(kn_process* process) KN_NOEXCEPT;
