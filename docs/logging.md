@@ -52,6 +52,11 @@ including fallback sinks.
 - `project`, `document`, `document.open`, `document.save`
 - `command.failure`
 - `media`, `preview`, `render`
+- `preview.performance`: video/audio preparation (cache-hit/miss costs), worker BGRA conversion,
+  WPF WritePixels, ready depth, maximum prepared/in-flight frames, dropped frames and underruns.
+  One aggregate per second per video/audio/controller, plus a final playback summary. Timing
+  p95 covers the latest 128 requests; counts/average/max and cache hit/miss means are lifetime.
+  Stable contributor IDs, quality and requested/presented ticks give slow-point context.
 - `mcp.transport`, `mcp.protocol`, `mcp.auth`, `mcp.session`,
   `mcp.command`, `mcp.query`
 

@@ -1,0 +1,99 @@
+{
+  "revision": "a688172-instrumented-e216577",
+  "os": "Unix 6.18.44.0",
+  "processors": 8,
+  "note": "Generated 1080p H264 MOV; decode and pixel-preparation wall times, no WPF WritePixels or physical A/V claim. Gated playback uses consumed samples from a deterministic test device.",
+  "results": [
+    {
+      "quality": "Full",
+      "frames": 60,
+      "preparation": {
+        "averageMs": 111.04902999999997,
+        "p95Ms": 512.4136,
+        "maximumMs": 526.0301
+      },
+      "cacheHit": {
+        "averageMs": 6.660759999999999,
+        "p95Ms": 13.0946,
+        "maximumMs": 13.0946
+      },
+      "pixelPreparation": {
+        "averageMs": 6.393523333333332,
+        "p95Ms": 9.2281,
+        "maximumMs": 19.4637
+      },
+      "conversionLocation": "old_managed_UI_pattern",
+      "perPresentationUiPixelArrayBytes": 8294400,
+      "cache": {
+        "Bytes": 99532800,
+        "Entries": 12,
+        "Hits": 10,
+        "Misses": 60,
+        "Evictions": 48
+      }
+    },
+    {
+      "quality": "Half",
+      "frames": 60,
+      "preparation": {
+        "averageMs": 106.76171333333333,
+        "p95Ms": 130.2796,
+        "maximumMs": 173.3503
+      },
+      "cacheHit": {
+        "averageMs": 1.96886,
+        "p95Ms": 2.9065,
+        "maximumMs": 2.9065
+      },
+      "pixelPreparation": {
+        "averageMs": 1.4254549999999988,
+        "p95Ms": 2.7409,
+        "maximumMs": 4.6057
+      },
+      "conversionLocation": "old_managed_UI_pattern",
+      "perPresentationUiPixelArrayBytes": 2073600,
+      "cache": {
+        "Bytes": 99532800,
+        "Entries": 48,
+        "Hits": 10,
+        "Misses": 60,
+        "Evictions": 12
+      }
+    },
+    {
+      "quality": "Quarter",
+      "frames": 60,
+      "preparation": {
+        "averageMs": 10.511210000000002,
+        "p95Ms": 29.2459,
+        "maximumMs": 92.6877
+      },
+      "cacheHit": {
+        "averageMs": 0.42195,
+        "p95Ms": 1.0443,
+        "maximumMs": 1.0443
+      },
+      "pixelPreparation": {
+        "averageMs": 0.33416499999999993,
+        "p95Ms": 0.7864,
+        "maximumMs": 1.3489
+      },
+      "conversionLocation": "old_managed_UI_pattern",
+      "perPresentationUiPixelArrayBytes": 518400,
+      "cache": {
+        "Bytes": 31104000,
+        "Entries": 60,
+        "Hits": 10,
+        "Misses": 60,
+        "Evictions": 0
+      }
+    }
+  ],
+  "gatedPresentation": {
+    "clockTick": 1176000,
+    "presentedTickWhileNextDecodeBlocked": 0,
+    "producerStillBlocked": true,
+    "DroppedVideoFrames": 0,
+    "Underruns": 0
+  }
+}
