@@ -1,4 +1,4 @@
-name: Windows portable package
+name: Windows Portable Package
 on: workflow_dispatch
 permissions:
   contents: read
