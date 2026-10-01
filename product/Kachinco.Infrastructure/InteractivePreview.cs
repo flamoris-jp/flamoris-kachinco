@@ -263,6 +263,9 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         finally
         {
             sessionCancellation.Cancel();
+            // A producer failure can leave its peer waiting on codec work.
+            // Freeze physical audio before joining, using the controller's gate.
+            lock (gate) { try { device.Pause(); } catch { } }
             try
             {
                 // Observe and join both producers without holding the gate.

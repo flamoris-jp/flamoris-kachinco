@@ -26,3 +26,8 @@ The updated Windows smoke captures generated 1080p Full/Half/Quarter real-codec
 preparation and device metrics when an audio device exists. A runner without an
 audio device reports that absence. Viewer smoke verifies actual BGRA pixels and
 WritePixels metrics. Review those automated results separately from this checklist.
+
+PR #56 supplements #55 with Full/Half/Quarter viewer byte/dimension checks and
+pauses physical audio before joining producers after a failure. When testing a
+missing/failed source, confirm queued sound stops promptly, the viewer clears and
+recovery does not publish old pixels or retain an old audio device.

@@ -139,6 +139,17 @@ internal static class InteractivePreviewChecks
         Require(!before.SequenceEqual(Pixels((BitmapSource)viewer.Source)), "Scrubbing actual source updates viewer pixels.");
         for (int i = 0; i < 100; i++) timeline.SetCursorTicks(T + i * T / 100);
         await controller.Completion; Require(controller.Frame?.Tick == T + 99 * T / 100, "Rapid scrub latest frame wins.");
+        foreach (var quality in new[] { PreviewQuality.Full, PreviewQuality.Half, PreviewQuality.Quarter })
+        {
+            controller.SetQuality(quality); await controller.Completion;
+            Require(viewer.Source is BitmapSource, "Prepared BGRA reaches WPF after quality change.");
+            var bitmap = (BitmapSource)viewer.Source;
+            Require(bitmap.PixelWidth == 1920 / (int)quality && bitmap.PixelHeight == 1080 / (int)quality, "Presentation quality dimensions.");
+            Require(Pixels(bitmap).SequenceEqual(controller.Presentation!.Bgra8), "WritePixels preserves prepared BGRA bytes.");
+            Require(controller.PresentationPerformance.Statistics.Count > 0, "WPF presentation has timing telemetry.");
+            evidence.Add(new { kind = "wpf_prepared_bgra_presentation", quality = quality.ToString(),
+                conversion = controller.ConversionPerformance.Statistics, presentation = controller.PresentationPerformance.Statistics });
+        }
         await Until(() => timeline.VisualizationWorkers == 0);
         var canvas = (Canvas)timeline.FindName("TimelineCanvas");
         int images = Descendants(canvas).OfType<Image>().Count(i => i.Source is BitmapSource);
