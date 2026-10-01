@@ -18,8 +18,13 @@ cache/key/decode/composition and native channel copying. WPF uses the BGRA backi
 array for its final WritePixels copy, without a per-presentation array or pixel loop.
 Export and native cached payloads keep their existing RGBA/PCM contract.
 
-All native playback decisions and queue mutations stay on the host synchronization
-context. The workers never mutate that handle or call the physical audio device.
+All native playback decisions, ready-queue mutations, host intent and physical
+audio-device operations are serialized by one controller gate. Correctness does
+not require an ambient SynchronizationContext; WPF still captures its Dispatcher
+for presentation callbacks. Decode, pixel preparation, asynchronous delays and
+producer joins run outside the gate. Each request snapshots its immutable context
+and quality under the gate before preparation. The workers never mutate the
+playback handle or call the physical audio device.
 Cancel/seek/quality/context changes supersede generation, freeze the device, and
 join both producers before a new session starts. Source workers use immutable
 contexts; outside-window edits still refresh the context between requests.
