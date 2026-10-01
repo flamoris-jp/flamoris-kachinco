@@ -69,3 +69,32 @@ dotnet run --project test/Kachinco.RuntimeBench/Kachinco.RuntimeBench.csproj -c 
 
 Issue #53 remains open for that physical acceptance. Do not claim a verified 30fps
 guarantee from this benchmark or a CI machine without an audio device.
+
+## PR #55 synchronization review follow-up
+
+Rebased the five implementation commits onto reviewed main `a25ee9b` after PR #54.
+One controller gate now protects native decisions, ready-queue access, generation
+checks, mailbox ownership and physical audio operations. Decode/pixel preparation,
+delays and producer joins remain outside the gate. Immutable context/quality values
+are captured before asynchronous preparation. The WPF Dispatcher remains the callback
+context for WPF callers, but a null SynchronizationContext is supported explicitly.
+
+Added two ThreadPool regression tests without a pump or ambient synchronization
+context. A deliberately held device-clock decision blocks a concurrent host clock
+read; sustained production/consumption preserves the three-frame bound. A stalled
+decode does not block presentation, and Pause freezes the clock, joins a producer
+that ignores cancellation and rejects its stale result. The serialization regression
+fails on the rebased pre-fix code at the expected concurrent-host-read assertion.
+
+Validation at the synchronization fix:
+
+- Release/headless build: zero warnings/errors; native contracts 4/4 passed.
+- Targeted preview/concurrency/logging tests: 21/21 passed.
+- Full managed suite: 211/213 passed. The same two MCP named-pipe tests cannot
+  create sockets in this execution environment (`Permission denied`); the new
+  synchronization tests and all other managed tests passed.
+- Self-review checked every native playback access and ready-queue mutation is
+  gated, and no asynchronous wait/join holds the gate. Session cleanup removes the
+  shared device reference before disposal; superseded generations cannot publish.
+- New-head Linux/Windows CI is recorded in the PR. Physical Windows A/V acceptance
+  remains pending; these tests do not replace it.
