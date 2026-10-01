@@ -105,7 +105,8 @@ int main() {
     kn_editor_destroy(s);
     kn_buffer* b=nullptr;const uint8_t malformed[]={0xff};REQUIRE(kn_editor_request(nullptr,malformed,1,&b)==KN_INVALID_ARGUMENT&&!b);
     REQUIRE(kn_editor_request(nullptr,nullptr,0,&b)==KN_INVALID_ARGUMENT&&!b);
-    REQUIRE(request(nullptr,R"({"action":"deserialize","text":"{\"schemaVersion\":99}"})").at("diagnostics")[0].at("code")=="SCHEMA_UNSUPPORTED");
+    const auto unsupported_schema=request(nullptr,json({{"action","deserialize"},{"text",R"({"schemaVersion":99})"}}).dump());
+    REQUIRE(unsupported_schema.at("diagnostics")[0].at("code")=="SCHEMA_UNSUPPORTED");
     return 0;
 }
 
