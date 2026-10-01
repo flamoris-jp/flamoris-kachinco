@@ -58,14 +58,16 @@ internal static class TimelineRippleChecks
 
             // Open the actual WPF menu and invoke its routed click path.
             surface.SetCursorTicks(4 * t);
-            var menu = Grid(b).ContextMenu!; menu.IsOpen = true; await Layout();
+            var menu = OpenMenu(b); await Layout();
+            await Task.Delay(150); await Layout();
+            Check(menu.IsOpen, "menu stays open after popup focus transfer");
             Check(surface.SelectedClipId == b && menu.Items.Count == 5, "menu selection/actions");
             Check(menu.Items.Cast<MenuItem>().All(i => i.IsEnabled), "interior menu availability");
             menu.IsOpen = false;
             ((MenuItem)menu.Items[3]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); await Layout();
             Near(Left(b), 0, "context reorder"); Check(edits == 2, "context single batch");
             surface.SetCursorTicks(0);
-            menu = Grid(b).ContextMenu!; menu.IsOpen = true; await Layout();
+            menu = OpenMenu(b); await Layout();
             Check(!((MenuItem)menu.Items[3]).IsEnabled && !((MenuItem)menu.Items[0]).IsEnabled, "disabled earlier/split");
             menu.IsOpen = false;
             ((MenuItem)menu.Items[2]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); await Layout();
@@ -83,6 +85,14 @@ internal static class TimelineRippleChecks
         double Left(Guid id) => System.Windows.Controls.Canvas.GetLeft(Grid(id));
         void Load() { var snapshot = session.GetProject(); surface.LoadProject(snapshot.Project, sequence, surface.SelectedClipId, snapshot.Revision); }
         async Task Layout() { surface.UpdateLayout(); await surface.Dispatcher.InvokeAsync(() => surface.UpdateLayout(), DispatcherPriority.ContextIdle); }
+        ContextMenu OpenMenu(Guid id)
+        {
+            var grid = Grid(id); var menu = grid.ContextMenu!;
+            Check((bool)typeof(TimelineSurface).GetMethod("PrepareClipMenu", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(surface, [menu, id])!, "menu preparation");
+            menu.PlacementTarget = grid; menu.IsOpen = true;
+            return menu;
+        }
         Thumb Begin(Guid id)
         {
             var thumb = Grid(id).Children.OfType<Thumb>().First();
