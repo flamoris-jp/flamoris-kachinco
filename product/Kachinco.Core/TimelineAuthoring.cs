@@ -125,6 +125,16 @@ public static class TimelineEditPlanner
             pointerTicks >= c.StartTicks && pointerTicks <= c.EndTicks);
         if (target is null) return Result<Guid?>.Fail(
             Diagnostic.Error("NO_INSERTION", "The pointer is in free space.", clipId));
+        int sourceIndex = Array.FindIndex(ordered.ToArray(), c => c.Id == clipId);
+        if (sourceIndex < 0) return Result<Guid?>.Fail(
+            Diagnostic.Error("CLIP_NOT_FOUND", "Clip not found.", clipId));
+        int targetIndex = ordered.IndexOf(target);
+        // A null insertion means the source run's end, so never derive it from
+        // a target across a gap. Check the full path, not just the target's neighbor.
+        for (int i = Math.Min(sourceIndex, targetIndex); i < Math.Max(sourceIndex, targetIndex); i++)
+            if (ordered[i].EndTicks != ordered[i + 1].StartTicks)
+                return Result<Guid?>.Fail(
+                    Diagnostic.Error("RIPPLE_GAP", "The target is outside this clip's contiguous run.", clipId));
         Guid? before = target.Id;
         if (pointerTicks >= target.StartTicks + target.DurationTicks / 2)
         {

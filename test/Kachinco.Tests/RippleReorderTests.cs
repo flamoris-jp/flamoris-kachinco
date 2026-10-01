@@ -85,6 +85,61 @@ public sealed class RippleReorderTests
     }
 
     [TestMethod]
+    public void PointerInAnotherRunNeverBecomesTheSourceRunEnd()
+    {
+        var f = Create(); using var session = f.Session;
+        var project = f.Project; var sequence = project.Sequences[0];
+        var track = sequence.Tracks[0];
+        // [A][B] gap [C][D] gap [E]: both foreign run ends are ambiguous
+        // without checking the source/target run before returning null.
+        track = track with { Clips = track.Clips.Select(c => c with {
+            StartTicks = c.Id == Ids[2] ? 10 * Fixture.T :
+                c.Id == Ids[3] ? 12 * Fixture.T :
+                c.Id == Ids[4] ? 18 * Fixture.T : c.StartTicks }).ToImmutableArray() };
+        project = project with { Sequences = [sequence with {
+            Tracks = sequence.Tracks.SetItem(0, track) }] };
+        Assert.IsTrue(session.ReplaceProject(project).Success);
+        var snapshot = session.GetProject();
+        foreach (var pair in new[] {
+            (Source: Ids[0], Target: Ids[3]), // later run's last clip
+            (Source: Ids[0], Target: Ids[4]), // final run on the track
+            (Source: Ids[3], Target: Ids[1]), // earlier run's last clip
+            (Source: Ids[0], Target: Ids[2]) }) // non-terminal foreign clip
+        {
+            var target = track.Clips.Single(c => c.Id == pair.Target);
+            foreach (long ticks in new[] { target.StartTicks,
+                target.StartTicks + target.DurationTicks / 4,
+                target.StartTicks + 3 * target.DurationTicks / 4, target.EndTicks })
+            {
+                var hit = TimelineEditPlanner.InsertionTarget(track, pair.Source, ticks);
+                Assert.IsFalse(hit.Success);
+                Assert.AreEqual("RIPPLE_GAP", hit.Diagnostics[0].Code);
+                var plan = TimelineEditPlanner.ReorderAt(f.Project, f.SequenceId,
+                    pair.Source, ticks, snapshot.Revision);
+                Assert.IsFalse(plan.Success);
+                Assert.AreEqual("RIPPLE_GAP", plan.Diagnostics[0].Code);
+                Assert.AreSame(snapshot, session.GetProject());
+            }
+        }
+        // Same-run end remains legal even when followed by a real gap.
+        foreach (var pair in new[] { (Source: Ids[0], Target: Ids[1]),
+            (Source: Ids[2], Target: Ids[3]) })
+        {
+            var target = track.Clips.Single(c => c.Id == pair.Target);
+            var hit = TimelineEditPlanner.InsertionTarget(track, pair.Source, target.EndTicks);
+            Assert.IsTrue(hit.Success);
+            Assert.IsNull(hit.Value);
+            var plan = TimelineEditPlanner.ReorderAt(f.Project, f.SequenceId,
+                pair.Source, target.EndTicks, snapshot.Revision);
+            Assert.IsTrue(plan.Success);
+            Assert.AreEqual(target.EndTicks - track.Clips.Single(c => c.Id == pair.Source).DurationTicks,
+                plan.Value!.InsertionTicks);
+        }
+        Assert.AreSame(snapshot, session.GetProject());
+        Assert.IsFalse(snapshot.CanUndo);
+    }
+
+    [TestMethod]
     public void GapWrongTrackOverlapAndNoopRejectWithoutTouchingHistory()
     {
         var f = Create(); using var session = f.Session;
