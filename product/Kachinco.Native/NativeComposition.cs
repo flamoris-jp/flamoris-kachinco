@@ -28,6 +28,12 @@ public static class NativeComposition
                     width, height, in appearance, y, Math.Min(16, height - y)));
             }
     }
+    public static unsafe void RgbaToBgra(ReadOnlySpan<byte> source, Span<byte> output)
+    {
+        if (source.Length != output.Length) throw new InvalidDataException("Invalid presentation buffer size.");
+        fixed (byte* src = source, dst = output)
+            NativeMediaProcess.Check(Methods.RgbaToBgra((IntPtr)dst, (IntPtr)src, checked((uint)source.Length)));
+    }
     public static unsafe void Mix(Span<double> mix, ReadOnlySpan<float> source, int offset, double gain)
     {
         fixed (double* dst = mix)
@@ -45,6 +51,8 @@ public static class NativeComposition
     private static class Methods
     {
         private const string Library = "Kachinco.Native.Runtime";
+        [DllImport(Library, EntryPoint = "kn_rgba_to_bgra", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus RgbaToBgra(IntPtr output, IntPtr source, uint size);
         [DllImport(Library, EntryPoint = "kn_blend", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Blend(NativeRgba backdrop, NativeRgba source, int mode, double opacity, out NativeRgba output);
         [DllImport(Library, EntryPoint = "kn_composite_rows", CallingConvention = CallingConvention.Cdecl)]

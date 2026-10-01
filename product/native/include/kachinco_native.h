@@ -30,6 +30,7 @@ extern "C" {
 #define KN_CAP_EDITOR UINT64_C(256)
 #define KN_CAP_PROJECT_CODEC UINT64_C(512)
 #define KN_CAP_TIME_QUERIES UINT64_C(1024)
+#define KN_CAP_PREVIEW_PRESENTATION UINT64_C(2048)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -105,6 +106,8 @@ typedef struct kn_appearance {
 typedef struct kn_rgba { double r, g, b, a; } kn_rgba;
 KN_API int32_t KN_CALL kn_blend(kn_rgba backdrop, kn_rgba source, int32_t mode, double opacity, kn_rgba* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_composite_rows(uint8_t* output, const uint8_t* source, uint32_t size, int32_t width, int32_t height, const kn_appearance* appearance, int32_t first_row, int32_t row_count) KN_NOEXCEPT;
+/* Presentation-only channel copy; input/output may alias. Straight alpha is preserved. */
+KN_API int32_t KN_CALL kn_rgba_to_bgra(uint8_t* output, const uint8_t* source, uint32_t size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_mix_add(double* mix, uint32_t mix_count, const float* source, uint32_t source_count, uint32_t offset, double gain) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_mix_finish(const double* mix, float* output, uint32_t count) KN_NOEXCEPT;
 
@@ -146,6 +149,8 @@ KN_API int32_t KN_CALL kn_playback_accept(const kn_playback* playback, int64_t g
 KN_API int32_t KN_CALL kn_playback_clock(kn_playback* playback, int64_t generation, int64_t played_frames, int64_t* position) KN_NOEXCEPT;
 /* ready_tick=-1 means no ready video. Decisions consume at most one request. */
 KN_API int32_t KN_CALL kn_playback_video(kn_playback* playback, int64_t generation, int64_t played_frames, int32_t ready_count, int64_t ready_tick, kn_playback_step* output) KN_NOEXCEPT;
+/* Presentation never reserves a decode request. Drop the head only when the next frame is due. */
+KN_API int32_t KN_CALL kn_playback_present(kn_playback* playback, int64_t generation, int64_t played_frames, int64_t ready_tick, int64_t next_ready_tick, kn_playback_step* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_playback_audio(kn_playback* playback, int64_t generation, int64_t queued_frames, kn_audio_step* output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_first_sample(int64_t tick, int32_t rate, int64_t* output) KN_NOEXCEPT;
 

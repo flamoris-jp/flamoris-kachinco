@@ -54,7 +54,8 @@ public sealed class InteractivePreviewTests
     {
         using var pump = new Pump(); var f = new Fixture(); var source = new Source(); var devices = new List<Device>();
         using var p = new InteractivePreview(source, () => { var d = new Device(); devices.Add(d); return d; });
-        p.SetContext(Context(f)); source.Hold = true; p.Play(); var late = source.Pending!;
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        source.Hold = true; p.Play(); var late = source.Pending!;
         p.Pause(); source.Hold = false; late.SetResult(Frame(0)); pump.Until(() => p.State == InteractivePreviewState.Paused);
         pump.Until(() => p.Completion.IsCompleted);
         Assert.IsFalse(devices[0].Running); Assert.IsTrue(devices[0].Disposed);

@@ -122,7 +122,9 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     public NativePreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024, NativePreviewPayload.Encode, NativePreviewPayload.Audio);
     public PreviewWorkMetrics VideoPerformance { get; } = new();
     public PreviewWorkMetrics AudioPerformance { get; } = new();
-    public async ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
+    public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token) =>
+        new(Task.Run(() => FrameCoreAsync(context, tick, quality, forward, token), token));
+    private async Task<Result<RenderedVideoFrame>> FrameCoreAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
     {
         if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
         token.ThrowIfCancellationRequested();
@@ -134,7 +136,7 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
         LogContributors(frame.Value!, forward, token, cacheHit);
         if (cacheHit) { RecordVideo(); return Result<RenderedVideoFrame>.Ok(cached); }
         var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions, logger);
-        var result = await Task.Run(async () => await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token), token);
+        var result = await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token);
         token.ThrowIfCancellationRequested();
         if (key != context.VideoKey(tick, quality)) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Frames.Put(key, result.Value!, result.Value!.Rgba8.Length);
@@ -155,15 +157,17 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
             }
         }
     }
-    public async ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token)
+    public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token) =>
+        new(Task.Run(() => AudioCoreAsync(context, firstSample, count, token), token));
+    private async Task<Result<RenderedAudioBlock>> AudioCoreAsync(PreviewContext context, long firstSample, int count, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         long started = Stopwatch.GetTimestamp();
         string key = context.AudioKey(firstSample, count);
         bool cacheHit = Audio.TryGet(key, out var cached);
         if (cacheHit) { RecordAudio(); return Result<RenderedAudioBlock>.Ok(cached); }
-        var result = await Task.Run(async () => await new SharedAudioRenderer(audio, context.ProjectPath)
-            .RenderAsync(context.Evaluator, firstSample, count, 48000, 2, token), token);
+        var result = await new SharedAudioRenderer(audio, context.ProjectPath)
+            .RenderAsync(context.Evaluator, firstSample, count, 48000, 2, token);
         token.ThrowIfCancellationRequested();
         if (key != context.AudioKey(firstSample, count)) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Audio.Put(key, result.Value!, result.Value!.Samples.Length * 4L);
