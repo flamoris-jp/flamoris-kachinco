@@ -177,7 +177,7 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
     if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
@@ -204,6 +204,40 @@ json apply(json p,const json& request) {
         if(!found) reject(caption?"CAPTION_NOT_FOUND":"CLIP_NOT_FOUND",caption?"Caption not found.":"Clip not found.",id);
         auto& values=s["tracks"][ti][caption?"captions":"clips"];
         if(type=="DeleteClip"||type=="DeleteCaption") values.erase(values.begin()+static_cast<json::difference_type>(ci));
+        else if(type=="RippleReorderClip") {
+            if(integer(s["tracks"][ti].at("kind"))==2)
+                reject("TRACK_MEDIA_MISMATCH","Choose a video or audio track.",id);
+            std::vector<size_t> order; order.reserve(values.size());
+            for(size_t i=0;i<values.size();++i) order.push_back(i);
+            std::sort(order.begin(),order.end(),[&](size_t a,size_t b) {
+                return integer(values[a].at("startTicks"))<integer(values[b].at("startTicks"));
+            });
+            auto start=[&](size_t i) {return integer(values[order[i]].at("startTicks"));};
+            auto end=[&](size_t i) {const auto& v=values[order[i]];return add(integer(v.at("startTicks")),integer(v.at("durationTicks")));};
+            for(size_t i=1;i<order.size();++i) if(end(i-1)>start(i))
+                reject("CLIP_OVERLAP","Ripple reordering requires a non-overlapping lane.",id);
+            size_t origin=0; while(order[origin]!=ci) ++origin;
+            size_t first=origin,last=origin;
+            while(first>0&&end(first-1)==start(first)) --first;
+            while(last+1<order.size()&&end(last)==start(last+1)) ++last;
+            const auto& before=c.at("beforeClipId"); size_t destination=last+1;
+            if(!before.is_null()) {
+                destination=first;
+                while(destination<=last&&values[order[destination]].at("id")!=before) ++destination;
+                if(destination>last) reject("RIPPLE_GAP","Insertion must stay within the contiguous run.",id);
+            }
+            if(destination==origin||destination==origin+1)
+                reject("REORDER_UNCHANGED","This insertion does not change clip order.",id);
+            const auto anchor=start(first); const auto moved=order[origin];
+            order.erase(order.begin()+static_cast<std::vector<size_t>::difference_type>(origin));
+            if(destination>origin) --destination;
+            order.insert(order.begin()+static_cast<std::vector<size_t>::difference_type>(destination),moved);
+            auto cursor=anchor;
+            for(size_t i=first;i<=last;++i) {
+                auto& clip=values[order[i]]; clip["startTicks"]=cursor;
+                cursor=add(cursor,integer(clip.at("durationTicks")));
+            }
+        }
         else if(type=="MoveClip") {json value=values[ci]; values.erase(values.begin()+static_cast<json::difference_type>(ci)); value["startTicks"]=c.at("startTicks"); auto target=find(s.at("tracks"),c.at("targetTrackId"),"TRACK_NOT_FOUND","Track not found."); s["tracks"][target]["clips"].push_back(value);}
         else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; values.push_back(right);}
         else if(type=="TrimClip") for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);
