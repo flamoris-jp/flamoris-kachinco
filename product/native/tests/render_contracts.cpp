@@ -36,7 +36,18 @@ int main() {
     REQUIRE(kn_playback_accept(playback,ticket.generation)==KN_CANCELLED);
     REQUIRE(kn_playback_request(playback,1,30,1,1,1,&ticket)==KN_OK && ticket.start_sample==0);
     REQUIRE(kn_playback_request(playback,std::numeric_limits<int64_t>::max(),30000,1001,0,0,&ticket)==KN_OK);
+    REQUIRE(kn_playback_request(playback,KN_TICKS_PER_SECOND,30,1,0,1,&ticket)==KN_OK);
+    REQUIRE(kn_playback_present(playback,ticket.generation,0,1176000,2352000,&step)==KN_OK && !step.present && !step.dropped);
+    REQUIRE(kn_playback_video(playback,ticket.generation,0,0,-1,&step)==KN_OK && step.video_tick==1176000);
+    REQUIRE(kn_playback_present(playback,ticket.generation,3200,1176000,2352000,&step)==KN_OK && step.dropped==1 && !step.present);
+    REQUIRE(kn_playback_present(playback,ticket.generation,3200,2352000,-1,&step)==KN_OK && step.present && !step.dropped);
+    REQUIRE(kn_playback_present(playback,ticket.generation,3200,-1,2352000,&step)==KN_INVALID_ARGUMENT);
     kn_playback_destroy(playback);
+    uint8_t rgba[8]={251,2,3,17,5,200,7,255}, bgra[8]={};
+    REQUIRE(kn_rgba_to_bgra(bgra,rgba,8)==KN_OK && bgra[0]==3 && bgra[2]==251 && bgra[3]==17 && rgba[0]==251);
+    REQUIRE(kn_rgba_to_bgra(rgba,rgba,8)==KN_OK && rgba[0]==3 && rgba[2]==251 && rgba[3]==17);
+    REQUIRE(kn_rgba_to_bgra(bgra,rgba,7)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_rgba_to_bgra(nullptr,rgba,8)==KN_INVALID_ARGUMENT);
     kn_decoder_candidate candidates[3]={{1,1,0,0,0,1},{2,2,0,10,0,1},{3,0,0,0,0,0}};
     int64_t selected,oldest;REQUIRE(kn_decoder_select(candidates,3,1,20,0,&selected,&oldest)==KN_OK && selected==2 && oldest==3);
     REQUIRE(kn_decoder_select(candidates,3,0,0,4800,&selected,&oldest)==KN_OK && selected==2);

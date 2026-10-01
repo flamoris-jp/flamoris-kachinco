@@ -37,7 +37,7 @@ internal static class NativePreviewPayload
     internal static RenderedVideoFrame Video(byte[] bytes) => new(
         BinaryPrimitives.ReadInt64LittleEndian(bytes), BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(8)),
         BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(16)), BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(20)),
-        ImmutableArray.CreateRange(bytes.AsSpan(24).ToArray()));
+        ImmutableCollectionsMarshal.AsImmutableArray(bytes.AsSpan(24).ToArray()));
     internal static byte[] Encode(RenderedAudioBlock block)
     {
         var bytes = new byte[checked(16 + block.Samples.Length * 4)];

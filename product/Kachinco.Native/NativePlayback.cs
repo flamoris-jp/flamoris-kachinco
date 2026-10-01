@@ -29,6 +29,8 @@ public sealed class NativePlayback : IDisposable
     { NativeMediaProcess.Check(Methods.Video(handle,generation,played,readyCount,readyTick,out var value)); return value; }
     public NativeAudioStep Audio(long generation,long queued)
     { NativeMediaProcess.Check(Methods.Audio(handle,generation,queued,out var value)); return value; }
+    public NativeVideoStep Presentation(long generation, long played, long readyTick, long nextReadyTick)
+    { NativeMediaProcess.Check(Methods.Presentation(handle, generation, played, readyTick, nextReadyTick, out var value)); return value; }
     public static long FirstSample(long tick,int rate=48000)
     { NativeMediaProcess.Check(Methods.FirstSample(tick,rate,out long value)); return value; }
     public static (long Selected,long Oldest) SelectDecoder(NativeDecoderCandidate[] candidates,bool video,long tick,int samples=0)
@@ -55,6 +57,7 @@ public sealed class NativePlayback : IDisposable
         [DllImport(Library, EntryPoint="kn_playback_clock", CallingConvention=CallingConvention.Cdecl)] internal static extern NativeStatus Clock(PlaybackHandle handle,long generation,long played,out long position);
         [DllImport(Library, EntryPoint="kn_playback_video", CallingConvention=CallingConvention.Cdecl)] internal static extern NativeStatus Video(PlaybackHandle handle,long generation,long played,int count,long tick,out NativeVideoStep value);
         [DllImport(Library, EntryPoint="kn_playback_audio", CallingConvention=CallingConvention.Cdecl)] internal static extern NativeStatus Audio(PlaybackHandle handle,long generation,long queued,out NativeAudioStep value);
+        [DllImport(Library, EntryPoint="kn_playback_present", CallingConvention=CallingConvention.Cdecl)] internal static extern NativeStatus Presentation(PlaybackHandle handle,long generation,long played,long readyTick,long nextReadyTick,out NativeVideoStep value);
         [DllImport(Library, EntryPoint="kn_first_sample", CallingConvention=CallingConvention.Cdecl)] internal static extern NativeStatus FirstSample(long tick,int rate,out long value);
     }
 }

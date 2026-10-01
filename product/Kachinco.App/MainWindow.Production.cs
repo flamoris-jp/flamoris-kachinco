@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -134,10 +136,11 @@ public partial class MainWindow
                 var f = displayedFrame;
                 if (previewBitmap is null || previewBitmap.PixelWidth != f.Width || previewBitmap.PixelHeight != f.Height)
                     previewBitmap = new(f.Width, f.Height, 96, 96, PixelFormats.Bgra32, null);
-                var bytes = f.Rgba8.ToArray();
-                for (int i = 0; i < bytes.Length; i += 4) (bytes[i], bytes[i + 2]) = (bytes[i + 2], bytes[i]);
+                long started = Stopwatch.GetTimestamp();
+                var bytes = ImmutableCollectionsMarshal.AsArray(playback.Presentation!.Bgra8)!;
                 previewBitmap.WritePixels(new Int32Rect(0, 0, f.Width, f.Height), bytes, f.Width * 4, 0);
                 PreviewImage.Source = previewBitmap;
+                playback.RecordPresentation(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             }
         }
         PreviewInfo.Visibility = PreviewImage.Source is null && selectedSequenceId is not null && playback.State != InteractivePreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;

@@ -61,6 +61,14 @@ int32_t KN_CALL kn_composite_rows(uint8_t* output, const uint8_t* source, uint32
     }
     return KN_OK;
 }
+int32_t KN_CALL kn_rgba_to_bgra(uint8_t* output, const uint8_t* source, uint32_t size) noexcept {
+    if (!output || !source || size == 0 || size % 4 != 0 || size > 256*1024*1024) return KN_INVALID_ARGUMENT;
+    for (uint32_t i=0; i<size; i+=4) {
+        const auto r=source[i], g=source[i+1], b=source[i+2], a=source[i+3];
+        output[i]=b; output[i+1]=g; output[i+2]=r; output[i+3]=a;
+    }
+    return KN_OK;
+}
 int32_t KN_CALL kn_mix_add(double* mix, uint32_t mix_count, const float* source, uint32_t source_count, uint32_t offset, double gain) noexcept {
     if ((!mix && mix_count) || (!source && source_count) || offset > mix_count || source_count > mix_count-offset ||
         mix_count > 96000 || !std::isfinite(gain) || gain < 0) return KN_INVALID_ARGUMENT;

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Flamoris.Logging;
@@ -119,36 +120,78 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     private ImmutableArray<Guid> forwardClipIds = [];
     public NativePreviewCache<RenderedVideoFrame> Frames { get; } = new(96 * 1024 * 1024, NativePreviewPayload.Encode, NativePreviewPayload.Video);
     public NativePreviewCache<RenderedAudioBlock> Audio { get; } = new(8 * 1024 * 1024, NativePreviewPayload.Encode, NativePreviewPayload.Audio);
-    public async ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
+    public PreviewWorkMetrics VideoPerformance { get; } = new();
+    public PreviewWorkMetrics AudioPerformance { get; } = new();
+    public ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token) =>
+        new(Task.Run(() => FrameCoreAsync(context, tick, quality, forward, token), token));
+    private async Task<Result<RenderedVideoFrame>> FrameCoreAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
     {
         if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
         token.ThrowIfCancellationRequested();
+        long started = Stopwatch.GetTimestamp();
         string key = context.VideoKey(tick, quality);
         var frame = context.Evaluator.Evaluate(tick);
         if (!frame.Success) return new(null, frame.Diagnostics);
         bool cacheHit = Frames.TryGet(key, out var cached);
         LogContributors(frame.Value!, forward, token, cacheHit);
-        if (cacheHit) return Result<RenderedVideoFrame>.Ok(cached);
+        if (cacheHit) { RecordVideo(); return Result<RenderedVideoFrame>.Ok(cached); }
         var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions, logger);
-        var result = await Task.Run(async () => await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token), token);
+        var result = await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token);
         token.ThrowIfCancellationRequested();
         if (key != context.VideoKey(tick, quality)) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Frames.Put(key, result.Value!, result.Value!.Rgba8.Length);
         else logger?.Error("preview.decoder", "Preview video request returned diagnostics", properties: FrameProperties(frame.Value!, quality,
             string.Join(",", result.Diagnostics.Select(x => x.Code))));
+        RecordVideo();
         return result;
+
+        void RecordVideo()
+        {
+            VideoPerformance.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds, cacheHit);
+            if (logger is not null && VideoPerformance.ShouldReport())
+            {
+                var properties = FrameProperties(frame.Value!, quality);
+                properties["videoPreparation"] = VideoPerformance.Statistics;
+                properties["cacheBytes"] = Frames.Statistics.Bytes;
+                properties["forward"] = forward;
+                logger.Info("preview.performance", "Preview video preparation metrics", properties);
+            }
+        }
     }
-    public async ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token)
+    public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token) =>
+        new(Task.Run(() => AudioCoreAsync(context, firstSample, count, token), token));
+    private async Task<Result<RenderedAudioBlock>> AudioCoreAsync(PreviewContext context, long firstSample, int count, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        long started = Stopwatch.GetTimestamp();
         string key = context.AudioKey(firstSample, count);
-        if (Audio.TryGet(key, out var cached)) return Result<RenderedAudioBlock>.Ok(cached);
-        var result = await Task.Run(async () => await new SharedAudioRenderer(audio, context.ProjectPath)
-            .RenderAsync(context.Evaluator, firstSample, count, 48000, 2, token), token);
+        bool cacheHit = Audio.TryGet(key, out var cached);
+        if (cacheHit) { RecordAudio(); return Result<RenderedAudioBlock>.Ok(cached); }
+        var result = await new SharedAudioRenderer(audio, context.ProjectPath)
+            .RenderAsync(context.Evaluator, firstSample, count, 48000, 2, token);
         token.ThrowIfCancellationRequested();
         if (key != context.AudioKey(firstSample, count)) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
         if (result.Success) Audio.Put(key, result.Value!, result.Value!.Samples.Length * 4L);
+        RecordAudio();
         return result;
+
+        void RecordAudio()
+        {
+            AudioPerformance.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds, cacheHit);
+            if (logger is not null && AudioPerformance.ShouldReport())
+            {
+                long start = TimelineTime.SampleToTicks(firstSample, 48000);
+                long end = Math.Min(context.Sequence.DurationTicks, TimelineTime.SampleToTicks(firstSample + count, 48000));
+                var layers = context.Evaluator.EvaluateAudioRange(start, end - start).Value;
+                logger.Info("preview.performance", "Preview audio preparation metrics", new Dictionary<string, object?>
+                {
+                    ["sequenceId"] = context.Sequence.Id, ["firstSample"] = firstSample, ["sampleCount"] = count,
+                    ["timelineTick"] = start, ["clipIds"] = string.Join(",", layers.Select(l => l.ClipId)),
+                    ["mediaAssetIds"] = string.Join(",", layers.Select(l => l.MediaAssetId)),
+                    ["audioPreparation"] = AudioPerformance.Statistics, ["cacheBytes"] = Audio.Statistics.Bytes,
+                });
+            }
+        }
     }
     private void LogContributors(EvaluatedFrame frame, bool forward, CancellationToken token, bool cacheHit)
     {

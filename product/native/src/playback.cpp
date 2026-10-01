@@ -93,6 +93,19 @@ int32_t KN_CALL kn_playback_video(kn_playback* p, int64_t generation, int64_t pl
     if (at < p->duration) { output->video_tick=std::max(p->requested_tick,at); ++p->next_video; }
     return KN_OK;
 }
+int32_t KN_CALL kn_playback_present(kn_playback* p, int64_t generation, int64_t played,
+    int64_t ready_tick, int64_t next_ready_tick, kn_playback_step* output) noexcept {
+    if (!output) return KN_INVALID_ARGUMENT;
+    *output={0,-1,0,0,0};
+    if (ready_tick < -1 || next_ready_tick < -1 ||
+        (next_ready_tick >= 0 && (ready_tick < 0 || next_ready_tick < ready_tick))) return KN_INVALID_ARGUMENT;
+    auto status=kn_playback_clock(p,generation,played,&output->position); if (status != KN_OK) return status;
+    if (!p->play) return KN_OK;
+    if (played >= p->total-p->start) { output->ended=1; output->position=p->duration; return KN_OK; }
+    if (next_ready_tick >= 0 && next_ready_tick <= output->position) output->dropped=1;
+    else if (ready_tick >= 0 && ready_tick <= output->position) output->present=1;
+    return KN_OK;
+}
 int32_t KN_CALL kn_playback_audio(kn_playback* p, int64_t generation, int64_t queued, kn_audio_step* output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;
     *output={};
