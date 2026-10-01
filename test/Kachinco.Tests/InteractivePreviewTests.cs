@@ -229,6 +229,46 @@ public sealed class InteractivePreviewTests
         StringAssert.Contains(p.Error!, "missing media");
     }
 
+    [TestMethod]
+    public void LateReadyFramesCoalesceToTheNewestDueFrameWithoutAStalePresentationBurst()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source(); var device = new Device();
+        var devices = new List<Device>();
+        using var p = new InteractivePreview(source, () => { var next = new Device(); devices.Add(next); return next; });
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted); p.Play();
+        pump.Until(() => p.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames); device = devices[0];
+        var presented = new List<long>(); p.Changed += (_, _) => { if (p.Frame is { } frame) presented.Add(frame.Tick); };
+        source.Hold = true; device.Advance(4800);
+        pump.Until(() => p.Frame?.Tick == Fixture.T / 10 && source.Pending is not null);
+        Assert.AreEqual(2L, p.DroppedVideoFrames);
+        Assert.IsTrue(presented.All(t => t == Fixture.T / 10), "Only newest due frame reaches Dispatcher.");
+        var held = source.Pending!; p.SetQuality(PreviewQuality.Quarter);
+        source.Hold = false; held.SetResult(Frame(0));
+        pump.Until(() => p.State == InteractivePreviewState.Playing && p.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        Assert.AreEqual(Fixture.T / 10, p.Frame!.Tick); Assert.IsTrue(device.Disposed);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted); Assert.IsTrue(p.Presentation is null);
+    }
+    [TestMethod]
+    public void ProducerFailurePausesAudioBeforeJoiningAnUncancellablePeer()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var device = new Device();
+        var source = new Source { HoldFromTick = TimelineTime.FrameToTicks(4, new(30, 1)) };
+        using var p = new InteractivePreview(source, () => device);
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted); p.Play();
+        pump.Until(() => p.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        source.AudioHold = true; device.Advance(4800);
+        pump.Until(() => source.Pending is not null && source.PendingAudio is not null);
+        source.Pending!.SetResult(Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MISSING", "missing media")));
+        pump.Until(() => !device.Running);
+        Assert.IsFalse(p.Completion.IsCompleted, "Teardown must still join the held audio request.");
+        Assert.IsFalse(device.Disposed, "Device lifetime ends only after its producer joins.");
+        source.AudioHold = false; source.PendingAudio!.SetResult(source.HeldAudio!);
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.AreEqual(InteractivePreviewState.Failed, p.State);
+        Assert.IsTrue(device.Disposed); Assert.AreEqual(0, p.ReadyVideoFrames);
+        Assert.IsNull(p.Presentation); StringAssert.Contains(p.Error!, "missing media");
+    }
+
     private static Result<RenderedVideoFrame> Frame(long tick) => Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [1, 2, 3, 255]));
     private sealed class Source : IInteractivePreviewSource
     {

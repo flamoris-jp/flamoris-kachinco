@@ -1,0 +1,63 @@
+{
+  "environment": "Ubuntu 24.04.3 LTS",
+  "runtime": ".NET 10.0.12",
+  "processors": 8,
+  "fixture": "Seeded RGBA32 bytes; 20 warmups \u002B 100 measured frames; identical pixels verified",
+  "note": "Pixel preparation microbenchmark only. No WPF WritePixels, decoder, device playback or physical A/V claim. Both preparations allocate one output; new UI uses its already-prepared immutable output without another full-frame allocation.",
+  "results": [
+    {
+      "quality": "Full",
+      "name": "legacy_managed_copy_and_swap",
+      "width": 1920,
+      "height": 1080,
+      "meanMs": 3.6379610000000002,
+      "p95Ms": 5.3013,
+      "allocatedBytesPerFrame": 8294424
+    },
+    {
+      "quality": "Full",
+      "name": "native_preparation_off_dispatcher",
+      "width": 1920,
+      "height": 1080,
+      "meanMs": 2.6911079999999985,
+      "p95Ms": 5.6834,
+      "allocatedBytesPerFrame": 8294424
+    },
+    {
+      "quality": "Half",
+      "name": "legacy_managed_copy_and_swap",
+      "width": 960,
+      "height": 540,
+      "meanMs": 0.8591529999999998,
+      "p95Ms": 1.3216,
+      "allocatedBytesPerFrame": 2073624
+    },
+    {
+      "quality": "Half",
+      "name": "native_preparation_off_dispatcher",
+      "width": 960,
+      "height": 540,
+      "meanMs": 0.502467,
+      "p95Ms": 0.885,
+      "allocatedBytesPerFrame": 2073624
+    },
+    {
+      "quality": "Quarter",
+      "name": "legacy_managed_copy_and_swap",
+      "width": 480,
+      "height": 270,
+      "meanMs": 0.148155,
+      "p95Ms": 0.4438,
+      "allocatedBytesPerFrame": 518424
+    },
+    {
+      "quality": "Quarter",
+      "name": "native_preparation_off_dispatcher",
+      "width": 480,
+      "height": 270,
+      "meanMs": 0.05939300000000002,
+      "p95Ms": 0.197,
+      "allocatedBytesPerFrame": 518424
+    }
+  ]
+}

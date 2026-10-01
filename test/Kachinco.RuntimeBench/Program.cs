@@ -3,6 +3,8 @@ using System.Text.Json;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 
+if (args is ["--pixels", var pixelOutput]) { PreviewPixelBench.Run(pixelOutput); return; }
+
 // Same driver can be copied into the pre-cutover checkout. Generated public fixtures only.
 if (args.Length == 4 && args[0] == "--preview")
 { await PreviewBench.Run(args[1], args[2], args[3]); return; }

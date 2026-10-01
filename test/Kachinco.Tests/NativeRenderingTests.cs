@@ -9,6 +9,16 @@ namespace Kachinco.Tests;
 public sealed class NativeRenderingTests
 {
     [TestMethod]
+    public void PresentationConversionPreservesAlphaAndSourceAndRejectsWrongBufferSize()
+    {
+        byte[] source = [1, 2, 3, 0, 5, 6, 7, 128, 9, 10, 11, 255];
+        var output = new byte[source.Length];
+        NativeComposition.RgbaToBgra(source, output);
+        CollectionAssert.AreEqual(new byte[] { 3, 2, 1, 0, 7, 6, 5, 128, 11, 10, 9, 255 }, output);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 0, 5, 6, 7, 128, 9, 10, 11, 255 }, source);
+        Assert.ThrowsExactly<InvalidDataException>(() => NativeComposition.RgbaToBgra(source, new byte[4]));
+    }
+    [TestMethod]
     public void SeededPixelsTransformsAndBlendModesMatchFrozenManagedOracle()
     {
         var random = new Random(34001);
