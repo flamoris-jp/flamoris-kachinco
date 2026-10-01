@@ -13,6 +13,7 @@ public sealed record RelinkMedia(Guid MediaAssetId, string SourcePath, long Dura
 public sealed record AddTrack(Guid SequenceId, Guid TrackId, string Name, TrackKind Kind) : EditCommand;
 public sealed record InsertClip(Guid SequenceId, Guid TrackId, Clip Clip) : EditCommand;
 public sealed record MoveClip(Guid SequenceId, Guid ClipId, Guid TargetTrackId, long StartTicks) : EditCommand;
+public sealed record RippleReorderClip(Guid SequenceId, Guid ClipId, Guid? BeforeClipId) : EditCommand;
 public sealed record TrimClip(Guid SequenceId, Guid ClipId, long StartTicks, long SourceInTicks, long DurationTicks) : EditCommand;
 public sealed record SplitClip(Guid SequenceId, Guid ClipId, long SplitTicks, Guid RightClipId) : EditCommand;
 public sealed record DeleteClip(Guid SequenceId, Guid ClipId) : EditCommand;
@@ -26,4 +27,3 @@ public sealed record DeleteCaption(Guid SequenceId, Guid CaptionId) : EditComman
 public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? ExpectedRevision = null, bool DryRun = false);
 public sealed record EditResult(bool Success, long Revision, ImmutableArray<Diagnostic> Diagnostics);
 public sealed record ProjectSnapshot(long Revision, Project? Project, bool CanUndo, bool CanRedo);
-

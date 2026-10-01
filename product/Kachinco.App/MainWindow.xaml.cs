@@ -336,13 +336,15 @@ public partial class MainWindow : Window
         if (selectedMediaId is not null)
         {
             selectedClipId = null;
-            Timeline.LoadProject(session.GetProject().Project, selectedSequenceId, null);
+            var snapshot = session.GetProject();
+            Timeline.LoadProject(snapshot.Project, selectedSequenceId, null, snapshot.Revision);
         }
         RefreshInspector();
     }
 
     private void Media_DoubleClick(object sender, MouseButtonEventArgs e) => Insert_Click(sender, e);
-    private void Timeline_CommandRequested(object sender, TimelineCommandEventArgs e) => Apply("タイムラインを編集しました。", e.Command);
+    private void Timeline_CommandRequested(object sender, TimelineCommandEventArgs e) =>
+        Show(session.Execute(e.Batch), "タイムラインを編集しました。");
     private void Timeline_ClipSelectionChanged(object sender, TimelineSelectionEventArgs e)
     {
         selectedClipId = e.ClipId;
@@ -444,7 +446,7 @@ public partial class MainWindow : Window
         var sequence = project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId) ?? project?.Sequences.FirstOrDefault();
         selectedSequenceId = sequence?.Id; SequenceList.SelectedItem = sequence;
         Timeline.SetMediaContext(filename);
-        Timeline.LoadProject(project, selectedSequenceId, selectedClipId);
+        Timeline.LoadProject(project, selectedSequenceId, selectedClipId, snapshot.Revision);
         var guidance = EditorStartup.Guidance(project, sequence);
         MediaGuidance.Text = guidance switch { EditorGuidance.ImportMedia => EditorText.ImportGuidance, EditorGuidance.CreateSequence => EditorText.SequenceGuidance, EditorGuidance.PlaceMedia => EditorText.PlacementGuidance, _ => EditorText.EditGuidance };
         WelcomeText.Text = MediaGuidance.Text;

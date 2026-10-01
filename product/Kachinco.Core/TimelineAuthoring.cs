@@ -87,8 +87,108 @@ public static class TimelineSnapping
 
 public enum TrimEdge { Start, End }
 
+public sealed record TimelineReorderPlan(EditBatch Batch, ImmutableDictionary<Guid, long> Starts,
+    long InsertionTicks);
+
 public static class TimelineEditPlanner
 {
+    public static Result<TimelineReorderPlan> Reorder(Project project, Guid sequenceId, Guid clipId,
+        Guid? beforeClipId, long? revision = null)
+    {
+        var found = Find(project, sequenceId, clipId);
+        if (!found.Success) return new(null, found.Diagnostics);
+        var (_, track, _) = found.Value;
+        var command = new RippleReorderClip(sequenceId, clipId, beforeClipId);
+        var projected = NativeProjectCodec.ProjectCommands(project, command);
+        if (!projected.Success) return new(null, projected.Diagnostics);
+        var clips = projected.Value!.Sequences.First(s => s.Id == sequenceId).Tracks.First(t => t.Id == track.Id).Clips;
+        return Result<TimelineReorderPlan>.Ok(new(new([command], revision),
+            clips.ToImmutableDictionary(c => c.Id, c => c.StartTicks), clips.First(c => c.Id == clipId).StartTicks));
+    }
+
+    // Pointer hit-testing is a transient projection. Native decides whether the
+    // selected insertion is legal and returns every preview position.
+    public static Result<TimelineReorderPlan> ReorderAt(Project project, Guid sequenceId, Guid clipId,
+        long pointerTicks, long? revision = null)
+    {
+        var found = Find(project, sequenceId, clipId);
+        if (!found.Success) return new(null, found.Diagnostics);
+        var insertion = InsertionTarget(found.Value.Track, clipId, pointerTicks);
+        return insertion.Success ? Reorder(project, sequenceId, clipId, insertion.Value, revision)
+            : new(null, insertion.Diagnostics);
+    }
+
+    public static Result<Guid?> InsertionTarget(Track track, Guid clipId, long pointerTicks)
+    {
+        var ordered = TimelineQueries.ListClips(track);
+        var target = ordered.FirstOrDefault(c => c.Id != clipId &&
+            pointerTicks >= c.StartTicks && pointerTicks <= c.EndTicks);
+        if (target is null) return Result<Guid?>.Fail(
+            Diagnostic.Error("NO_INSERTION", "The pointer is in free space.", clipId));
+        int sourceIndex = Array.FindIndex(ordered.ToArray(), c => c.Id == clipId);
+        if (sourceIndex < 0) return Result<Guid?>.Fail(
+            Diagnostic.Error("CLIP_NOT_FOUND", "Clip not found.", clipId));
+        int targetIndex = ordered.IndexOf(target);
+        // A null insertion means the source run's end, so never derive it from
+        // a target across a gap. Check the full path, not just the target's neighbor.
+        for (int i = Math.Min(sourceIndex, targetIndex); i < Math.Max(sourceIndex, targetIndex); i++)
+            if (ordered[i].EndTicks != ordered[i + 1].StartTicks)
+                return Result<Guid?>.Fail(
+                    Diagnostic.Error("RIPPLE_GAP", "The target is outside this clip's contiguous run.", clipId));
+        Guid? before = target.Id;
+        if (pointerTicks >= target.StartTicks + target.DurationTicks / 2)
+        {
+            int index = ordered.IndexOf(target);
+            var next = index + 1 < ordered.Length ? ordered[index + 1] : null;
+            before = next is not null && next.StartTicks == target.EndTicks ? next.Id : null;
+        }
+        return Result<Guid?>.Ok(before);
+    }
+
+    public static Result<TimelineReorderPlan> ReorderAdjacent(Project project, Guid sequenceId,
+        Guid clipId, bool earlier, long? revision = null)
+    {
+        var found = Find(project, sequenceId, clipId);
+        if (!found.Success) return new(null, found.Diagnostics);
+        var ordered = TimelineQueries.ListClips(found.Value.Track);
+        int index = ordered.IndexOf(found.Value.Clip);
+        int neighbor = index + (earlier ? -1 : 1);
+        if (neighbor < 0 || neighbor >= ordered.Length || (earlier
+            ? ordered[neighbor].EndTicks != ordered[index].StartTicks
+            : ordered[index].EndTicks != ordered[neighbor].StartTicks))
+            return Result<TimelineReorderPlan>.Fail(Diagnostic.Error("RIPPLE_GAP", "No adjacent clip in this run.", clipId));
+        Guid? before = earlier ? ordered[neighbor].Id : neighbor + 1 < ordered.Length &&
+            ordered[neighbor].EndTicks == ordered[neighbor + 1].StartTicks ? ordered[neighbor + 1].Id : null;
+        return Reorder(project, sequenceId, clipId, before, revision);
+    }
+
+    public static Result<EditBatch> Duplicate(Project project, Guid sequenceId, Guid clipId,
+        Guid newClipId, long? revision = null)
+    {
+        var found = Find(project, sequenceId, clipId);
+        if (!found.Success) return new(null, found.Diagnostics);
+        if (newClipId == Guid.Empty || ProjectValidator.ContainsId(project, newClipId))
+            return Result<EditBatch>.Fail(Diagnostic.Error("INVALID_ID", "Choose a unique clip identity.", newClipId));
+        var (sequence, track, clip) = found.Value;
+        try
+        {
+            long start = clip.EndTicks;
+            foreach (var occupied in TimelineQueries.ListClips(track))
+            {
+                if (occupied.EndTicks <= start) continue;
+                if (checked(start + clip.DurationTicks) <= occupied.StartTicks) break;
+                start = occupied.EndTicks;
+            }
+            long end = checked(start + clip.DurationTicks);
+            var commands = ImmutableArray.CreateBuilder<EditCommand>();
+            if (end > sequence.DurationTicks) commands.Add(new SetSequenceDuration(sequenceId, end));
+            commands.Add(new InsertClip(sequenceId, track.Id, clip with { Id = newClipId, StartTicks = start }));
+            return Result<EditBatch>.Ok(new(commands.ToImmutable(), revision));
+        }
+        catch (OverflowException)
+        { return Result<EditBatch>.Fail(Diagnostic.Error("TIME_OVERFLOW", "Duplicate exceeds supported time.", clipId)); }
+    }
+
     // Placement extends the sequence before insertion in one undoable transaction.
     public static Result<EditBatch> Place(Project project, Guid sequenceId, Guid mediaId,
         Guid trackId, Guid clipId, long startTicks, long? revision = null)

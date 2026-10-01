@@ -38,6 +38,8 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 - `AddTrack(sequenceId, trackId, name, kind)` — appends above existing tracks.
 - `InsertClip(sequenceId, trackId, clip)` — explicit asset ID and source/timeline range.
 - `MoveClip(sequenceId, clipId, targetTrackId, startTicks)`.
+- `RippleReorderClip(sequenceId, clipId, beforeClipId)` — reorder inside a non-overlapping
+  contiguous run on the same track; null means the run end (ADR 0012).
 - `TrimClip(sequenceId, clipId, startTicks, sourceInTicks, durationTicks)`.
 - `SplitClip(sequenceId, clipId, splitTicks, rightClipId)` — strict interior split.
 - `DeleteClip(sequenceId, clipId)`.

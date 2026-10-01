@@ -93,8 +93,37 @@ static int history_contracts() {
     auto after=snapshot(s).at("project");commit(s,{{"action","undo"}});REQUIRE(snapshot(s).at("project")==project);commit(s,{{"action","redo"}});REQUIRE(snapshot(s).at("project")==after);
     kn_editor_destroy(s);return 0;
 }
+static int ripple_contracts() {
+    kn_editor_session* s=nullptr;REQUIRE(kn_editor_create(10,&s)==KN_OK);
+    auto clip=[](int n,int64_t start,int64_t duration) {return json{
+        {"id",id(n)},{"mediaAssetId",id(3)},{"startTicks",start},{"durationTicks",duration},{"sourceInTicks",1},{"enabled",true},
+        {"appearance",{{"transform",{{"x",0},{"y",0},{"scaleX",1},{"scaleY",1},{"rotationDegrees",0}}},{"opacity",1},{"blend",0}}},
+        {"audio",{{"gain",1},{"muted",false}}}};};
+    json project={{"id",id(1)},{"name","ripple"},
+        {"assets",json::array({{{"id",id(3)},{"name","video"},{"sourcePath","missing.mov"},{"kind",0},{"durationTicks",100},{"sampleRate",nullptr},{"channels",nullptr},{"provenance",nullptr}}})},
+        {"sequences",json::array({{{"id",id(2)},{"name","sequence"},{"settings",{{"width",1920},{"height",1080},{"frameRate",{{"numerator",30},{"denominator",1}}}}},
+            {"durationTicks",20},{"clappers",json::array()},{"recipes",json::array()},
+            {"tracks",json::array({{{"id",id(4)},{"name","V1"},{"kind",0},{"enabled",true},{"captions",json::array()},
+                {"clips",json::array({clip(5,0,3),clip(6,3,5),clip(7,8,2),clip(8,16,2)})}}})}}})}};
+    commit(s,{{"action","replace"},{"project",project}});auto before=snapshot(s);
+    auto reorder=edit(json::array({command("RippleReorderClip",{{"sequenceId",id(2)},{"clipId",id(7)},{"beforeClipId",id(6)}})}));
+    auto dry=reorder;dry["dryRun"]=true;REQUIRE(request(s,dry.dump()).at("success")==true);REQUIRE(snapshot(s)==before);
+    auto prepared=request(s,reorder.dump());REQUIRE(prepared.at("success")==true);request(s,R"({"action":"abort"})");REQUIRE(snapshot(s)==before);
+    commit(s,reorder);auto after=snapshot(s);
+    const auto& clips=after.at("project")["sequences"][0]["tracks"][0]["clips"];
+    REQUIRE(clips[1]["startTicks"]==5);REQUIRE(clips[2]["startTicks"]==3);REQUIRE(clips[3]["startTicks"]==16);
+    for(size_t i=0;i<clips.size();++i) {auto actual=clips[i];actual["startTicks"]=project["sequences"][0]["tracks"][0]["clips"][i]["startTicks"];REQUIRE(actual==project["sequences"][0]["tracks"][0]["clips"][i]);}
+    commit(s,{{"action","undo"}});REQUIRE(snapshot(s).at("project")==project);REQUIRE(snapshot(s).at("canUndo")==false);
+    commit(s,{{"action","redo"}});REQUIRE(snapshot(s).at("project")==after.at("project"));
+    auto invalid=edit(json::array({command("RippleReorderClip",{{"sequenceId",id(2)},{"clipId",id(7)},{"beforeClipId",id(8)}})}));
+    before=snapshot(s);REQUIRE(request(s,invalid.dump()).at("success")==false);REQUIRE(snapshot(s)==before);
+    auto forward=edit(json::array({command("RippleReorderClip",{{"sequenceId",id(2)},{"clipId",id(5)},{"beforeClipId",nullptr}})}));
+    commit(s,forward);REQUIRE(snapshot(s).at("project")["sequences"][0]["tracks"][0]["clips"][0]["startTicks"]==7);
+    kn_editor_destroy(s);return 0;
+}
 int main() {
     REQUIRE(history_contracts()==0);
+    REQUIRE(ripple_contracts()==0);
     kn_editor_session* s=nullptr; REQUIRE(kn_editor_create(0,&s)==KN_INVALID_ARGUMENT&&!s); REQUIRE(kn_editor_create(2,&s)==KN_OK);
     auto command=R"({"action":"execute","commands":[{"type":"CreateProject","value":{"projectId":"00000000-0000-0000-0000-000000000001","name":"日本語😀"}}]})";
     for(int i=0;i<200;++i) {
@@ -105,7 +134,8 @@ int main() {
     kn_editor_destroy(s);
     kn_buffer* b=nullptr;const uint8_t malformed[]={0xff};REQUIRE(kn_editor_request(nullptr,malformed,1,&b)==KN_INVALID_ARGUMENT&&!b);
     REQUIRE(kn_editor_request(nullptr,nullptr,0,&b)==KN_INVALID_ARGUMENT&&!b);
-    REQUIRE(request(nullptr,R"({"action":"deserialize","text":"{\"schemaVersion\":99}"})").at("diagnostics")[0].at("code")=="SCHEMA_UNSUPPORTED");
+    const auto unsupported_schema=request(nullptr,json({{"action","deserialize"},{"text",R"({"schemaVersion":99})"}}).dump());
+    REQUIRE(unsupported_schema.at("diagnostics")[0].at("code")=="SCHEMA_UNSUPPORTED");
     return 0;
 }
 

@@ -18,7 +18,7 @@ public static class KachincoMcpTools
         [nameof(CreateProject)] = typeof(CreateProject), [nameof(CreateSequence)] = typeof(CreateSequence),
         [nameof(RegisterMedia)] = typeof(RegisterMedia), [nameof(RelinkMedia)] = typeof(RelinkMedia),
         [nameof(SetSequenceDuration)] = typeof(SetSequenceDuration), [nameof(AddTrack)] = typeof(AddTrack),
-        [nameof(InsertClip)] = typeof(InsertClip), [nameof(MoveClip)] = typeof(MoveClip), [nameof(TrimClip)] = typeof(TrimClip),
+        [nameof(InsertClip)] = typeof(InsertClip), [nameof(MoveClip)] = typeof(MoveClip), [nameof(RippleReorderClip)] = typeof(RippleReorderClip), [nameof(TrimClip)] = typeof(TrimClip),
         [nameof(SplitClip)] = typeof(SplitClip), [nameof(DeleteClip)] = typeof(DeleteClip), [nameof(SetClipProperties)] = typeof(SetClipProperties),
         [nameof(SetTrackEnabled)] = typeof(SetTrackEnabled), [nameof(ReorderTrack)] = typeof(ReorderTrack),
         [nameof(AddCaption)] = typeof(AddCaption), [nameof(UpdateCaption)] = typeof(UpdateCaption), [nameof(DeleteCaption)] = typeof(DeleteCaption)
@@ -132,7 +132,7 @@ public static class KachincoMcpTools
     private static bool AllowedCommand(Type type) => type.Name is
         nameof(AddClapper) or nameof(UpdateClapper) or nameof(DeleteClapper) or
         nameof(AddRecipe) or nameof(UpdateRecipe) or nameof(CreateSequence) or nameof(SetSequenceDuration) or
-        nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(TrimClip) or nameof(SplitClip) or
+        nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(RippleReorderClip) or nameof(TrimClip) or nameof(SplitClip) or
         nameof(DeleteClip) or nameof(SetClipProperties) or nameof(SetTrackEnabled) or nameof(ReorderTrack) or
         nameof(AddCaption) or nameof(UpdateCaption) or nameof(DeleteCaption);
 
