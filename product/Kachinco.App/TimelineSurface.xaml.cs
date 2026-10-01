@@ -13,9 +13,9 @@ using Track = Kachinco.Core.Track;
 
 namespace Kachinco.App;
 
-public sealed class TimelineCommandEventArgs(EditCommand command) : EventArgs
+public sealed class TimelineCommandEventArgs(EditBatch batch) : EventArgs
 {
-    public EditCommand Command { get; } = command;
+    public EditBatch Batch { get; } = batch;
 }
 
 public sealed class TimelineSelectionEventArgs(Guid? clipId) : EventArgs
@@ -47,6 +47,7 @@ public partial class TimelineSurface : UserControl
     private readonly Brush videoBrush = new SolidColorBrush(Color.FromRgb(47, 112, 170));
     private readonly Brush audioBrush = new SolidColorBrush(Color.FromRgb(52, 139, 91));
     private Project? project;
+    private long? revision;
     private Sequence? sequence;
     private TimelineViewport viewport = new(80m);
     private Guid? selectedClipId;
@@ -79,7 +80,7 @@ public partial class TimelineSurface : UserControl
     public bool SnappingEnabled { get; private set; } = true;
     public decimal PixelsPerSecond => viewport.PixelsPerSecond;
 
-    public void LoadProject(Project? value, Guid? sequenceId, Guid? selectedId = null)
+    public void LoadProject(Project? value, Guid? sequenceId, Guid? selectedId = null, long? expectedRevision = null)
     {
         CancelGesture();
         if (sequence?.Id != sequenceId || project?.Id != value?.Id)
@@ -88,6 +89,7 @@ public partial class TimelineSurface : UserControl
             ScrollTo(0);
         }
         project = value;
+        revision = expectedRevision;
         sequence = value?.Sequences.FirstOrDefault(x => x.Id == sequenceId);
         selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => t.Clips.Any(c => c.Id == id)) == true ? id : null;
         if (sequence is null) playheadTicks = 0;
@@ -186,14 +188,14 @@ public partial class TimelineSurface : UserControl
     public void DeleteSelected()
     {
         if (sequence is not null && selectedClipId is { } clipId)
-            CommandRequested?.Invoke(this, new(new DeleteClip(sequence.Id, clipId)));
+            Request(new([new DeleteClip(sequence.Id, clipId)], revision));
     }
 
     public void SplitSelected()
     {
         if (project is null || sequence is null || selectedClipId is not { } clipId) return;
         var result = TimelineEditPlanner.Split(project, sequence.Id, clipId, playheadTicks, Guid.NewGuid());
-        if (result.Success) CommandRequested?.Invoke(this, new(result.Value!));
+        if (result.Success) Request(new([result.Value!], revision));
         else InteractionFailed?.Invoke(this, new(result.Diagnostics));
     }
 
@@ -207,6 +209,7 @@ public partial class TimelineSurface : UserControl
     private void RebuildCore()
     {
         if (drag is not null) return;
+        ClearRippleMarker();
         BeginVisualPlan();
         RulerCanvas.Children.Clear();
         TimelineCanvas.Children.Clear();
@@ -356,6 +359,7 @@ public partial class TimelineSurface : UserControl
         AddMediaVisual(grid, clip, width, geometry.Row(row));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
+        AttachClipMenu(grid, clip.Id);
         Canvas.SetLeft(grid, left); Canvas.SetTop(grid, geometry.Row(row).ClipTop);
         // Clips may cross rows during a gesture; later lane backgrounds must not cover them.
         Panel.SetZIndex(grid, 1);
@@ -414,6 +418,7 @@ public partial class TimelineSurface : UserControl
         Canvas.SetLeft(drag.Element, Math.Max(0, drag.Visual.Left + drag.DeltaX));
         Canvas.SetTop(drag.Element, Math.Clamp(geometry.Row(drag.Visual.Row).ClipTop + drag.DeltaY, geometry.Row(0).ClipTop,
             geometry.Row(geometry.Count - 1).ClipTop));
+        UpdateRipplePreview();
     }
 
     private void Body_DragCompleted(object sender, DragCompletedEventArgs e)
@@ -421,18 +426,14 @@ public partial class TimelineSurface : UserControl
         if (drag is null || project is null || sequence is null) return;
         var current = drag; drag = null;
         if (e.Canceled || (current.DeltaX == 0 && current.DeltaY == 0)) { Rebuild(); return; }
-        long delta = viewport.DeltaPixelsToTicks((decimal)current.DeltaX);
-        long candidate;
-        try { candidate = Math.Max(0, checked(current.Visual.Clip.StartTicks + delta)); }
-        catch (OverflowException) { Fail("INVALID_TIMELINE_RANGE", "The clip move is outside the timeline.", current.Visual.Clip.Id); Rebuild(); return; }
-        candidate = SnapMove(candidate, current.Visual.Clip);
-
-        var rows = TimelineLanes.Create(sequence);
-        var originRow = geometry.Row(current.Visual.Row);
-        int targetRow = geometry.HitRow(Math.Clamp(originRow.Top + originRow.Height / 2 + current.DeltaY, 0, geometry.Height - .01));
-        Guid targetTrack = rows.Length == 0 ? current.Visual.TrackId : rows[targetRow].TrackId ?? Guid.Empty;
-        var result = TimelineEditPlanner.Move(project, sequence.Id, current.Visual.Clip.Id, targetTrack, candidate);
-        Dispatch(result);
+        ClearRippleMarker();
+        if (current.Ripple is { } ripple)
+        {
+            if (ripple.Success) Request(ripple.Value!.Batch);
+            else if (ripple.Diagnostics.Any(d => d.Code == "REORDER_UNCHANGED")) Rebuild();
+            else { InteractionFailed?.Invoke(this, new(ripple.Diagnostics)); Rebuild(); }
+        }
+        else Dispatch(PlanFreeMove(current));
     }
 
     private void Trim_DragStarted(object sender, DragStartedEventArgs e)
@@ -481,7 +482,7 @@ public partial class TimelineSurface : UserControl
 
     private void Dispatch<T>(Result<T> result) where T : EditCommand
     {
-        if (result.Success) CommandRequested?.Invoke(this, new(result.Value!));
+        if (result.Success) Request(new([result.Value!], revision));
         else { InteractionFailed?.Invoke(this, new(result.Diagnostics)); Rebuild(); }
     }
 
@@ -621,5 +622,8 @@ public partial class TimelineSurface : UserControl
         public TrimEdge? Edge { get; } = edge;
         public double DeltaX { get; set; }
         public double DeltaY { get; set; }
+        public bool HasRippleTarget { get; set; }
+        public Guid? RippleTarget { get; set; }
+        public Result<TimelineReorderPlan>? Ripple { get; set; }
     }
 }
