@@ -30,15 +30,16 @@ public partial class TimelineSurface
         grid.ContextMenu = menu;
         grid.ContextMenuOpening += (_, e) =>
         {
-            if (drag is not null || project is null || sequence is null || !IsEnabled)
-            { e.Handled = true; return; }
+            e.Handled = !PrepareClipMenu(menu, clipId);
         };
-        menu.Opened += (_, _) =>
-        {
+    }
+
+    // Prepare before the popup owns focus. Keyboard opening uses the same path.
+    private bool PrepareClipMenu(ContextMenu menu, Guid clipId)
+    {
             if (drag is not null || project is null || sequence is null || !IsEnabled)
-            { menu.IsOpen = false; return; }
+                return false;
             Select(clipId, rebuild: false);
-            Focus();
             menu.Items.Clear();
             var split = TimelineEditPlanner.Split(project, sequence.Id, clipId, playheadTicks, Guid.NewGuid());
             var splitBatch = new EditBatch(split.Success ? [split.Value!] : [], revision);
@@ -58,7 +59,7 @@ public partial class TimelineSurface
                 item.Click += (_, _) => action();
                 menu.Items.Add(item);
             }
-        };
+            return true;
     }
 
     private Guid DragTargetTrack(DragState current)

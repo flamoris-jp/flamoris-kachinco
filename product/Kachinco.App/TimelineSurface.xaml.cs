@@ -479,7 +479,7 @@ public partial class TimelineSurface : UserControl
             (e.Key == Key.Apps || e.Key == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift))
         {
             var grid = TimelineCanvas.Children.OfType<Grid>().FirstOrDefault(g => Equals(g.Tag, clipId));
-            if (grid?.ContextMenu is { } menu)
+            if (grid?.ContextMenu is { } menu && PrepareClipMenu(menu, clipId))
             { menu.PlacementTarget = grid; menu.IsOpen = true; e.Handled = true; }
             return;
         }
