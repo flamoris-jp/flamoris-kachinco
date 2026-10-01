@@ -2,8 +2,9 @@ name: Product
 on:
   push:
     branches-ignore: [main]
-    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', '.github/workflows/foundation.yml']
+    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', 'staging/windows-production.md', 'docs/windows-packaging.md', '.github/workflows/windows-package.yml', '.github/workflows/foundation.yml']
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -35,7 +36,7 @@ jobs:
           retention-days: 3
   windows-shell:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -62,22 +63,19 @@ jobs:
           name: interactive-preview-evidence
           path: artifacts/interactive-preview-metrics.json
           retention-days: 3
+      - name: Portable archive integrity contracts
+        shell: pwsh
+        run: ./test/packaging/portable-package.Tests.ps1
       - name: Portable publish smoke
         shell: pwsh
         run: ./product/packaging/publish-windows.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          # The repository currently caps retention at 3 days. Preserve the
-          # reviewed ZIP for later physical acceptance; 14 is the requested limit.
-          name: Kachinco-win-x64
-          path: artifacts/windows/Kachinco-win-x64.zip
-          retention-days: 14
       - name: Published editor and bridge external MCP acceptance
-        run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/windows/Kachinco-win-x64
+        run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/windows/FLAMORIS-Kachinco-win-x64
       - name: Launch shell smoke
         shell: pwsh
         run: |
-          $app = Resolve-Path 'product/Kachinco.App/bin/Release/net10.0-windows/Kachinco.App.exe'
+          $app = Resolve-Path 'artifacts/windows/FLAMORIS-Kachinco-win-x64/Kachinco.App.exe'
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           $process = Start-Process $app -PassThru
           try {
             $ready = $false
@@ -91,3 +89,13 @@ jobs:
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
+      - name: Upload accepted portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLAMORIS-Kachinco-win-x64
+          path: |
+            artifacts/windows/FLAMORIS-Kachinco-win-x64.zip
+            artifacts/windows/FLAMORIS-Kachinco-win-x64.inventory.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
