@@ -256,8 +256,16 @@ One native EditorSession owns commands, validation, history and v1/v2 persistenc
 C# exposes immutable queries and desktop/MCP adapters; canonical time and shared
 preview/export evaluation/composition are native. See [ADR 0010](docs/decisions/0010-native-editing-authority.md)
 and the [final audit](docs/reviews/issue-36-native-audit.md).
-Publish on Windows with `./product/packaging/publish-windows.ps1`; extract the
-complete matching ZIP. Missing/incompatible native components fail startup with
+Build the portable distribution candidate on Windows with PowerShell 7:
+
+```powershell
+git pull --ff-only
+./product/packaging/publish-windows.ps1
+```
+
+The directory, ZIP and inventory are under `artifacts/windows/`, named
+`FLAMORIS-Kachinco-win-x64`. Extract the complete ZIP and start `Kachinco.App.exe`.
+See [the shared Windows packaging contract](docs/windows-packaging.md). Missing/incompatible native components fail startup with
 an actionable diagnostic. Packages include BUILD-INFO.txt, licenses and acceptance
 checklists. FFmpeg/ffprobe and Recipe Python remain external prerequisites.
 

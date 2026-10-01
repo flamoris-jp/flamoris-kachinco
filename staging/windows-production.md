@@ -97,15 +97,15 @@ From a fresh Windows checkout with the test driver's .NET SDK available:
 ```powershell
 dotnet build Kachinco.slnx -c Release
 dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
-./product/packaging/publish-windows.ps1 -OutputDirectory artifacts/mcp-acceptance
-dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/mcp-acceptance/Kachinco-win-x64
+./product/packaging/publish-windows.ps1
+dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build -- --packaged artifacts/windows/FLAMORIS-Kachinco-win-x64
 ```
 
 The driver uses Windows UI Automation and the official SDK. The **separate published
 editor and bridge** receive System32-only PATH, so ordinary attachment/edit/history
 needs no developer .NET, Node, Python or FFmpeg. Existing worker/media tests run
 separately with their declared dependencies. The official MCP SDK is now a required production dependency. Package tests must never ship in the
-bundle; normal CI continues to upload ZIPs only on manual runs, retaining 3 days.
+bundle. Product CI and the delegated manual package workflow upload the same accepted ZIP plus inventory, retaining 3 days. `SHA256SUMS.txt` covers distributed files except itself; the external inventory includes it. See [Windows packaging](../docs/windows-packaging.md).
 
 ## Human acceptance — not performed by CI
 
