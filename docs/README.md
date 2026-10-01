@@ -29,5 +29,6 @@
 
 - [Native editor/project codec ADR](decisions/0010-native-editing-authority.md): shared UI/MCP native editing authority.
 - [Final cutover ADR](decisions/0011-native-cutover-cleanup.md): canonical time, retained adapters and deployment.
+- [Timeline ripple reorder ADR](decisions/0012-timeline-ripple-reorder.md): same-track insertion, gap protection, native preview and shared history.
 - [Native migration final audit](reviews/issue-36-native-audit.md): authority mapping, verification and remaining physical acceptance.
 - [Post-migration Windows acceptance](../staging/windows-native-phase2.md): final bundle and physical A/V workflow.

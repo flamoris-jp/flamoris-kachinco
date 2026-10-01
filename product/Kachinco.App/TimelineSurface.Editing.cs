@@ -32,6 +32,11 @@ public partial class TimelineSurface
         {
             if (drag is not null || project is null || sequence is null || !IsEnabled)
             { e.Handled = true; return; }
+        };
+        menu.Opened += (_, _) =>
+        {
+            if (drag is not null || project is null || sequence is null || !IsEnabled)
+            { menu.IsOpen = false; return; }
             Select(clipId, rebuild: false);
             Focus();
             menu.Items.Clear();
@@ -77,7 +82,7 @@ public partial class TimelineSurface
         { return Result<MoveClip>.Fail(Diagnostic.Error("INVALID_TIMELINE_RANGE", "The clip move is outside the timeline.", current.Visual.Clip.Id)); }
     }
 
-    private void UpdateRipplePreview()
+    private void UpdateRipplePreview(long? pointerTicks = null)
     {
         if (drag is not { } current || project is null || sequence is null) return;
         var track = sequence.Tracks.First(t => t.Id == current.Visual.TrackId);
@@ -86,8 +91,7 @@ public partial class TimelineSurface
                 Canvas.SetLeft(grid, ToDouble(viewport.TicksToPixels(clip.StartTicks)));
         ClearRippleMarker();
         bool sameTrack = DragTargetTrack(current) == track.Id;
-        var pointer = Mouse.GetPosition(TimelineViewportHost);
-        long ticks = Coordinates.ViewXToTicks((decimal)pointer.X);
+        long ticks = pointerTicks ?? Coordinates.ViewXToTicks((decimal)Mouse.GetPosition(TimelineViewportHost).X);
         var insertion = sameTrack ? TimelineEditPlanner.InsertionTarget(track, current.Visual.Clip.Id,
             Snap(ticks, current.Visual.Clip.Id)) : null;
         if (insertion?.Success == true)
