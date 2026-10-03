@@ -46,6 +46,7 @@ public partial class MainWindow
     private void InspectorSlider_Cancelled(object? sender, EventArgs e) => CancelInspectorGesture();
     private void CancelInspectorGesture()
     {
+        CancelVolumeGesture();
         if (inspectorGesture is null) return;
         var control = inspectorSlider; inspectorGesture = null; inspectorSlider = null;
         control?.CancelEdit(); previewContext = null; RefreshInteractiveContext();

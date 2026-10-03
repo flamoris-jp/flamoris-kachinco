@@ -25,6 +25,7 @@ public partial class MainWindow
     {
         previewSource = new(new WindowsCaptionRasterizer(Dispatcher), logger: logger);
         playback = new(previewSource, () => new WindowsPreviewAudioOutput(), logger);
+        InitializeMonitoring();
         playback.Changed += (_, _) => RefreshPlaybackFeedback();
         CompositionTarget.Rendering += PlaybackRendering;
         Closed += async (_, _) =>

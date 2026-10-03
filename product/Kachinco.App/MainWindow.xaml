@@ -88,6 +88,8 @@
         <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.PlaypauseSpace}" />
         <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Stopcancelpreparation}" />
         <Button Content="▶|" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}" />
+        <TextBlock Text="{DynamicResource Shell.MonitoringVolume}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+        <local:PropertySlider x:Name="MonitoringControl" Width="158" SliderMinimum="0" SliderMaximum="1" NumberMinimum="0" NumberMaximum="1" DisplayFactor="100" Suffix="%" Value="1" EditStarted="Monitoring_Started" EditPreview="Monitoring_Preview" EditCommitted="Monitoring_Committed" EditCancelled="Monitoring_Cancelled" AutomationProperties.Name="{DynamicResource Shell.MonitoringVolume}" ToolTip="{DynamicResource Shell.MonitoringHelp}"/>
         <Separator />
         <StackPanel x:Name="ClipContext" Orientation="Horizontal" Visibility="Collapsed">
           <TextBlock x:Name="ContextClipName" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="#D20B3A" Margin="4,0,8,0"/>
@@ -206,6 +208,24 @@
                 <TextBlock Text="{DynamicResource Shell.Gain}"/>
                 <local:PropertySlider x:Name="GainControl" Tag="Gain" SliderMinimum="0" SliderMaximum="2" NumberMinimum="0" NumberMaximum="16" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.Gain}" Margin="0,2,0,6"/>
                 <CheckBox x:Name="MutedBox" Content="{DynamicResource Shell.Muteaudio}" Foreground="#E7E7E7" Click="InspectorChoice_Click"/>
+                <TextBlock Text="{DynamicResource Shell.VolumePoints}" FontWeight="SemiBold" Margin="0,12,0,4"/>
+                <TextBlock Text="{DynamicResource Shell.VolumePointsHelp}" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                <ListBox x:Name="VolumePointsList" Height="108" DisplayMemberPath="Label" SelectionChanged="VolumePoints_Changed" Background="#202124" Foreground="#E7E7E7" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{DynamicResource Shell.VolumePoints}"/>
+                <WrapPanel Margin="0,4">
+                  <Button x:Name="AddVolumePointButton" Content="{DynamicResource Shell.AddVolumePoint}" Click="AddVolumePoint_Click"/>
+                  <Button x:Name="DeleteVolumePointButton" Content="{DynamicResource Shell.Delete}" Click="DeleteVolumePoint_Click"/>
+                </WrapPanel>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <TextBlock Text="{DynamicResource Shell.VolumeTime}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                  <TextBox x:Name="VolumeTimeBox" Grid.Column="1" Width="96" TextAlignment="Right" KeyDown="VolumeTime_KeyDown" AutomationProperties.Name="{DynamicResource Shell.VolumeTime}"/>
+                  <Button x:Name="VolumeTimeApplyButton" Grid.Column="2" Content="✓" Click="VolumeTimeApply_Click" ToolTip="{DynamicResource Shell.Applychanges}"/>
+                </Grid>
+                <TextBlock Text="{DynamicResource Shell.VolumeMultiplier}" Margin="0,4,0,0"/>
+                <local:PropertySlider x:Name="VolumeValueControl" SliderMinimum="0" SliderMaximum="2" NumberMinimum="0" NumberMaximum="16" DisplayFactor="100" Suffix="%" EditStarted="VolumeValue_Started" EditPreview="VolumeValue_Preview" EditCommitted="VolumeValue_Committed" EditCancelled="VolumeValue_Cancelled" AutomationProperties.Name="{DynamicResource Shell.VolumeMultiplier}" Margin="0,2,0,6"/>
+                <WrapPanel>
+                  <Button x:Name="FadeInButton" Content="{DynamicResource Shell.FadeIn}" Tag="In" Click="FadeVolume_Click"/>
+                  <Button x:Name="FadeOutButton" Content="{DynamicResource Shell.FadeOut}" Tag="Out" Click="FadeVolume_Click"/>
+                </WrapPanel>
               </StackPanel></Expander>
             </StackPanel>
           </StackPanel>

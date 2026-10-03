@@ -32,7 +32,7 @@ public sealed class PropertySlider : UserControl
     public event EventHandler? EditCancelled;
     private readonly Slider slider = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 48, IsMoveToPointEnabled = true };
     private readonly TextBox number = new() { Width = 66, Padding = new(3, 2, 3, 2), TextAlignment = TextAlignment.Right, VerticalContentAlignment = VerticalAlignment.Center };
-    private readonly TextBlock suffix = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new(3, 0, 0, 0), Foreground = Brushes.LightGray };
+    private readonly TextBlock suffix = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new(3, 0, 0, 0) };
     private bool updating, editing;
     private double original;
     private string rendered = "";

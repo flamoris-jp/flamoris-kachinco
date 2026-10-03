@@ -491,6 +491,7 @@ public partial class MainWindow : Window
             TransformXBox.Text = transform.X.ToString(); TransformYBox.Text = transform.Y.ToString();
             ScaleXControl.Value = transform.ScaleX; ScaleYControl.Value = transform.ScaleY; RotationControl.Value = transform.RotationDegrees;
             GainControl.Value = value.Clip.Audio.Gain; MutedBox.IsChecked = value.Clip.Audio.Muted;
+            RefreshVolumePoints(value.Clip);
         }
         else if (SelectedAsset(project) is { } asset)
         {

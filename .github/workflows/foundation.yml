@@ -64,6 +64,7 @@ jobs:
           path: |
             artifacts/interactive-preview-metrics.json
             artifacts/inspector-properties.png
+            artifacts/volume-automation.png
           retention-days: 3
       - name: Portable archive integrity contracts
         shell: pwsh
