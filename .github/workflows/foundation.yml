@@ -61,7 +61,9 @@ jobs:
         if: always()
         with:
           name: interactive-preview-evidence
-          path: artifacts/interactive-preview-metrics.json
+          path: |
+            artifacts/interactive-preview-metrics.json
+            artifacts/inspector-properties.png
           retention-days: 3
       - name: Portable archive integrity contracts
         shell: pwsh

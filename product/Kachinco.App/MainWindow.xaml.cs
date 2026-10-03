@@ -357,23 +357,6 @@ public partial class MainWindow : Window
     }
     private void Timeline_InteractionFailed(object sender, TimelineDiagnosticsEventArgs e) => ShowErrors(e.Diagnostics);
 
-    private void ApplyInspector_Click(object sender, RoutedEventArgs e)
-    {
-        var project = session.GetProject().Project;
-        var found = FindSelectedClip(project);
-        if (project is null || found is null || selectedSequenceId is not { } sequenceId) return;
-        if (!TrySeconds(ClipStartBox.Text, out var start) || !TrySeconds(ClipSourceInBox.Text, out var sourceIn) ||
-            !TrySeconds(ClipDurationBox.Text, out var duration) || duration <= 0)
-        { Refresh("秒数を0以上の数値で入力してください。"); return; }
-        var clip = found.Value.Clip;
-        if (!double.TryParse(OpacityBox.Text, out var opacity) || !double.TryParse(TransformXBox.Text,out var x) || !double.TryParse(TransformYBox.Text,out var y) ||
-            !double.TryParse(ScaleXBox.Text,out var sx) || !double.TryParse(ScaleYBox.Text,out var sy) || !double.TryParse(RotationBox.Text,out var rotation) || !double.TryParse(GainBox.Text,out var gain) || BlendBox.SelectedItem is not BlendMode blend)
-        { Status.Text = "合成・変形・音量の数値を確認してください。"; return; }
-        Apply("クリップの設定を変更しました。",
-            new TrimClip(sequenceId, clip.Id, start, sourceIn, duration),
-            new SetClipProperties(sequenceId, clip.Id, ClipEnabledBox.IsChecked == true, new(new(x,y,sx,sy,rotation),opacity,blend),new(gain,MutedBox.IsChecked == true)));
-    }
-
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         bool editingText = Keyboard.FocusedElement is TextBoxBase { IsReadOnly: false } or PasswordBox;
@@ -481,7 +464,12 @@ public partial class MainWindow : Window
 
     private void RefreshInspector()
     {
-        var project = session.GetProject().Project;
+        CancelInspectorGesture();
+        inspectorRefreshing = true;
+        try
+        {
+        var baseline = session.GetProject();
+        var project = baseline.Project;
         var selected = FindSelectedClip(project);
         ClipContext.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         ContextClipName.Text = selected is { } chosen ? project?.Assets.FirstOrDefault(a => a.Id == chosen.Clip.MediaAssetId)?.Name : "";
@@ -496,11 +484,13 @@ public partial class MainWindow : Window
             ClipSourceInBox.Text = Seconds(value.Clip.SourceInTicks);
             ClipDurationBox.Text = Seconds(value.Clip.DurationTicks);
             ClipEnabledBox.IsChecked = value.Clip.Enabled;
-            BlendBox.SelectedItem = value.Clip.Appearance.Blend; OpacityBox.Text = value.Clip.Appearance.Opacity.ToString();
+            BlendBox.SelectedItem = value.Clip.Appearance.Blend; OpacityControl.Value = value.Clip.Appearance.Opacity;
+            AppearanceSection.Visibility = TransformSection.Visibility = value.Track.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;
+            AudioSection.Visibility = value.Track.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
             var transform = value.Clip.Appearance.Transform;
             TransformXBox.Text = transform.X.ToString(); TransformYBox.Text = transform.Y.ToString();
-            ScaleXBox.Text = transform.ScaleX.ToString(); ScaleYBox.Text = transform.ScaleY.ToString(); RotationBox.Text = transform.RotationDegrees.ToString();
-            GainBox.Text = value.Clip.Audio.Gain.ToString(); MutedBox.IsChecked = value.Clip.Audio.Muted;
+            ScaleXControl.Value = transform.ScaleX; ScaleYControl.Value = transform.ScaleY; RotationControl.Value = transform.RotationDegrees;
+            GainControl.Value = value.Clip.Audio.Gain; MutedBox.IsChecked = value.Clip.Audio.Muted;
         }
         else if (SelectedAsset(project) is { } asset)
         {
@@ -511,6 +501,8 @@ public partial class MainWindow : Window
                 (asset.SampleRate is { } rate ? $"\n{rate} Hz · {asset.Channels ?? 0} ch" : "") +
                 "\n" + (state.IsAvailable ? EditorText.Choose("利用可能", "Available") : EditorText.Choose("見つかりません", "Missing"));
         }
+        }
+        finally { RememberInspectorNumbers(session.GetProject(), FindSelectedClip(session.GetProject().Project)?.Clip); inspectorRefreshing = false; }
     }
 
     private MediaAsset? SelectedAsset(Project? project)

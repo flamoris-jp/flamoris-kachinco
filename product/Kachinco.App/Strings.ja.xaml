@@ -81,4 +81,15 @@
   <system:String x:Key="Mcp.Edit">編集を許可して接続</system:String>
   <system:String x:Key="Mcp.Copy">接続情報をコピー</system:String>
   <system:String x:Key="Mcp.Stop">接続を無効にする</system:String>
+  <system:String x:Key="Shell.Basic">基本</system:String>
+  <system:String x:Key="Shell.Appearance">合成</system:String>
+  <system:String x:Key="Shell.Transform">変形</system:String>
+  <system:String x:Key="Shell.Audio">音声</system:String>
+  <system:String x:Key="Shell.Opacity">不透明度</system:String>
+  <system:String x:Key="Shell.PositionX">位置 X（px）</system:String>
+  <system:String x:Key="Shell.PositionY">位置 Y（px）</system:String>
+  <system:String x:Key="Shell.ScaleX">拡大率 X</system:String>
+  <system:String x:Key="Shell.ScaleY">拡大率 Y</system:String>
+  <system:String x:Key="Shell.Rotation">回転</system:String>
+  <system:String x:Key="Shell.Gain">クリップ音量</system:String>
 </ResourceDictionary>

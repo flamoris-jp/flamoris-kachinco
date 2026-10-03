@@ -81,4 +81,15 @@
   <system:String x:Key="Mcp.Edit">Connect with edit permission</system:String>
   <system:String x:Key="Mcp.Copy">Copy connection information</system:String>
   <system:String x:Key="Mcp.Stop">Disable connection</system:String>
+  <system:String x:Key="Shell.Basic">Basic</system:String>
+  <system:String x:Key="Shell.Appearance">Compositing</system:String>
+  <system:String x:Key="Shell.Transform">Transform</system:String>
+  <system:String x:Key="Shell.Audio">Audio</system:String>
+  <system:String x:Key="Shell.Opacity">Opacity</system:String>
+  <system:String x:Key="Shell.PositionX">Position X (px)</system:String>
+  <system:String x:Key="Shell.PositionY">Position Y (px)</system:String>
+  <system:String x:Key="Shell.ScaleX">Scale X</system:String>
+  <system:String x:Key="Shell.ScaleY">Scale Y</system:String>
+  <system:String x:Key="Shell.Rotation">Rotation</system:String>
+  <system:String x:Key="Shell.Gain">Clip volume</system:String>
 </ResourceDictionary>
