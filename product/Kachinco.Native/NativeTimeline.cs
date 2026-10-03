@@ -10,16 +10,22 @@ public readonly record struct NativeEvaluationResult(int Index, int Kind, long T
     long Duration, NativeAppearance Appearance, double Gain);
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct NativeParameterPoint(long Tick, double Value);
+public sealed record NativeGainCurve(int Index, NativeParameterPoint[] Points);
 
 public sealed class NativeTimeline : IDisposable
 {
     private readonly TimelineHandle handle;
     private readonly int capacity;
-    public NativeTimeline(long duration, NativeEvaluationItem[] items)
+    public NativeTimeline(long duration, NativeEvaluationItem[] items, NativeGainCurve[]? curves = null)
     {
         NativeMediaProcess.Check(Methods.Create(duration, items, (uint)items.Length, out handle));
         capacity = items.Length;
-        handle.Account(checked(items.LongLength * Marshal.SizeOf<NativeEvaluationItem>() + 32));
+        try
+        {
+            foreach (var curve in curves ?? []) NativeMediaProcess.Check(Methods.SetGainCurve(handle, curve.Index, curve.Points, checked((uint)curve.Points.Length)));
+            handle.Account(checked(items.LongLength * Marshal.SizeOf<NativeEvaluationItem>() + (curves?.Sum(c => c.Points.LongLength * 16) ?? 0) + 32));
+        }
+        catch { handle.Dispose(); throw; }
     }
     public NativeEvaluationResult[] Evaluate(long tick, long duration = 0)
     {
@@ -30,6 +36,13 @@ public sealed class NativeTimeline : IDisposable
     public static double Parameter(NativeParameterPoint[] points, long tick, double fallback)
     {
         NativeMediaProcess.Check(Methods.Parameter(points, (uint)points.Length, tick, fallback, out double value)); return value;
+    }
+    public unsafe void MixAudio(int index, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int rate, int channels)
+    {
+        fixed (double* dst = mix)
+        fixed (float* src = source)
+            NativeMediaProcess.Check(Methods.MixAudio(handle, index, (IntPtr)dst, checked((uint)mix.Length), (IntPtr)src,
+                checked((uint)source.Length), checked((uint)offset), firstSample, rate, channels));
     }
     public void Dispose() => handle.Dispose();
     private sealed class TimelineHandle : SafeHandleZeroOrMinusOneIsInvalid
@@ -55,5 +68,10 @@ public sealed class NativeTimeline : IDisposable
         internal static extern NativeStatus Evaluate(TimelineHandle handle, long tick, long duration, [Out] NativeEvaluationResult[] output, uint capacity, out uint count);
         [DllImport(Library, EntryPoint = "kn_parameter_at", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Parameter([In] NativeParameterPoint[] points, uint count, long tick, double fallback, out double output);
+        [DllImport(Library, EntryPoint = "kn_timeline_set_gain_curve", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SetGainCurve(TimelineHandle handle, int index, [In] NativeParameterPoint[] points, uint count);
+        [DllImport(Library, EntryPoint = "kn_timeline_mix_audio", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus MixAudio(TimelineHandle handle, int index, IntPtr mix, uint mixCount, IntPtr source, uint sourceCount, uint offset,
+            long firstSample, int rate, int channels);
     }
 }

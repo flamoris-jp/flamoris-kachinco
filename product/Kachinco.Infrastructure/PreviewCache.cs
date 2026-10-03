@@ -87,7 +87,9 @@ public sealed class PreviewContext
         long end = Math.Min(Sequence.DurationTicks, TimelineTime.SampleToTicks(first + count, 48000));
         var plan = Evaluator.EvaluateAudioRange(start, end - start);
         if (!plan.Success) throw new ArgumentOutOfRangeException(nameof(first));
-        return Hash(new { Sequence.Id, first, count, Layers = plan.Value, Media = plan.Value.Select(l => MediaKey(l.MediaAssetId)).ToArray() });
+        return Hash(new { Sequence.Id, first, count, Layers = plan.Value,
+            Curves = plan.Value.Select(l => Sequence.Tracks.SelectMany(t => t.Clips).First(c => c.Id == l.ClipId).Audio.VolumePoints).ToArray(),
+            Media = plan.Value.Select(l => MediaKey(l.MediaAssetId)).ToArray() });
     }
     // Conservative intersection signature for the device queue plus in-flight forward work.
     public string WindowKey(long start, long end)

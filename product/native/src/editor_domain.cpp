@@ -148,6 +148,7 @@ json validate(const json& p) {
                 if(!points.is_null()) {
                     if(!points.is_array()||points.size()>4096) e("INVALID_VOLUME_CURVE","Volume curve must be an initialized array of at most 4096 points.",cid);
                     else {
+                        if(kind!=1&&!points.empty()) e("VOLUME_AUDIO_REQUIRED","Volume points belong to audio-track clips.",cid);
                         std::set<std::string> point_ids; int64_t previous=0; bool first=true;
                         for(const auto& point:points) {
                             if(!point.is_object()) { e("INVALID_VOLUME_POINT","Volume point is required.",cid); continue; }
@@ -257,8 +258,12 @@ json apply(json p,const json& request) {
         else if(type=="MoveClip") {json value=values[ci]; values.erase(values.begin()+static_cast<json::difference_type>(ci)); value["startTicks"]=c.at("startTicks"); auto target=find(s.at("tracks"),c.at("targetTrackId"),"TRACK_NOT_FOUND","Track not found."); s["tracks"][target]["clips"].push_back(value);}
         else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
         else if(type=="TrimClip") {
-            const auto delta=add(integer(values[ci].at("sourceInTicks")),-integer(c.at("sourceInTicks")));
-            if(values[ci]["audio"].contains("volumePoints")) for(auto& point:values[ci]["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),delta);
+            if(values[ci]["audio"].contains("volumePoints")&&!values[ci]["audio"]["volumePoints"].empty()) {
+                auto source=integer(c.at("sourceInTicks"));
+                if(source<0) reject("INVALID_SOURCE_RANGE","Source in must be nonnegative.",id);
+                const auto delta=integer(values[ci].at("sourceInTicks"))-source;
+                for(auto& point:values[ci]["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),delta);
+            }
             for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);
         }
         else if(type=="SetClipProperties") {

@@ -19,11 +19,13 @@ public sealed class TimelineEvaluator : IDisposable
     public Sequence Sequence { get; }
     private readonly Kachinco.Native.NativeTimeline native;
     private readonly (Guid TrackId, Clip? Clip, Caption? Caption)[] identities;
+    private readonly Dictionary<Guid, int> audioIndices = [];
     private TimelineEvaluator(Project project, Sequence sequence)
     {
         Project = project; Sequence = sequence;
         var items = new List<Kachinco.Native.NativeEvaluationItem>();
         var ids = new List<(Guid, Clip?, Caption?)>();
+        var curves = new List<Kachinco.Native.NativeGainCurve>();
         for (int trackIndex = 0; trackIndex < sequence.Tracks.Length; ++trackIndex)
         {
             var track = sequence.Tracks[trackIndex];
@@ -36,6 +38,12 @@ public sealed class TimelineEvaluator : IDisposable
                     new(t.X,t.Y,t.ScaleX,t.ScaleY,t.RotationDegrees,clip.Appearance.Opacity,(int)clip.Appearance.Blend),
                     clip.Audio.Gain, clip.Audio.Muted ? 1 : 0, track.Enabled ? 1 : 0));
                 ids.Add((track.Id, clip, null));
+                if (track.Kind == TrackKind.Audio)
+                {
+                    int index = ids.Count - 1; audioIndices.Add(clip.Id, index);
+                    if (!clip.Audio.VolumePoints.IsDefaultOrEmpty)
+                        curves.Add(new(index, clip.Audio.VolumePoints.Select(p => new Kachinco.Native.NativeParameterPoint(p.Tick, p.Multiplier)).ToArray()));
+                }
             }
             foreach (var caption in track.Captions)
             {
@@ -46,7 +54,7 @@ public sealed class TimelineEvaluator : IDisposable
                 ids.Add((track.Id, null, caption));
             }
         }
-        identities = ids.ToArray(); native = new(sequence.DurationTicks, items.ToArray());
+        identities = ids.ToArray(); native = new(sequence.DurationTicks, items.ToArray(), curves.ToArray());
     }
     public static Result<TimelineEvaluator> Create(Project project, Guid sequenceId)
     {
@@ -88,4 +96,6 @@ public sealed class TimelineEvaluator : IDisposable
         })]);
     }
     public void Dispose() => native.Dispose();
+    public void MixAudio(Guid clipId, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int rate, int channels) =>
+        native.MixAudio(audioIndices[clipId], mix, source, offset, firstSample, rate, channels);
 }
