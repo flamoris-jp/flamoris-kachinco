@@ -7,3 +7,6 @@ TestResults/
 artifacts/
 
 artifacts/
+
+# WPF temporary compilation projects
+*_wpftmp.csproj

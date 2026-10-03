@@ -17,6 +17,16 @@
       <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F0E6E9"/><Setter Property="BorderBrush" Value="{StaticResource FamilyAccent}"/></Trigger></Style.Triggers>
     </Style>
     <Style TargetType="TextBox"><Setter Property="Foreground" Value="#202124"/><Setter Property="Background" Value="#F6F3F1"/></Style>
+    <Style x:Key="InspectorNumber" TargetType="TextBox">
+      <Setter Property="Width" Value="96"/><Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="Padding" Value="4,2"/><Setter Property="TextAlignment" Value="Right"/>
+      <EventSetter Event="PreviewKeyDown" Handler="InspectorNumber_KeyDown"/>
+      <EventSetter Event="LostKeyboardFocus" Handler="InspectorNumber_LostFocus"/>
+    </Style>
+    <Style x:Key="InspectorSection" TargetType="Expander">
+      <Setter Property="IsExpanded" Value="True"/><Setter Property="Foreground" Value="#E7E7E7"/>
+      <Setter Property="Margin" Value="0,10,0,0"/><Setter Property="Padding" Value="0,5,0,0"/>
+    </Style>
     <Style TargetType="ComboBox"><Setter Property="Foreground" Value="#202124"/></Style>
     <Style TargetType="Button"><Setter Property="Foreground" Value="#202124"/><Setter Property="Padding" Value="8,3"/><Setter Property="Margin" Value="2"/></Style>
     <Style x:Key="PanelText" TargetType="TextBlock"><Setter Property="Foreground" Value="#E7E7E7"/></Style>
@@ -170,18 +180,33 @@
               <TextBlock Text="{DynamicResource Shell.Clip}" Foreground="#B5BAC2" />
               <TextBlock x:Name="ClipNameText" FontWeight="SemiBold" TextWrapping="Wrap" />
               <TextBlock Visibility="Collapsed" x:Name="ClipIdText" FontSize="10" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,3,0,8" />
-              <TextBlock Text="{DynamicResource Shell.Startseconds}" /><TextBox x:Name="ClipStartBox" />
-              <TextBlock Text="{DynamicResource Shell.Sourceinseconds}" Margin="0,6,0,0" /><TextBox x:Name="ClipSourceInBox" />
-              <TextBlock Text="{DynamicResource Shell.Durationseconds}" Margin="0,6,0,0" /><TextBox x:Name="ClipDurationBox" />
-              <TextBlock Text="{DynamicResource Shell.Blend}" Margin="0,6,0,0" /><ComboBox x:Name="BlendBox" />
-              <TextBlock Text="{DynamicResource Shell.Opacity01}" /><TextBox x:Name="OpacityBox" />
-              <TextBlock Text="{DynamicResource Shell.PositionXYpx}" /><TextBox x:Name="TransformXBox" /><TextBox x:Name="TransformYBox" />
-              <TextBlock Text="{DynamicResource Shell.ScaleXY}" /><TextBox x:Name="ScaleXBox" /><TextBox x:Name="ScaleYBox" />
-              <TextBlock Text="{DynamicResource Shell.Rotationdegrees}" /><TextBox x:Name="RotationBox" />
-              <TextBlock Text="{DynamicResource Shell.Gain016}" /><TextBox x:Name="GainBox" />
-              <CheckBox x:Name="MutedBox" Content="{DynamicResource Shell.Muteaudio}" />
-              <CheckBox x:Name="ClipEnabledBox" Content="{DynamicResource Shell.Enabled}" Margin="0,8,0,0" />
-              <Button Content="{DynamicResource Shell.Applychanges}" Click="ApplyInspector_Click" Margin="0,8,0,0" />
+              <CheckBox x:Name="ClipEnabledBox" Content="{DynamicResource Shell.Enabled}" Foreground="#E7E7E7" Click="InspectorChoice_Click" Margin="0,7"/>
+              <Expander Header="{DynamicResource Shell.Basic}" Style="{StaticResource InspectorSection}"><StackPanel>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.Startseconds}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="ClipStartBox" Tag="Start" Style="{StaticResource InspectorNumber}"/></Grid>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.Sourceinseconds}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="ClipSourceInBox" Tag="Source" Style="{StaticResource InspectorNumber}"/></Grid>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.Durationseconds}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="ClipDurationBox" Tag="Duration" Style="{StaticResource InspectorNumber}"/></Grid>
+              </StackPanel></Expander>
+              <Expander x:Name="AppearanceSection" Header="{DynamicResource Shell.Appearance}" Style="{StaticResource InspectorSection}"><StackPanel>
+                <ComboBox x:Name="BlendBox" SelectionChanged="InspectorBlend_Changed" Margin="0,3,0,6"/>
+                <TextBlock Text="{DynamicResource Shell.Opacity}"/>
+                <local:PropertySlider x:Name="OpacityControl" Tag="Opacity" SliderMinimum="0" SliderMaximum="1" NumberMinimum="0" NumberMaximum="1" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.Opacity}" Margin="0,2,0,6"/>
+              </StackPanel></Expander>
+              <Expander x:Name="TransformSection" Header="{DynamicResource Shell.Transform}" Style="{StaticResource InspectorSection}"><StackPanel>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.PositionX}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="TransformXBox" Tag="X" Style="{StaticResource InspectorNumber}"/></Grid>
+                <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.PositionY}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="TransformYBox" Tag="Y" Style="{StaticResource InspectorNumber}"/></Grid>
+
+                <TextBlock Text="{DynamicResource Shell.ScaleX}"/>
+                <local:PropertySlider x:Name="ScaleXControl" Tag="ScaleX" SliderMinimum="0.01" SliderMaximum="4" NumberMinimum="5E-324" NumberMaximum="Infinity" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.ScaleX}" Margin="0,2,0,6"/>
+                <TextBlock Text="{DynamicResource Shell.ScaleY}"/>
+                <local:PropertySlider x:Name="ScaleYControl" Tag="ScaleY" SliderMinimum="0.01" SliderMaximum="4" NumberMinimum="5E-324" NumberMaximum="Infinity" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.ScaleY}" Margin="0,2,0,6"/>
+                <TextBlock Text="{DynamicResource Shell.Rotation}"/>
+                <local:PropertySlider x:Name="RotationControl" Tag="Rotation" SliderMinimum="-180" SliderMaximum="180" NumberMinimum="-Infinity" NumberMaximum="Infinity" DisplayFactor="1" Suffix="°" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.Rotation}" Margin="0,2,0,6"/>
+              </StackPanel></Expander>
+              <Expander x:Name="AudioSection" Header="{DynamicResource Shell.Audio}" Style="{StaticResource InspectorSection}"><StackPanel>
+                <TextBlock Text="{DynamicResource Shell.Gain}"/>
+                <local:PropertySlider x:Name="GainControl" Tag="Gain" SliderMinimum="0" SliderMaximum="2" NumberMinimum="0" NumberMaximum="16" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.Gain}" Margin="0,2,0,6"/>
+                <CheckBox x:Name="MutedBox" Content="{DynamicResource Shell.Muteaudio}" Foreground="#E7E7E7" Click="InspectorChoice_Click"/>
+              </StackPanel></Expander>
             </StackPanel>
           </StackPanel>
         </ScrollViewer>
