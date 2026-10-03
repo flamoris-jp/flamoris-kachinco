@@ -48,11 +48,19 @@ static int enum_value(const json& v,const std::vector<std::string>& names) {
 static json sorted(json values,bool timed=false) {
     std::stable_sort(values.begin(),values.end(),[&](const json& a,const json& b){if(timed&&integer(a.at("startTicks"))!=integer(b.at("startTicks"))) return integer(a.at("startTicks"))<integer(b.at("startTicks")); return a.at("id").get<std::string>()<b.at("id").get<std::string>();}); return values;
 }
-static json encode_clip(json c) {
+static json encode_clip(json c,bool curves) {
+    auto& audio=c["audio"];
+    if(curves) {
+        if(!audio.contains("volumePoints")) audio["volumePoints"]=json::array();
+        for(auto& point:audio["volumePoints"]) point["tick"]=std::to_string(integer(point.at("tick")));
+    } else audio.erase("volumePoints");
     c["startTicks"]=std::to_string(integer(c.at("startTicks"))); c["sourceInTicks"]=std::to_string(integer(c.at("sourceInTicks"))); c["durationTicks"]=std::to_string(integer(c.at("durationTicks"))); c["appearance"]["blend"]=blend.at(static_cast<size_t>(integer(c.at("appearance").at("blend")))); return c;
 }
 json encode_file(const json& p) {
-    json result={{"format","flamoris-kachinco"},{"schemaVersion",2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
+    bool curves=false;
+    for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("clips"))
+        if(c.at("audio").contains("volumePoints")&&!c.at("audio").at("volumePoints").empty()) curves=true;
+    json result={{"format","flamoris-kachinco"},{"schemaVersion",curves?3:2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
     for(auto a:sorted(p.at("assets"))) {
         const auto pr=a.value("provenance",json(nullptr)); a.erase("provenance"); a["kind"]=media.at(static_cast<size_t>(integer(a.at("kind")))); a["durationTicks"]=std::to_string(integer(a.at("durationTicks"))); result["project"]["assets"].push_back(a);
         if(!pr.is_null()) result["generatedAssets"].push_back({{"mediaAssetId",a.at("id")},{"recipeId",pr.at("recipeId")},{"recipeRevision",pr.at("recipeRevision")},{"sourceSha256",pr.at("sourceSha256")},{"outputSha256",pr.at("outputSha256")}});
@@ -62,7 +70,7 @@ json encode_file(const json& p) {
         for(auto& c:clappers) {c["startTicks"]=std::to_string(integer(c.at("startTicks"))); c["durationTicks"]=std::to_string(integer(c.at("durationTicks"))); if(!c.at("geometry").is_null()) c["geometry"]["kind"]=geometry.at(static_cast<size_t>(integer(c.at("geometry").at("kind"))));}
         result["authoring"].push_back({{"sequenceId",s.at("id")},{"clappers",clappers},{"recipes",recipes}}); s.erase("clappers"); s.erase("recipes");
         auto fps=s.at("settings").at("frameRate"); s["settings"].erase("frameRate"); s["settings"]["fpsNumerator"]=fps.at("numerator"); s["settings"]["fpsDenominator"]=fps.at("denominator"); s["durationTicks"]=std::to_string(integer(s.at("durationTicks")));
-        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c); for(auto& c:captions) {c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
+        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c,curves); for(auto& c:captions) {c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
         result["project"]["sequences"].push_back(s);
     }
     return result;
@@ -73,7 +81,7 @@ json decode_file(const std::string& raw) {
     int32_t schema;
     try { schema=i32(first.at("schemaVersion")); }
     catch(...) { throw rejected{error("INVALID_ENVELOPE","An integer schemaVersion is required.")}; }
-    if(schema!=1&&schema!=2) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
+    if(schema!=1&&schema!=2&&schema!=3) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
     auto root=parse(raw);
     if(schema==1) fields(root,{"format","schemaVersion","timebase","project"}); else fields(root,{"format","schemaVersion","timebase","project","authoring","generatedAssets"});
     if(text(root.at("format"))!="flamoris-kachinco"||ticks(root.at("timebase"))!=KN_TICKS_PER_SECOND) throw std::invalid_argument("envelope");
@@ -89,13 +97,17 @@ json decode_file(const std::string& raw) {
             for(auto& c:t["clips"]) {
                 fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio"});c["id"]=guid(c.at("id"));c["mediaAssetId"]=guid(c.at("mediaAssetId"));for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) c[k]=ticks(c.at(k));c["enabled"]=boolean(c.at("enabled"));
                 auto& a=c["appearance"];fields(a,{"transform","opacity","blend"});a["opacity"]=number(a.at("opacity"));a["blend"]=enum_value(a.at("blend"),blend);auto& tr=a["transform"];fields(tr,{"x","y","scaleX","scaleY","rotationDegrees"});for(const char* k:{"x","y","scaleX","scaleY","rotationDegrees"}) tr[k]=number(tr.at(k));
-                auto& audio=c["audio"];fields(audio,{"gain","muted"});audio["gain"]=number(audio.at("gain"));audio["muted"]=boolean(audio.at("muted"));
+                auto& audio=c["audio"];
+                if(schema==3) fields(audio,{"gain","muted","volumePoints"});else fields(audio,{"gain","muted"});
+                audio["gain"]=number(audio.at("gain"));audio["muted"]=boolean(audio.at("muted"));
+                if(schema<3) audio["volumePoints"]=json::array();
+                else {array(audio.at("volumePoints"));for(auto& point:audio["volumePoints"]) {fields(point,{"id","tick","multiplier"});point["id"]=guid(point.at("id"));point["tick"]=ticks(point.at("tick"));point["multiplier"]=number(point.at("multiplier"));}}
             }
             for(auto& c:t["captions"]) {fields(c,{"id","startTicks","durationTicks","text","enabled"});c["id"]=guid(c.at("id"));c["startTicks"]=ticks(c.at("startTicks"));c["durationTicks"]=ticks(c.at("durationTicks"));c["text"]=text(c.at("text"));c["enabled"]=boolean(c.at("enabled"));}
         }
         s["clappers"]=json::array();s["recipes"]=json::array();
     }
-    if(schema==2) {
+    if(schema>=2) {
         const auto& authoring=root.at("authoring"); const auto& generated=root.at("generatedAssets");array(authoring);array(generated);
         if(authoring.size()!=p.at("sequences").size()) throw std::invalid_argument("authoring");
         std::set<std::string> seen;

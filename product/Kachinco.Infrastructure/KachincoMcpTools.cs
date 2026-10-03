@@ -20,6 +20,7 @@ public static class KachincoMcpTools
         [nameof(SetSequenceDuration)] = typeof(SetSequenceDuration), [nameof(AddTrack)] = typeof(AddTrack),
         [nameof(InsertClip)] = typeof(InsertClip), [nameof(MoveClip)] = typeof(MoveClip), [nameof(RippleReorderClip)] = typeof(RippleReorderClip), [nameof(TrimClip)] = typeof(TrimClip),
         [nameof(SplitClip)] = typeof(SplitClip), [nameof(DeleteClip)] = typeof(DeleteClip), [nameof(SetClipProperties)] = typeof(SetClipProperties),
+        [nameof(AddClipVolumePoint)] = typeof(AddClipVolumePoint), [nameof(UpdateClipVolumePoint)] = typeof(UpdateClipVolumePoint), [nameof(DeleteClipVolumePoint)] = typeof(DeleteClipVolumePoint),
         [nameof(SetTrackEnabled)] = typeof(SetTrackEnabled), [nameof(ReorderTrack)] = typeof(ReorderTrack),
         [nameof(AddCaption)] = typeof(AddCaption), [nameof(UpdateCaption)] = typeof(UpdateCaption), [nameof(DeleteCaption)] = typeof(DeleteCaption)
     };
@@ -133,7 +134,7 @@ public static class KachincoMcpTools
         nameof(AddClapper) or nameof(UpdateClapper) or nameof(DeleteClapper) or
         nameof(AddRecipe) or nameof(UpdateRecipe) or nameof(CreateSequence) or nameof(SetSequenceDuration) or
         nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(RippleReorderClip) or nameof(TrimClip) or nameof(SplitClip) or
-        nameof(DeleteClip) or nameof(SetClipProperties) or nameof(SetTrackEnabled) or nameof(ReorderTrack) or
+        nameof(DeleteClip) or nameof(SetClipProperties) or nameof(AddClipVolumePoint) or nameof(UpdateClipVolumePoint) or nameof(DeleteClipVolumePoint) or nameof(SetTrackEnabled) or nameof(ReorderTrack) or
         nameof(AddCaption) or nameof(UpdateCaption) or nameof(DeleteCaption);
 
     private sealed class IntegerStringConverter : JsonConverter<long>

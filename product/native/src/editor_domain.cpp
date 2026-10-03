@@ -144,6 +144,22 @@ json validate(const json& p) {
                 const auto& audio=field(c,"audio"); bool good_audio=audio.is_object()&&finite(field(audio,"gain"));
                 if(good_audio) good_audio=audio.at("gain").get<double>()>=0&&audio.at("gain").get<double>()<=16;
                 if(!good_audio) e("INVALID_AUDIO_PROPERTIES","Gain must be finite and within [0,16].",cid);
+                const auto& points=field(audio,"volumePoints");
+                if(!points.is_null()) {
+                    if(!points.is_array()||points.size()>4096) e("INVALID_VOLUME_CURVE","Volume curve must be an initialized array of at most 4096 points.",cid);
+                    else {
+                        std::set<std::string> point_ids; int64_t previous=0; bool first=true;
+                        for(const auto& point:points) {
+                            if(!point.is_object()) { e("INVALID_VOLUME_POINT","Volume point is required.",cid); continue; }
+                            auto key=guid(point.at("id"));auto tick=integer(point.at("tick"));
+                            if(key=="00000000-0000-0000-0000-000000000000"||!point_ids.insert(key).second||(!first&&tick<=previous)||
+                               !finite(field(point,"multiplier"))||point.at("multiplier").get<double>()<0||point.at("multiplier").get<double>()>16)
+                                e("INVALID_VOLUME_POINT","Use clip-scoped unique IDs, strictly ordered ticks and finite multiplier [0,16].",cid);
+                            first=false;previous=tick;
+                        }
+                    }
+                } else if(audio.contains("volumePoints")) e("INVALID_VOLUME_CURVE","Volume curve must be initialized.",cid);
+
             }
             for(const auto& c:captions) {
                 if(c.is_null()) { e("INVALID_CAPTION","Null caption."); continue; }
@@ -177,7 +193,7 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
     if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
@@ -239,9 +255,27 @@ json apply(json p,const json& request) {
             }
         }
         else if(type=="MoveClip") {json value=values[ci]; values.erase(values.begin()+static_cast<json::difference_type>(ci)); value["startTicks"]=c.at("startTicks"); auto target=find(s.at("tracks"),c.at("targetTrackId"),"TRACK_NOT_FOUND","Track not found."); s["tracks"][target]["clips"].push_back(value);}
-        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; values.push_back(right);}
-        else if(type=="TrimClip") for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);
-        else if(type=="SetClipProperties") for(const char* k:{"enabled","appearance","audio"}) values[ci][k]=c.at(k);
+        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
+        else if(type=="TrimClip") {
+            const auto delta=add(integer(values[ci].at("sourceInTicks")),-integer(c.at("sourceInTicks")));
+            if(values[ci]["audio"].contains("volumePoints")) for(auto& point:values[ci]["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),delta);
+            for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);
+        }
+        else if(type=="SetClipProperties") {
+            values[ci]["enabled"]=c.at("enabled");values[ci]["appearance"]=c.at("appearance");
+            values[ci]["audio"]["gain"]=c.at("audio").at("gain");values[ci]["audio"]["muted"]=c.at("audio").at("muted");
+        }
+        else if(type=="AddClipVolumePoint"||type=="UpdateClipVolumePoint"||type=="DeleteClipVolumePoint") {
+            if(integer(s["tracks"][ti].at("kind"))!=1) reject("VOLUME_AUDIO_REQUIRED","Volume points belong to audio-track clips.",id);
+            auto& audio=values[ci]["audio"];if(!audio.contains("volumePoints")) audio["volumePoints"]=json::array();auto& points=audio["volumePoints"];
+            if(type=="AddClipVolumePoint") points.push_back(c.at("point"));
+            else {
+                auto index=find(points,type=="DeleteClipVolumePoint"?c.at("pointId"):c.at("point").at("id"),"VOLUME_POINT_NOT_FOUND","Volume point not found.");
+                if(type=="DeleteClipVolumePoint") points.erase(points.begin()+static_cast<json::difference_type>(index));
+                else points[index]=c.at("point");
+            }
+            std::stable_sort(points.begin(),points.end(),[](const json& a,const json& b){return integer(a.at("tick"))<integer(b.at("tick"));});
+        }
         else if(type=="UpdateCaption") for(const char* k:{"startTicks","durationTicks","text","enabled"}) values[ci][k]=c.at(k);
     }
     return p;
