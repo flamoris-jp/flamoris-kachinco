@@ -26,6 +26,28 @@ int main() {
     REQUIRE(kn_timeline_evaluate(timeline,20,0,values,2,&count)==KN_INVALID_ARGUMENT);
     REQUIRE(kn_timeline_evaluate(timeline,0,0,values,1,&count)==KN_INVALID_ARGUMENT);
     kn_timeline_destroy(timeline);
+    kn_eval_item curve_item{0,KN_TICKS_PER_SECOND,0,0,1,0,0,1,1,a,2,0,1};
+    REQUIRE(kn_timeline_create(KN_TICKS_PER_SECOND,&curve_item,1,&timeline)==KN_OK);
+    kn_parameter_point curve[]={{0,0},{KN_TICKS_PER_SECOND,1}};
+    REQUIRE(kn_timeline_set_gain_curve(timeline,0,curve,2)==KN_OK);
+    curve[1].value=0; // Curves are copied; no borrowed mutable memory.
+    REQUIRE(kn_timeline_evaluate(timeline,KN_TICKS_PER_SECOND/2,0,values,2,&count)==KN_OK && values[0].gain==1);
+    double envelope_mix[4]={};float envelope_source[4]={1,1,1,1};
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,24000,48000,2)==KN_OK);
+    REQUIRE(envelope_mix[0]==1 && envelope_mix[2]>1 && envelope_mix[2]<1.0001);
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,1,0,48000,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio(timeline,0,nullptr,4,envelope_source,4,0,0,48000,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,47999,48000,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,INT64_MAX-1,48000,2)==KN_INVALID_ARGUMENT);
+    envelope_source[3]=std::numeric_limits<float>::quiet_NaN();double untouched=envelope_mix[0];
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,0,48000,2)==KN_INVALID_MEDIA && envelope_mix[0]==untouched);
+    curve[1].tick=0;REQUIRE(kn_timeline_set_gain_curve(timeline,0,curve,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_gain_curve(timeline,0,curve,4097)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_gain_curve(timeline,0,nullptr,2)==KN_INVALID_ARGUMENT);
+    curve[0]={INT64_MIN,0};curve[1]={INT64_MAX,1};
+    REQUIRE(kn_timeline_set_gain_curve(timeline,0,curve,2)==KN_OK);
+    REQUIRE(kn_timeline_evaluate(timeline,0,0,values,2,&count)==KN_OK && values[0].gain==1);
+    kn_timeline_destroy(timeline);
     kn_playback* playback=nullptr;REQUIRE(kn_playback_create(&playback)==KN_OK);
     kn_playback_ticket ticket;REQUIRE(kn_playback_request(playback,KN_TICKS_PER_SECOND,30,1,0,1,&ticket)==KN_OK);
     kn_audio_step audio; int64_t queued=0;

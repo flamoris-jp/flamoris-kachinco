@@ -151,7 +151,8 @@ json validate(const json& p) {
                         if(kind!=1&&!points.empty()) e("VOLUME_AUDIO_REQUIRED","Volume points belong to audio-track clips.",cid);
                         std::set<std::string> point_ids; int64_t previous=0; bool first=true;
                         for(const auto& point:points) {
-                            if(!point.is_object()) { e("INVALID_VOLUME_POINT","Volume point is required.",cid); continue; }
+                            if(!point.is_object()||point.size()!=3||!point.contains("id")||!point.contains("tick")||!point.contains("multiplier"))
+                            { e("INVALID_VOLUME_POINT","Volume point requires only id, tick and multiplier.",cid); continue; }
                             auto key=guid(point.at("id"));auto tick=integer(point.at("tick"));
                             if(key=="00000000-0000-0000-0000-000000000000"||!point_ids.insert(key).second||(!first&&tick<=previous)||
                                !finite(field(point,"multiplier"))||point.at("multiplier").get<double>()<0||point.at("multiplier").get<double>()>16)

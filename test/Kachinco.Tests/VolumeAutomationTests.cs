@@ -112,6 +112,79 @@ public sealed class VolumeAutomationTests
         Assert.AreNotEqual(first.AudioKey(48000, 4800), second.AudioKey(48000, 4800));
     }
     private static Clip Audio(Fixture f) => f.Project.Sequences[0].Tracks[1].Clips.Single();
+    [TestMethod]
+    public void PointLimitAndClipScopedIdentitiesAreValidatedBeforeCommit()
+    {
+        var f = new Fixture(); var clip = Audio(f);
+        var points = Enumerable.Range(100, 4096).Select(i => new VolumePoint(Fixture.Id(i), i, 1)).ToImmutableArray();
+        var copy = clip with { Id = Fixture.Id(99), Audio = clip.Audio with { VolumePoints = points } };
+        Assert.IsTrue(f.Edit(new InsertClip(f.SequenceId, f.AudioTrackId, copy)).Success);
+        Assert.IsTrue(f.Edit(new AddClipVolumePoint(f.SequenceId, f.AudioClipId, points[0])).Success, "Same point ID in another clip is scoped.");
+        var before = NativeProjectCodec.Serialize(f.Project).Value;
+        Assert.IsFalse(f.Edit(new AddClipVolumePoint(f.SequenceId, copy.Id, new(Fixture.Id(5000), 5000, 1))).Success);
+        Assert.AreEqual(before, NativeProjectCodec.Serialize(f.Project).Value);
+        Assert.IsFalse(f.Edit(new AddClipVolumePoint(f.SequenceId, f.AudioClipId, new(Guid.Empty, 0, 1))).Success);
+    }
+    [TestMethod]
+    public async Task InteractivePreviewAndExportAgreeAcrossCacheReloadAndDifferentBlockSizes()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".wav"); File.WriteAllBytes(path, []);
+        try
+        {
+            var f = new Fixture(); AddRamp(f, Fixture.T); Assert.IsTrue(f.Edit(new RelinkMedia(f.WavId, path, 10 * Fixture.T, 48000, 2)).Success);
+            using var source = new InteractivePreviewSource(forwardAudio: new ConstantDecoder());
+            var context = PreviewContext.Create(f.Session.GetProject(), f.SequenceId).Value!;
+            var backend = new AudioCaptureBackend();
+            var export = new SnapshotExportService(new UnusedVideo(), new SharedAudioRenderer(new ConstantDecoder()), backend, new(null));
+            Assert.AreEqual(ExportStage.Completed, (await export.ExportAsync(f.Session.GetProject(),
+                new(Guid.NewGuid(), f.SequenceId, Path.GetFullPath("volume-envelope.mp4"), ExportPreset.YoutubeH264AacMp4), null, default)).Stage);
+            var output = backend.Samples.ToArray();
+            for (long first = 48000; first < 96000; first += 4800)
+            {
+                var preview = await source.AudioAsync(context, first, 4800, default); Assert.IsTrue(preview.Success);
+                CollectionAssert.AreEqual(output.AsSpan((int)first * 2, 9600).ToArray(), preview.Value!.Samples.ToArray());
+            }
+            var cached = await source.AudioAsync(context, 48000, 4800, default); Assert.IsTrue(cached.Success); Assert.IsTrue(source.Audio.Statistics.Hits > 0);
+            Assert.IsTrue(f.Edit(new UpdateClipVolumePoint(f.SequenceId, f.AudioClipId, new(Fixture.Id(101), Fixture.T, .2))).Success);
+            var reopened = NativeProjectCodec.Deserialize(NativeProjectCodec.Serialize(f.Project).Value!).Value!;
+            using var reload = new EditorSession(); Assert.IsTrue(reload.ReplaceProject(reopened).Success);
+            var fresh = PreviewContext.Create(reload.GetProject(), f.SequenceId).Value!;
+            var changed = await source.AudioAsync(fresh, 48000, 4800, default); Assert.IsTrue(changed.Success);
+            Assert.AreEqual(cached.Value!.Samples[0], changed.Value!.Samples[0]); Assert.AreNotEqual(cached.Value.Samples[^1], changed.Value.Samples[^1]);
+        }
+        finally { File.Delete(path); }
+    }
+    private sealed class UnusedVideo : IFrameRenderer
+    {
+        public ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long index, CancellationToken token) => throw new AssertFailedException();
+    }
+    private sealed class AudioCaptureBackend : IVideoEncodingBackend
+    {
+        public List<float> Samples { get; } = [];
+        public async Task<ExportResult> EncodeAsync(EncodingRequest request, IRenderedMediaSource media, FfmpegSettings settings, IProgress<ExportProgress>? progress, CancellationToken token)
+        { await foreach (var block in media.ReadAudioAsync(token)) Samples.AddRange(block.Samples); return new(request.JobId, ExportStage.Completed, request.OutputPath, []); }
+    }
+    [TestMethod]
+    public void FadesPreserveUnrelatedKeysAreOneUndoAndPointPreviewIsTransient()
+    {
+        var f = new Fixture(); var middle = new VolumePoint(Fixture.Id(100), 3 * Fixture.T, .4);
+        Assert.IsTrue(f.Edit(new AddClipVolumePoint(f.SequenceId, f.AudioClipId, middle),
+            new AddClipVolumePoint(f.SequenceId, f.AudioClipId, new(Fixture.Id(101), Fixture.T / 2, .7))).Success);
+        var baseline = f.Session.GetProject(); string before = NativeProjectCodec.Serialize(f.Project).Value!;
+        Assert.IsTrue(f.Session.Execute(VolumeCurveEdits.Fade(baseline, f.SequenceId, f.AudioClipId, true)).Success);
+        Assert.AreEqual(3, Audio(f).Audio.VolumePoints.Length); Assert.AreEqual(middle, Audio(f).Audio.VolumePoints.Single(p => p.Id == middle.Id));
+        Assert.AreEqual(0d, Audio(f).Audio.VolumePoints[0].Multiplier); Assert.AreEqual(Fixture.T, Audio(f).Audio.VolumePoints[1].Tick);
+        Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(before, NativeProjectCodec.Serialize(f.Project).Value);
+        Assert.IsTrue(f.Session.Redo().Success);
+        Assert.IsTrue(f.Session.Execute(VolumeCurveEdits.Fade(f.Session.GetProject(), f.SequenceId, f.AudioClipId, false)).Success);
+        using var evaluator = TimelineEvaluator.Create(f.Project, f.SequenceId).Value!;
+        Assert.AreEqual(.5, evaluator.Evaluate(6 * Fixture.T + Fixture.T / 2).Value!.Audio[0].Gain, 1e-12);
+        baseline = f.Session.GetProject(); before = NativeProjectCodec.Serialize(f.Project).Value!;
+        var edit = new VolumePointEdit(baseline, f.SequenceId, f.AudioClipId, middle);
+        Assert.IsTrue(edit.Preview(.8).Success); Assert.AreEqual(baseline, f.Session.GetProject());
+        Assert.IsTrue(f.Session.Execute(edit.Batch(.8)).Success); Assert.IsTrue(f.Session.Undo().Success);
+        Assert.AreEqual(before, NativeProjectCodec.Serialize(f.Project).Value);
+    }
     private static void AddRamp(Fixture f, long end) => Assert.IsTrue(f.Edit(
         new AddClipVolumePoint(f.SequenceId, f.AudioClipId, new(Fixture.Id(100), 0, 0)),
         new AddClipVolumePoint(f.SequenceId, f.AudioClipId, new(Fixture.Id(101), end, 1))).Success);
