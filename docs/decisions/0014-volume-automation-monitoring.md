@@ -60,6 +60,10 @@ multiplier, add at playhead, edit time/value, delete, plus one-second (or half-c
 fade-in/out convenience actions implemented as ordinary point commands. Each action
 is one transaction and one Undo. Time/curve errors remain actionable. A point list
 is the first editing surface; direct timeline envelopes can follow separately.
+Fade actions replace keys strictly inside their fade interval, preserve keys outside
+it and reuse existing endpoint identities. Adding a point uses a neutral 100%
+multiplier; adding at an existing time selects that point without a new history entry.
+Preferences use `%LOCALAPPDATA%/FLAMORIS/Kachinco/playback.json` (4 KiB read limit).
 
 Windows physical audible/DPI acceptance remains #42. Official Windows references:
 https://learn.microsoft.com/en-us/windows/win32/api/mmeapi/nf-mmeapi-waveoutsetvolume

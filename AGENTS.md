@@ -248,7 +248,7 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Use .NET 10, WPF only in `product/Kachinco.App`, and headless Core/Infrastructure. Physical boundaries follow section 3.
 - Canonical time is 35,280,000 ticks/second. Use `TimelineTime` for all conversions, reduced rational FPS, and half-open ranges. Never copy 2D's timebase into this product.
 - All editing goes through `EditorSession.Execute(EditBatch)`; `ReplaceProject` is explicit Open/New lifecycle, not an editing shortcut. Use immutable snapshots and explicit expected revisions for concurrent clients.
-- Native project codec owns frozen v1 input migration and v2 output. Core records are immutable wire/query projections. Required fields, decimal-string ticks, version dispatch and unknown-field rejection remain compatibility contracts; changes require a schema decision and regression tests.
+- Native project codec owns frozen v1/v2 input migration and conditional v2/v3 output (ADR 0014). Projects with volume curves write v3; projects without curves retain byte-compatible v2. Core records are immutable wire/query projections. Required fields, decimal-string ticks, version dispatch and unknown-field rejection remain compatibility contracts; changes require a schema decision and regression tests.
 - Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` now encodes rendered RGBA/PCM; it must never evaluate clip placement itself.
 - Issue #5 adds the bounded production slice documented in ADRs 0002–0004 and `staging/windows-production.md`; do not infer unrestricted Python, real-time preview or external integrations.
 - Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
@@ -267,8 +267,8 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 
 ## 17. Production slice authority (Issue #5)
 
-- Follow ADRs 0002–0004. Frozen `ProjectFormatV1` remains the input migration contract;
-  `ProjectFormatV2` is current output. Required authoring/provenance fields must not be dropped.
+- Follow ADRs 0002–0004 and 0014. Frozen v1/v2 remain input migration contracts;
+  volume automation selects v3 output. Required authoring/provenance fields must not be dropped.
 - Recipe source is parsed in the bounded worker and never executed with eval/exec.
   Preserve Windows job limits, POSIX limits, wall timeout and host IR revalidation.
 - Recipe generation prepares ordinary commands against one expected revision.
@@ -313,3 +313,15 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
   are presentation ownership; decoded frame/audio caches are native.
 - Run native sanitizer contracts, managed conformance, real-codec/export, Windows
   raster/package and shared MCP gates. Keep physical A/V acceptance explicit.
+
+## Clip volume and monitoring authority (Issue #30)
+
+- ADR 0014 defines clip-relative signed ticks, clip-scoped point IDs, linear envelope
+  multipliers, checked trim/split preservation and conditional v3 persistence.
+- Explicit native add/update/delete point commands share UI/MCP history. Constant
+  `SetClipProperties` gain/mute edits preserve points.
+- Native owns instant and sample-accurate gain evaluation for preview/export. Cache
+  keys include full curves; never apply a block-start gain to a changing whole block.
+- Monitoring gain is a bounded atomic editor preference outside project/history/export.
+  Windows applies it to the output handle, including queued sound, without resetting
+  the consumed-sample clock. New outputs inherit the current preference.

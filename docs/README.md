@@ -17,6 +17,8 @@
 - [Live MCP migration ADR](decisions/0005-mcp-core-migration.md): historical Core 1.1.0, typed host, local bridge, permissions and compatibility.
 - [Original Live MCP ADR](decisions/0003-live-mcp.md): historical scoped attachment design.
 - [Authoring v2 ADR](decisions/0004-authoring-v2.md): migration, Clappers, Recipes and provenance.
+- [Volume automation/monitoring ADR](decisions/0014-volume-automation-monitoring.md): editable native curves, conditional v3, sample-accurate shared audio and editor-only monitoring.
+- [Inspector controls](issue-29-inspector.md): grouped image-editor-style numeric/slider editing and history semantics.
 - [Production Windows workflow](../staging/windows-production.md): prerequisites and acceptance.
 - [Editor UX reference audit and coordinate contract](issue-7-editor-ux.md): Issue #7, real NLE references and Cutwork family grammar.
 - [Windows hands-on checklist](../staging/windows-issue7.md): automated evidence and remaining physical acceptance.

@@ -14,7 +14,7 @@ foundation-only deferrals are superseded by these current contracts:
   sample clock, quality, dependency cache and visible thumbnail/placement policy.
 - [ADR 0003](decisions/0003-live-mcp.md): stdio bridge to the live Windows session.
 - [ADR 0004](decisions/0004-authoring-v2.md): persistent Clappers/Recipes/provenance,
-  v1 migration and bounded worker. Current output is schema v2.
+  v1 migration and bounded worker. ADR 0014 adds conditional v3 volume curves.
 - [Production acceptance](../staging/windows-production.md): concrete UI workflow,
   prerequisites, limits and unperformed human acceptance.
 
@@ -46,7 +46,7 @@ Both preview and export call the same native evaluator/compositor/mixer.
 ADRs [0010](decisions/0010-native-editing-authority.md) and
 [0011](decisions/0011-native-cutover-cleanup.md) complete the cutover: one native
 EditorSession owns project mutation/validation, expected revisions, history and
-document generations. Native owns v1/v2 schema conversion and canonical rational
+document generations. Native owns v1/v2/v3 schema conversion and canonical rational
 frame/sample conversions. The C# facade publishes immutable queries and dispatches
 the same typed commands for UI/MCP; ProjectFileStore supplies bounded atomic I/O.
 Decimal input/display and transient authoring geometry remain managed projections.
@@ -67,6 +67,19 @@ requests the frozen frame. Resume prepares a new bounded window. Native generati
 reject late old work; end playback explicitly requests the last canonical frame.
 No timer substitutes for audio consumption. See the #34 performance and physical
 acceptance records; automated timing/pixel tests do not establish A/V perception.
+
+## Volume automation and monitoring (Issue #30)
+
+[ADR 0014](decisions/0014-volume-automation-monitoring.md) defines persistent,
+clip-scoped volume points in signed clip-relative ticks. Native commands, codec and
+instant/per-sample evaluation own the curve; preview and export use the same mixer.
+Trim/split preserve the envelope on source samples, including points outside the
+active range. No curves retains v2 output; any curve selects v3 with required arrays.
+
+The Audio Inspector offers point add/time/value/delete and one-transaction fades.
+The transport's monitoring slider changes only the Windows audio session's volume.
+Its bounded atomic preference is stored in LocalApplicationData; it does not enter
+the project, revision, history, PCM cache or export.
 
 ## Foundation rationale (historical implementation scope)
 
