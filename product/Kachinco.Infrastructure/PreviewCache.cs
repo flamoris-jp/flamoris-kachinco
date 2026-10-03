@@ -88,7 +88,7 @@ public sealed class PreviewContext
         var plan = Evaluator.EvaluateAudioRange(start, end - start);
         if (!plan.Success) throw new ArgumentOutOfRangeException(nameof(first));
         return Hash(new { Sequence.Id, first, count, Layers = plan.Value,
-            Curves = plan.Value.Select(l => Sequence.Tracks.SelectMany(t => t.Clips).First(c => c.Id == l.ClipId).Audio.VolumePoints).ToArray(),
+            Audio = plan.Value.Select(l => Sequence.Tracks.SelectMany(t => t.Clips).First(c => c.Id == l.ClipId).Audio).ToArray(),
             Media = plan.Value.Select(l => MediaKey(l.MediaAssetId)).ToArray() });
     }
     // Conservative intersection signature for the device queue plus in-flight forward work.

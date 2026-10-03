@@ -111,7 +111,12 @@ public partial class MainWindow
         if (point.Tick == tick) return;
         var result = session.Execute(new([new UpdateClipVolumePoint(value.Sequence, value.Clip.Id, point with { Tick = tick })], value.Baseline.Revision));
         if (result.Success) Refresh(EditorText.Choose("音量ポイントの時刻を変更しました。", "Volume point time updated."));
-        else { VolumeTimeBox.BorderBrush = Brushes.OrangeRed; Status.Text = string.Join(" / ", result.Diagnostics.Select(d => d.Message)); }
+        else
+        {
+            VolumeTimeBox.BorderBrush = Brushes.OrangeRed;
+            Status.Text = string.Join(" / ", result.Diagnostics.Select(d => d.Code == "INVALID_VOLUME_POINT" ?
+                EditorText.Choose("同じ時刻にポイントがあります。別の秒数を入力してください。", "A point already exists at this time. Enter a different time.") : d.Message));
+        }
         void Invalid() { VolumeTimeBox.BorderBrush = Brushes.OrangeRed; Status.Text = EditorText.Choose("クリップ先頭からの秒数を入力してください。", "Enter seconds relative to the clip start."); }
     }
     private void FadeVolume_Click(object sender, RoutedEventArgs e)

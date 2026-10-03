@@ -144,7 +144,14 @@ public sealed class VolumeAutomationTests
                 var preview = await source.AudioAsync(context, first, 4800, default); Assert.IsTrue(preview.Success);
                 CollectionAssert.AreEqual(output.AsSpan((int)first * 2, 9600).ToArray(), preview.Value!.Samples.ToArray());
             }
-            var cached = await source.AudioAsync(context, 48000, 4800, default); Assert.IsTrue(cached.Success); Assert.IsTrue(source.Audio.Statistics.Hits > 0);
+        var cached = await source.AudioAsync(context, 48000, 4800, default); Assert.IsTrue(cached.Success); Assert.IsTrue(source.Audio.Statistics.Hits > 0);
+        Assert.IsTrue(f.Edit(new SetClipProperties(f.SequenceId, f.AudioClipId, true, Audio(f).Appearance, new(.5, false))).Success);
+        var gainContext = PreviewContext.Create(f.Session.GetProject(), f.SequenceId).Value!;
+        Assert.AreEqual(context.Evaluator.Evaluate(Fixture.T).Value!.Audio[0].Gain, gainContext.Evaluator.Evaluate(Fixture.T).Value!.Audio[0].Gain);
+        Assert.AreNotEqual(context.AudioKey(48000, 4800), gainContext.AudioKey(48000, 4800), "Base gain matters even when the first envelope sample is zero.");
+        var gainChanged = await source.AudioAsync(gainContext, 48000, 4800, default); Assert.IsTrue(gainChanged.Success);
+        Assert.AreEqual(cached.Value!.Samples[^1] * .5f, gainChanged.Value!.Samples[^1]);
+        Assert.IsTrue(f.Session.Undo().Success);
             Assert.IsTrue(f.Edit(new UpdateClipVolumePoint(f.SequenceId, f.AudioClipId, new(Fixture.Id(101), Fixture.T, .2))).Success);
             var reopened = NativeProjectCodec.Deserialize(NativeProjectCodec.Serialize(f.Project).Value!).Value!;
             using var reload = new EditorSession(); Assert.IsTrue(reload.ReplaceProject(reopened).Success);

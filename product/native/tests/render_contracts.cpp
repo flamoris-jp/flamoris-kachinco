@@ -37,6 +37,7 @@ int main() {
     REQUIRE(envelope_mix[0]==1 && envelope_mix[2]>1 && envelope_mix[2]<1.0001);
     REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,1,0,48000,2)==KN_INVALID_ARGUMENT);
     REQUIRE(kn_timeline_mix_audio(timeline,0,nullptr,4,envelope_source,4,0,0,48000,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,3,envelope_source,2,0,0,48000,2)==KN_INVALID_ARGUMENT);
     REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,47999,48000,2)==KN_INVALID_ARGUMENT);
     REQUIRE(kn_timeline_mix_audio(timeline,0,envelope_mix,4,envelope_source,4,0,INT64_MAX-1,48000,2)==KN_INVALID_ARGUMENT);
     envelope_source[3]=std::numeric_limits<float>::quiet_NaN();double untouched=envelope_mix[0];
