@@ -163,6 +163,7 @@ public sealed class PreviewConcurrencyTests
                 Assert.IsTrue(submitted - played <= InteractivePreview.MaximumQueuedFrames);
             }
         }
+        public void SetMonitoringGain(double gain) { }
         public void Play() { lock (gate) { Assert.IsFalse(disposed); running = true; } }
         public void Pause() { lock (gate) { Assert.IsFalse(disposed); running = false; } }
         public void Dispose() { lock (gate) { running = false; disposed = true; } }

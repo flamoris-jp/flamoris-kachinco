@@ -217,6 +217,7 @@ public sealed class LoggingIntegrationTests
         public long PlayedFrames => 0;
         public long QueuedFrames => queued;
         public void Enqueue(RenderedAudioBlock block) => queued += block.Samples.Length / block.Channels;
+        public void SetMonitoringGain(double gain) { }
         public void Play() { }
         public void Pause() { }
         public void Dispose() { }

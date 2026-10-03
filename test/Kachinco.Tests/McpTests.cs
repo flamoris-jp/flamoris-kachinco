@@ -7,6 +7,32 @@ namespace Kachinco.Tests;
 public sealed class McpTests
 {
     [TestMethod]
+    public async Task VolumePointsUseTypedSignedTicksAndTheSameNativeHistory()
+    {
+        using var h = new McpCoreHarness(); var f = h.Fixture;
+        using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
+        var id = Fixture.Id(100);
+        var add = new { commands = new[] { new { type = "AddClipVolumePoint", sequenceId = f.SequenceId, clipId = f.AudioClipId,
+            point = new { id, tick = "-9007199254740993", multiplier = .3 } } } };
+        var result = await h.Call(grant, "edit_batch", add, h.Guard());
+        Assert.IsFalse(result.IsError); Assert.IsTrue(result.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.AreEqual(-9_007_199_254_740_993L, f.Project.Sequences[0].Tracks[1].Clips[0].Audio.VolumePoints[0].Tick);
+        var query = (await h.Call(grant, "get_project")).Value!.Value;
+        Assert.AreEqual(3, query.GetProperty("project").GetProperty("schemaVersion").GetInt32());
+        result = await h.Call(grant, "edit_batch", new { commands = new[] { new { type = "UpdateClipVolumePoint", sequenceId = f.SequenceId, clipId = f.AudioClipId,
+            point = new { id, tick = "0", multiplier = .6 } } } }, h.Guard());
+        Assert.IsTrue(result.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.IsTrue((await h.Human(() => f.Session.Undo())).Success);
+        Assert.AreEqual(.3, f.Project.Sequences[0].Tracks[1].Clips[0].Audio.VolumePoints[0].Multiplier);
+        var before = f.Session.GetProject();
+        result = await h.Call(grant, "edit_batch", new { commands = new[] { new { type = "UpdateClipVolumePoint", sequenceId = f.SequenceId, clipId = f.AudioClipId,
+            point = new { id, tick = 0, multiplier = .8 } } } }, h.Guard());
+        Assert.AreEqual(McpErrors.InvalidRequest, result.Error); Assert.AreEqual(before, f.Session.GetProject());
+        result = await h.Call(grant, "edit_batch", new { commands = new[] { new { type = "DeleteClipVolumePoint", sequenceId = f.SequenceId, clipId = f.AudioClipId, pointId = id } } }, h.Guard());
+        Assert.IsTrue(result.Value!.Value.GetProperty("success").GetBoolean());
+        Assert.AreEqual(0, f.Project.Sequences[0].Tracks[1].Clips[0].Audio.VolumePoints.Length);
+    }
+    [TestMethod]
     public async Task RippleUiPlanAndMcpCommandShareHistoryAndNullableEndInsertion()
     {
         using var h = new McpCoreHarness();

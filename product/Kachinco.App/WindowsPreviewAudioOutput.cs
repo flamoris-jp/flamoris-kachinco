@@ -75,6 +75,17 @@ public sealed class WindowsPreviewAudioOutput : IPreviewAudioOutput
     }
     public void Play() { EnsureOpen(); Check(waveOutRestart(handle), "Start audio output"); }
     public void Pause() { EnsureOpen(); Check(waveOutPause(handle), "Pause audio output"); }
+    public void SetMonitoringGain(double gain)
+    {
+        uint volume = EncodeMonitoringGain(gain);
+        EnsureOpen(); Check(waveOutSetVolume(handle, volume), "Set monitoring volume");
+    }
+    public static uint EncodeMonitoringGain(double gain)
+    {
+        if (!double.IsFinite(gain) || gain < 0 || gain > 1) throw new ArgumentOutOfRangeException(nameof(gain));
+        uint channel = (uint)Math.Round(gain * ushort.MaxValue, MidpointRounding.AwayFromZero);
+        return channel | channel << 16;
+    }
     private void Reap()
     {
         while (buffers.TryPeek(out var b) && (Marshal.PtrToStructure<WaveHeader>(b.Header).Flags & Done) != 0)
@@ -107,4 +118,5 @@ public sealed class WindowsPreviewAudioOutput : IPreviewAudioOutput
     [DllImport("winmm.dll")] private static extern uint waveOutPrepareHeader(IntPtr handle, IntPtr header, uint size);
     [DllImport("winmm.dll")] private static extern uint waveOutUnprepareHeader(IntPtr handle, IntPtr header, uint size);
     [DllImport("winmm.dll")] private static extern uint waveOutWrite(IntPtr handle, IntPtr header, uint size);
+    [DllImport("winmm.dll")] private static extern uint waveOutSetVolume(IntPtr handle, uint volume);
 }

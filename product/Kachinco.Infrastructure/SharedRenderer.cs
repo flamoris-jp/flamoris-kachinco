@@ -122,7 +122,8 @@ public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPa
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("MEDIA_MISSING", "Audio source is missing.", layer.MediaAssetId));
                 var samples = await decoder.AudioAsync(path.ResolvedPath, sourceTicks, (int)(until - from), sampleRate, channels, cancellationToken);
                 int offset = checked((int)(from - firstSample) * channels);
-                Kachinco.Native.NativeComposition.Mix(mix, samples.AsSpan(), offset, layer.Gain);
+                if (samples.Length != checked((int)(until - from) * channels)) throw new InvalidDataException("Decoder returned an incomplete PCM block.");
+                evaluator.MixAudio(layer.ClipId, mix, samples.AsSpan(), offset, from, sampleRate, channels);
             }
             return Result<RenderedAudioBlock>.Ok(new(firstSample, sampleRate, channels,
                 System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(Kachinco.Native.NativeComposition.Finish(mix))));

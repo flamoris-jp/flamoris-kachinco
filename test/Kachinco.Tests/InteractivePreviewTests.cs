@@ -10,6 +10,26 @@ namespace Kachinco.Tests;
 public sealed class InteractivePreviewTests
 {
     [TestMethod]
+    public void MonitoringGainChangesQueuedDeviceWithoutChangingClockPCMOrProjectAndSurvivesResume()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var snapshot = f.Session.GetProject();
+        var source = new Source(); var devices = new List<Device>();
+        using var p = new InteractivePreview(source, () => { var d = new Device(); devices.Add(d); return d; });
+        p.SetMonitoringGain(.35); p.SetContext(Context(f)); p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing);
+        var device = devices.Single(); Assert.AreEqual(.35, device.MonitoringGain);
+        device.Advance(4800); long tick = p.ReadPositionTicks(), queued = device.QueuedFrames;
+        int audioRequests = source.Audio.Count;
+        p.SetMonitoringGain(0); Assert.AreEqual(0d, device.MonitoringGain);
+        Assert.AreEqual(InteractivePreviewState.Playing, p.State); Assert.AreEqual(tick, p.ReadPositionTicks());
+        Assert.AreEqual(queued, device.QueuedFrames); Assert.AreEqual(audioRequests, source.Audio.Count);
+        Assert.AreEqual(snapshot, f.Session.GetProject());
+        foreach (double invalid in new[] { double.NaN, double.PositiveInfinity, -.01, 1.01 })
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => p.SetMonitoringGain(invalid));
+        p.Pause(); pump.Until(() => p.Completion.IsCompleted); p.SetMonitoringGain(.8);
+        p.Play(); pump.Until(() => devices.Count == 2 && p.State == InteractivePreviewState.Playing);
+        Assert.AreEqual(.8, devices[1].MonitoringGain); p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+    [TestMethod]
     public void ScrubMailboxIsBoundedLatestWinsAndNeverMutatesProject()
     {
         using var pump = new Pump(); var f = new Fixture(); var snapshot = f.Session.GetProject();
@@ -300,6 +320,8 @@ public sealed class InteractivePreviewTests
         private long submitted; public bool Running, Disposed;
         public void Advance(long samples) { if (Running) PlayedFrames = Math.Min(submitted, PlayedFrames + samples); }
         public void Enqueue(RenderedAudioBlock block) { submitted += block.Samples.Length / 2; Assert.IsTrue(QueuedFrames <= 24000); }
+        public double MonitoringGain { get; private set; } = 1;
+        public void SetMonitoringGain(double gain) => MonitoringGain = gain;
         public void Play() => Running = true; public void Pause() => Running = false;
         public void Dispose() { Running = false; Disposed = true; }
     }

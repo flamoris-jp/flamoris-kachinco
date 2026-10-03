@@ -18,6 +18,9 @@ public sealed record TrimClip(Guid SequenceId, Guid ClipId, long StartTicks, lon
 public sealed record SplitClip(Guid SequenceId, Guid ClipId, long SplitTicks, Guid RightClipId) : EditCommand;
 public sealed record DeleteClip(Guid SequenceId, Guid ClipId) : EditCommand;
 public sealed record SetClipProperties(Guid SequenceId, Guid ClipId, bool Enabled, ClipAppearance Appearance, AudioProperties Audio) : EditCommand;
+public sealed record AddClipVolumePoint(Guid SequenceId, Guid ClipId, VolumePoint Point) : EditCommand;
+public sealed record UpdateClipVolumePoint(Guid SequenceId, Guid ClipId, VolumePoint Point) : EditCommand;
+public sealed record DeleteClipVolumePoint(Guid SequenceId, Guid ClipId, Guid PointId) : EditCommand;
 public sealed record SetTrackEnabled(Guid SequenceId, Guid TrackId, bool Enabled) : EditCommand;
 public sealed record ReorderTrack(Guid SequenceId, Guid TrackId, int NewIndex) : EditCommand;
 public sealed record AddCaption(Guid SequenceId, Guid TrackId, Caption Caption) : EditCommand;

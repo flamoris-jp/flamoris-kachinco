@@ -8,6 +8,7 @@ authority or proof of physical Windows acceptance.
 - [Issue #9 self-review](issue-9-self-review.md)
 - [Issue #9 performance evidence](issue-9-performance.md)
 - [Issue #13 self-review](issue-13-self-review.md)
+- [Issue #30 self-review](issue-30-self-review.md)
 
 Keep future review/benchmark narratives here. Raw staging measurements remain in
 `staging/evidence/`; human acceptance checklists remain in `staging/`. Link to both

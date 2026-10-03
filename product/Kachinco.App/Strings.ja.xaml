@@ -85,6 +85,15 @@
   <system:String x:Key="Shell.Appearance">合成</system:String>
   <system:String x:Key="Shell.Transform">変形</system:String>
   <system:String x:Key="Shell.Audio">音声</system:String>
+  <system:String x:Key="Shell.MonitoringVolume">モニター音量</system:String>
+  <system:String x:Key="Shell.MonitoringHelp">試聴用の音量。書き出し音量には影響しません。</system:String>
+  <system:String x:Key="Shell.VolumePoints">音量ポイント</system:String>
+  <system:String x:Key="Shell.VolumePointsHelp">ポイント間は滑らかに変化します。倍率はクリップ音量に掛かります。</system:String>
+  <system:String x:Key="Shell.AddVolumePoint">現在位置に追加</system:String>
+  <system:String x:Key="Shell.VolumeTime">先頭からの秒数</system:String>
+  <system:String x:Key="Shell.VolumeMultiplier">音量倍率</system:String>
+  <system:String x:Key="Shell.FadeIn">フェードイン</system:String>
+  <system:String x:Key="Shell.FadeOut">フェードアウト</system:String>
   <system:String x:Key="Shell.Opacity">不透明度</system:String>
   <system:String x:Key="Shell.PositionX">位置 X（px）</system:String>
   <system:String x:Key="Shell.PositionY">位置 Y（px）</system:String>

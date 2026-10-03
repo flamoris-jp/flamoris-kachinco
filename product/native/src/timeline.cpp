@@ -1,27 +1,48 @@
 #include "kachinco_native.h"
+#include "time_math.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <map>
 #include <tuple>
 #include <vector>
 static_assert(sizeof(kn_eval_item) == 128 && sizeof(kn_eval_result) == 96);
-struct kn_timeline { int64_t duration; std::vector<kn_eval_item> items; };
+struct kn_timeline { int64_t duration; std::vector<kn_eval_item> items; std::map<int32_t,std::vector<kn_parameter_point>> curves; };
+static double parameter_value(const kn_parameter_point* points,uint32_t count,int64_t tick,double fallback) noexcept {
+    if(!count) return fallback;
+    auto after=std::upper_bound(points,points+count,tick,[](int64_t value,const auto& p){return value<p.tick;});
+    if(after==points) return points[0].value;
+    if(after==points+count) return points[count-1].value;
+    const auto& a=*(after-1);const auto& b=*after;
+    // Ordered subtraction in unsigned space avoids signed overflow at Int64 extrema.
+    const auto elapsed=static_cast<uint64_t>(tick)-static_cast<uint64_t>(a.tick);
+    const auto span=static_cast<uint64_t>(b.tick)-static_cast<uint64_t>(a.tick);
+    const double ratio=static_cast<double>(elapsed)/static_cast<double>(span);
+    return a.value*(1-ratio)+b.value*ratio;
+}
+static double gain_at(const kn_timeline* timeline,const kn_eval_item& item,int64_t local) noexcept {
+    const auto found=timeline->curves.find(item.index);
+    if(found==timeline->curves.end()) return item.gain;
+    const auto& points=found->second;
+    return item.gain*parameter_value(points.data(),static_cast<uint32_t>(points.size()),local,1);
+}
+int32_t KN_CALL kn_timeline_set_gain_curve(kn_timeline* timeline,int32_t index,const kn_parameter_point* points,uint32_t count) noexcept {
+    if(!timeline||(!points&&count)||count>4096) return KN_INVALID_ARGUMENT;
+    auto item=std::find_if(timeline->items.begin(),timeline->items.end(),[&](const auto& v){return v.index==index;});
+    if(item==timeline->items.end()||item->kind!=1) return KN_INVALID_ARGUMENT;
+    for(uint32_t i=0;i<count;++i) if(!std::isfinite(points[i].value)||points[i].value<0||points[i].value>16||(i&&points[i-1].tick>=points[i].tick)) return KN_INVALID_ARGUMENT;
+    try {if(!count) timeline->curves.erase(index);else timeline->curves[index]=std::vector<kn_parameter_point>(points,points+count);return KN_OK;}
+    catch(const std::bad_alloc&) {return KN_OUT_OF_MEMORY;}catch(...) {return KN_INTERNAL_ERROR;}
+}
 int32_t KN_CALL kn_parameter_at(const kn_parameter_point* points, uint32_t count, int64_t tick, double fallback, double* output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;
     *output = 0;
     if ((!points && count) || tick < 0 || !std::isfinite(fallback)) return KN_INVALID_ARGUMENT;
     for (uint32_t i=0; i<count; ++i)
         if (points[i].tick < 0 || !std::isfinite(points[i].value) || (i && points[i-1].tick >= points[i].tick)) return KN_INVALID_ARGUMENT;
-    if (!count) { *output=fallback; return KN_OK; }
-    if (tick <= points[0].tick) { *output=points[0].value; return KN_OK; }
-    for (uint32_t i=1; i<count; ++i) if (tick < points[i].tick) {
-        const auto& a=points[i-1]; const auto& b=points[i];
-        const double fraction=static_cast<double>(tick-a.tick)/static_cast<double>(b.tick-a.tick);
-        *output=a.value*(1-fraction)+b.value*fraction;
-        return std::isfinite(*output) ? KN_OK : KN_OVERFLOW;
-    }
-    *output=points[count-1].value; return KN_OK;
+    *output=parameter_value(points,count,tick,fallback);
+    return std::isfinite(*output) ? KN_OK : KN_OVERFLOW;
 }
 int32_t KN_CALL kn_timeline_create(int64_t duration, const kn_eval_item* items, uint32_t count, kn_timeline** output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;
@@ -62,10 +83,32 @@ int32_t KN_CALL kn_timeline_evaluate(const kn_timeline* timeline, int64_t tick, 
         } else if (tick < c.start || tick-c.start >= c.duration) continue;
         const auto local=start-c.start;
         kn_eval_result value{c.index,c.kind,start,c.source+local,length,c.appearance,c.gain};
-        // Constant today; the same explicit clip-local boundary accepts future curves.
-        kn_parameter_at(nullptr,0,local,c.gain,&value.gain);
+        value.gain=gain_at(timeline,c,local);
         kn_parameter_at(nullptr,0,local,c.appearance.opacity,&value.appearance.opacity);
         output[(*count)++]=value;
+    }
+    return KN_OK;
+}
+int32_t KN_CALL kn_timeline_mix_audio(const kn_timeline* timeline,int32_t index,double* mix,uint32_t mix_count,
+    const float* source,uint32_t source_count,uint32_t offset,int64_t first_sample,int32_t rate,int32_t channels) noexcept {
+    if(!timeline||(!mix&&mix_count)||(!source&&source_count)||mix_count>96000||offset>mix_count||source_count>mix_count-offset||
+       first_sample<0||rate!=48000||channels!=2||mix_count%2||source_count%2||offset%2||first_sample>INT64_MAX-source_count/2) return KN_INVALID_ARGUMENT;
+    auto item=std::find_if(timeline->items.begin(),timeline->items.end(),[&](const auto& v){return v.index==index;});
+    if(item==timeline->items.end()||item->kind!=1) return KN_INVALID_ARGUMENT;
+    for(uint32_t i=0;i<source_count;++i) if(!std::isfinite(source[i])) return KN_INVALID_MEDIA;
+    if(source_count) {
+        int64_t first=0,last=0;
+        static_assert(KN_TICKS_PER_SECOND%48000==0);
+        constexpr auto step=KN_TICKS_PER_SECOND/48000;
+        if(first_sample+source_count/2-1>INT64_MAX/step) return KN_OVERFLOW;
+        first=first_sample*step;last=(first_sample+source_count/2-1)*step;
+        if(first<item->start||last-item->start>=item->duration) return KN_INVALID_ARGUMENT;
+    }
+    if(!item->enabled||!item->track_enabled||item->muted||item->gain==0) return KN_OK;
+    for(uint32_t frame=0;frame<source_count/2;++frame) {
+        const int64_t tick=(first_sample+frame)*(KN_TICKS_PER_SECOND/48000);
+        const auto gain=gain_at(timeline,*item,tick-item->start);
+        mix[offset+2*frame]+=source[2*frame]*gain;mix[offset+2*frame+1]+=source[2*frame+1]*gain;
     }
     return KN_OK;
 }

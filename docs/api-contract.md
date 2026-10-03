@@ -44,6 +44,15 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 - `SplitClip(sequenceId, clipId, splitTicks, rightClipId)` — strict interior split.
 - `DeleteClip(sequenceId, clipId)`.
 - `SetClipProperties(sequenceId, clipId, enabled, appearance, audio)`.
+- `AddClipVolumePoint(sequenceId, clipId, point)` and
+  `UpdateClipVolumePoint(sequenceId, clipId, point)` use
+  `VolumePoint(id, tick, multiplier)`; `DeleteClipVolumePoint(sequenceId, clipId, pointId)`
+  removes one point. IDs are clip-scoped, tick is signed clip-relative Int64 and
+  multiplier is finite [0,16]. Points interpolate linearly and hold outside endpoints;
+  no points means 1. Constant clip gain multiplies the envelope.
+- Constant `SetClipProperties` edits preserve existing points. Trim shifts points by
+  old-source-in minus new-source-in; split copies/offsets them without dropping keys.
+  Native validates ordered unique times and up to 4096 points per clip.
 - `SetTrackEnabled(sequenceId, trackId, enabled)`.
 - `ReorderTrack(sequenceId, trackId, newIndex)` — zero-based bottom-to-top index.
 - `AddCaption(sequenceId, trackId, caption)` / `DeleteCaption(sequenceId, captionId)`.
@@ -118,7 +127,7 @@ MCP tools: `get_project`, `edit_batch`, `undo`, `redo`, `clapper_resolve`,
 validation; Edit additionally exposes batch and shared history.
 Tool schemas describe arguments; batch command fields match camelCase C# constructor
 names. Int64 values are decimal strings, IDs are UUIDs, enums are exact names.
-`get_project` includes the v2 envelope and transient visible sequence/clip/playhead.
+`get_project` includes the v2/v3 envelope and transient visible sequence/clip/playhead.
 
 Example command within `edit_batch.commands`:
 
@@ -177,7 +186,7 @@ with runtime/document identity and decimal-string `expectedRevision`.
 ```
 
 `undo`/`redo` use empty `input` and the same required guard. `get_project` keeps its
-v2 Project envelope, string revision, current UI context and shared history flags.
+v2/v3 Project envelope, string revision, current UI context and shared history flags.
 Domain results retain `success`, string revision and structured diagnostics.
 Clients must check domain `success` as well as MCP `isError`: Core's `isError`
 represents boundary failures, whose structured/text content contains

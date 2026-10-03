@@ -85,6 +85,15 @@
   <system:String x:Key="Shell.Appearance">Compositing</system:String>
   <system:String x:Key="Shell.Transform">Transform</system:String>
   <system:String x:Key="Shell.Audio">Audio</system:String>
+  <system:String x:Key="Shell.MonitoringVolume">Monitor volume</system:String>
+  <system:String x:Key="Shell.MonitoringHelp">Listening volume only. Exported audio is unchanged.</system:String>
+  <system:String x:Key="Shell.VolumePoints">Volume points</system:String>
+  <system:String x:Key="Shell.VolumePointsHelp">Volume changes smoothly between points. Multipliers apply to clip gain.</system:String>
+  <system:String x:Key="Shell.AddVolumePoint">Add at playhead</system:String>
+  <system:String x:Key="Shell.VolumeTime">Seconds from start</system:String>
+  <system:String x:Key="Shell.VolumeMultiplier">Volume multiplier</system:String>
+  <system:String x:Key="Shell.FadeIn">Fade in</system:String>
+  <system:String x:Key="Shell.FadeOut">Fade out</system:String>
   <system:String x:Key="Shell.Opacity">Opacity</system:String>
   <system:String x:Key="Shell.PositionX">Position X (px)</system:String>
   <system:String x:Key="Shell.PositionY">Position Y (px)</system:String>

@@ -252,7 +252,11 @@ For the native engine, also install CMake supporting your Visual Studio version 
 Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
 native runtime and copies it into app/test/publish outputs. Linux headless builds
 require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
-One native EditorSession owns commands, validation, history and v1/v2 persistence.
+One native EditorSession owns commands, validation, history and v1/v2/v3 persistence.
+The grouped Inspector pairs compact sliders with precise numeric inputs. Audio clips
+support editable volume points and fade-in/out with shared preview/export evaluation.
+The transport monitoring slider is an editor preference and leaves exported audio
+unchanged. Projects without volume points retain v2 format; curves use v3.
 C# exposes immutable queries and desktop/MCP adapters; canonical time and shared
 preview/export evaluation/composition are native. See [ADR 0010](docs/decisions/0010-native-editing-authority.md)
 and the [final audit](docs/reviews/issue-36-native-audit.md).

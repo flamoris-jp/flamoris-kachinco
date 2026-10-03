@@ -45,8 +45,11 @@ public sealed record ClipAppearance(Transform2D Transform, double Opacity, Blend
 }
 public sealed record AudioProperties(double Gain, bool Muted)
 {
+    public ImmutableArray<VolumePoint> VolumePoints { get; init; } = [];
     public static AudioProperties Default => new(1, false);
 }
+// Point identity is clip-scoped; signed ticks are relative to the current clip start.
+public sealed record VolumePoint(Guid Id, long Tick, double Multiplier);
 
 public enum DiagnosticSeverity { Error, Warning, Info }
 public sealed record Diagnostic(string Code, DiagnosticSeverity Severity, string Message,
