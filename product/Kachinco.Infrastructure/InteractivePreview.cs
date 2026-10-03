@@ -12,6 +12,8 @@ public interface IPreviewAudioOutput : IDisposable
     void Enqueue(RenderedAudioBlock block);
     void Play();
     void Pause();
+    // Device/session volume only: project PCM and the playback clock stay unchanged.
+    void SetMonitoringGain(double gain);
 }
 
 public enum InteractivePreviewState { Stopped, Scrubbing, Buffering, Playing, Paused, Failed }
@@ -52,9 +54,21 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     private readonly Kachinco.Native.NativePlayback native = new();
     private Kachinco.Native.NativePlaybackTicket ticket;
     private IPreviewAudioOutput? output;
+    public double MonitoringGain { get; private set; } = 1;
     private bool playSession;
     private Guid? playbackSessionId;
     private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After);
+
+    public void SetMonitoringGain(double gain)
+    {
+        if (!double.IsFinite(gain) || gain < 0 || gain > 1) throw new ArgumentOutOfRangeException(nameof(gain));
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            output?.SetMonitoringGain(gain);
+            MonitoringGain = gain;
+        }
+    }
 
     public void SetContext(PreviewContext? value)
     {
@@ -211,7 +225,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             ct.ThrowIfCancellationRequested();
             playbackSessionId = sessionId;
             logger?.Info("preview.playback", "Preview playback session started", Properties(request.Tick));
-            device = outputFactory(); output = device; playSession = true;
+            device = outputFactory();
+            try { device.SetMonitoringGain(MonitoringGain); }
+            catch { device.Dispose(); throw; }
+            output = device; playSession = true;
             playbackTicket = ticket;
         }
         using var deviceLifetime = device;

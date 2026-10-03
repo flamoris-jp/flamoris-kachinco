@@ -103,6 +103,7 @@ internal static class PreviewBench
         public long QueuedFrames => submitted - PlayedFrames;
         public void Advance(long count) { if (playing) PlayedFrames = Math.Min(submitted, PlayedFrames + count); }
         public void Enqueue(RenderedAudioBlock block) => submitted += block.Samples.Length / 2;
+        public void SetMonitoringGain(double gain) { }
         public void Play() => playing = true; public void Pause() => playing = false; public void Dispose() => playing = false;
     }
     private sealed class Pump : SynchronizationContext, IDisposable
