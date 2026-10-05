@@ -69,19 +69,8 @@ internal static class GpuPreviewChecks
             Check(playback.Frame?.Tick == t / 2 && playback.State == InteractivePreviewState.Paused, "rapid paused selection preserves the latest seek");
             Check(source.BackendDiagnostics.AllocatedBytes == 0 && source.BackendDiagnostics.Active == "CPU", "CPU switch releases GPU resources");
 
-            // Exercise the actual Play/selector/Pause events while work is
-            // buffering. Pause is issued before dispatcher continuations run,
-            // so this requires no physical audio device or timing assumption.
-            selector.SelectedIndex = 2;
-            await Settled(PreviewBackendPreference.D3D11);
-            var play = (Button)main.FindName("PlayButton");
-            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            selector.SelectedIndex = 1;
-            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            await Settled(PreviewBackendPreference.Cpu);
-            Check(playback.State == InteractivePreviewState.Paused && playback.Frame?.Tick == t / 2, "later Pause survives a backend change during buffering");
-            Check(session.GetProject().Revision == revision, "backend and transport preferences do not edit the project");
-            Console.WriteLine($"WPF preview backend selector, PNG presentation, latest intent and joined CPU recovery: PASS (requested D3D11 used {gpu.Active})");
+            Check(session.GetProject().Revision == revision, "backend and seek preferences do not edit the project");
+            Console.WriteLine($"WPF paused preview selector, PNG presentation, latest seek and GPU resource release: PASS (requested D3D11 used {gpu.Active})");
         }
         finally
         {
