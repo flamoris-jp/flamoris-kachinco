@@ -1,4 +1,30 @@
-# Delivery progress: still images and AI-authored effects
+# Delivery progress
+
+## GPU preview and effect pipeline — Issue #67
+
+Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
+
+| Work | Status | Evidence |
+| --- | --- | --- |
+| Current authority and design audit | Complete | AGENTS, Issue #67, native composition, FFmpeg process and WPF presentation inspected; ADR 0016 |
+| Native D3D11 backend and bounded resources | In progress | Hardware device, transform/opacity/normal/screen compute path, explicit CPU fallback |
+| D3D11VA forward decoding | In progress | Strict hardware download with software forward retry; existing time/seek authority |
+| Preview integration and backend diagnostics | In progress | Same immutable CPU frame contract; explicit transfer accounting |
+| Independent review and fixes | In progress | Separate read-only reviewer checks parity, lifetime, codec formats and total memory |
+| Automated verification and merge | Pending | Native/headless and Windows runtime/package CI are merge gates |
+| Mango 6 GB performance acceptance | Pending physical verification | No measured FPS/utilization/VRAM claims; Issue #67 remains open for acceptance |
+
+- 2026-10-05: verified GitHub main through the connected integration. Preserved all
+  tracked source bytes against its Git tree; no unauthenticated clone required.
+- Design: existing executable FFmpeg and WPF array contracts require hardware
+  decode download plus one compositor output readback. Record transfers explicitly;
+  do not describe this slice as GPU-resident or zero-copy.
+- Native compositor pool has a 256 MiB payload ceiling. Separate bounded FFmpeg
+  decoder surfaces and driver overhead require physical total-memory measurement.
+- Work proceeds in focused design/foundation/decode/compositor/integration/review
+  commits. GPU initialization and shader failures must preserve CPU recovery.
+
+## Completed: still images and AI-authored effects
 
 Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
 
