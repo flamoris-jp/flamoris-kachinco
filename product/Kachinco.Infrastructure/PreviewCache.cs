@@ -108,15 +108,62 @@ public interface IInteractivePreviewSource
 {
     ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token);
     ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token);
+    ValueTask ResetAsync(CancellationToken token = default) => ValueTask.CompletedTask;
+    ValueTask SelectBackendAsync(PreviewBackendPreference preference, CancellationToken token = default) => ValueTask.CompletedTask;
 }
 
-public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null,
-    IMediaDecoder? randomDecoder = null, IMediaDecoder? forwardVideo = null, IMediaDecoder? forwardAudio = null,
-    FlamorisLogger? logger = null) : IInteractivePreviewSource, IDisposable
+public sealed class InteractivePreviewSource : IInteractivePreviewSource, IDisposable
 {
-    private readonly IMediaDecoder random = randomDecoder ?? new FfmpegMediaDecoder();
-    private readonly IMediaDecoder video = forwardVideo ?? new FfmpegForwardDecoder(logger: logger, role: "video");
-    private readonly IMediaDecoder audio = forwardAudio ?? new FfmpegForwardDecoder(logger: logger, role: "audio");
+    private readonly ICaptionRasterizer? captions;
+    private readonly FlamorisLogger? logger;
+    private readonly IMediaDecoder random;
+    private IMediaDecoder video, audio;
+    private readonly bool ownsVideo, ownsAudio;
+    private readonly SemaphoreSlim videoGate = new(1, 1);
+    private readonly PreviewRenderBackend backend;
+    private bool disposed;
+    public InteractivePreviewSource(ICaptionRasterizer? captions = null,
+        IMediaDecoder? randomDecoder = null, IMediaDecoder? forwardVideo = null, IMediaDecoder? forwardAudio = null,
+        FlamorisLogger? logger = null, PreviewBackendPreference backendPreference = PreviewBackendPreference.Cpu,
+        PreviewCompositorFactory? compositorFactory = null)
+    {
+        this.captions = captions; this.logger = logger;
+        random = randomDecoder ?? new FfmpegMediaDecoder();
+        ownsVideo = forwardVideo is null; ownsAudio = forwardAudio is null;
+        backend = new(backendPreference, compositorFactory);
+        video = forwardVideo ?? CreateForwardVideo();
+        audio = forwardAudio ?? new FfmpegForwardDecoder(logger: logger, role: "audio");
+    }
+    private FfmpegForwardDecoder CreateForwardVideo() => new(logger: logger, role: "video",
+        decodePreference: backend.Diagnostics.Requested == PreviewBackendPreference.Cpu ? PreviewDecodePreference.Software : PreviewDecodePreference.D3D11);
+    public PreviewBackendDiagnostics BackendDiagnostics => backend.Diagnostics;
+    public PreviewDecodeDiagnostics? DecodeDiagnostics => (video as FfmpegForwardDecoder)?.DecodeDiagnostics;
+    public async ValueTask SelectBackendAsync(PreviewBackendPreference preference, CancellationToken token = default)
+    {
+        await videoGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            await backend.SelectAsync(preference, token).ConfigureAwait(false);
+            if (ownsVideo) { (video as IDisposable)?.Dispose(); video = CreateForwardVideo(); }
+            Frames.Clear();
+        }
+        finally { videoGate.Release(); }
+    }
+    public ValueTask ResetAsync(CancellationToken token = default) => new(Task.Run(async () =>
+    {
+        await videoGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            await backend.ResetAsync(token).ConfigureAwait(false);
+            // Preserve sticky decoder downgrade across seeks; explicit backend
+            // selection recreates the decoder when the user wants to retry hardware.
+            if (ownsVideo && video is FfmpegForwardDecoder videoDecoder) videoDecoder.ResetStreams();
+            if (ownsAudio && audio is FfmpegForwardDecoder audioDecoder) audioDecoder.ResetStreams();
+        }
+        finally { videoGate.Release(); }
+    }, token));
     private readonly object diagnosticsGate = new();
     private CancellationToken forwardOwner;
     private ImmutableArray<Guid> forwardClipIds = [];
@@ -128,37 +175,45 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
         new(Task.Run(() => FrameCoreAsync(context, tick, quality, forward, token), token));
     private async Task<Result<RenderedVideoFrame>> FrameCoreAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token)
     {
-        if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
-        token.ThrowIfCancellationRequested();
-        long started = Stopwatch.GetTimestamp();
-        string key = context.VideoKey(tick, quality);
-        var frame = context.Evaluator.Evaluate(tick);
-        if (!frame.Success) return new(null, frame.Diagnostics);
-        bool cacheHit = Frames.TryGet(key, out var cached);
-        LogContributors(frame.Value!, forward, token, cacheHit);
-        if (cacheHit) { RecordVideo(); return Result<RenderedVideoFrame>.Ok(cached); }
-        var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions, logger);
-        var result = await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token);
-        token.ThrowIfCancellationRequested();
-        if (key != context.VideoKey(tick, quality)) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
-        if (result.Success) Frames.Put(key, result.Value!, result.Value!.Rgba8.Length);
-        else logger?.Error("preview.decoder", "Preview video request returned diagnostics", properties: FrameProperties(frame.Value!, quality,
-            string.Join(",", result.Diagnostics.Select(x => x.Code))));
-        RecordVideo();
-        return result;
-
-        void RecordVideo()
+        await videoGate.WaitAsync(token).ConfigureAwait(false);
+        try
         {
-            VideoPerformance.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds, cacheHit);
-            if (logger is not null && VideoPerformance.ShouldReport())
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (quality is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(quality));
+            token.ThrowIfCancellationRequested();
+            long started = Stopwatch.GetTimestamp();
+            string key = context.VideoKey(tick, quality);
+            var frame = context.Evaluator.Evaluate(tick);
+            if (!frame.Success) return new(null, frame.Diagnostics);
+            bool cacheHit = Frames.TryGet(key, out var cached);
+            LogContributors(frame.Value!, forward, token, cacheHit);
+            if (cacheHit) { RecordVideo(); return Result<RenderedVideoFrame>.Ok(cached); }
+            var renderer = new SharedFrameRenderer(forward ? video : random, context.ProjectPath, captions, logger, backend);
+            var result = await renderer.RenderPreviewAsync(context.Project, frame.Value!, quality, token);
+            token.ThrowIfCancellationRequested();
+            if (key != context.VideoKey(tick, quality)) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("SOURCE_CHANGED", "Media changed while decoding. Retry preview."));
+            if (result.Success) Frames.Put(key, result.Value!, result.Value!.Rgba8.Length);
+            else logger?.Error("preview.decoder", "Preview video request returned diagnostics", properties: FrameProperties(frame.Value!, quality,
+                string.Join(",", result.Diagnostics.Select(x => x.Code))));
+            RecordVideo();
+            return result;
+
+            void RecordVideo()
             {
-                var properties = FrameProperties(frame.Value!, quality);
-                properties["videoPreparation"] = VideoPerformance.Statistics;
-                properties["cacheBytes"] = Frames.Statistics.Bytes;
-                properties["forward"] = forward;
-                logger.Info("preview.performance", "Preview video preparation metrics", properties);
+                VideoPerformance.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds, cacheHit);
+                if (logger is not null && VideoPerformance.ShouldReport())
+                {
+                    var properties = FrameProperties(frame.Value!, quality);
+                    properties["videoPreparation"] = VideoPerformance.Statistics;
+                    properties["cacheBytes"] = Frames.Statistics.Bytes;
+                    properties["forward"] = forward;
+                    properties["renderBackend"] = BackendDiagnostics;
+                    properties["decodeBackend"] = DecodeDiagnostics;
+                    logger.Info("preview.performance", "Preview video preparation metrics", properties);
+                }
             }
         }
+        finally { videoGate.Release(); }
     }
     public ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token) =>
         new(Task.Run(() => AudioCoreAsync(context, firstSample, count, token), token));
@@ -228,7 +283,15 @@ public sealed class InteractivePreviewSource(ICaptionRasterizer? captions = null
     }
     public void Dispose()
     {
-        Frames.Dispose(); Audio.Dispose();
-        (random as IDisposable)?.Dispose(); (video as IDisposable)?.Dispose(); (audio as IDisposable)?.Dispose();
+        // Shell joins InteractivePreview.Completion before disposing this source.
+        videoGate.Wait();
+        try
+        {
+            if (disposed) return;
+            disposed = true;
+            backend.Dispose(); Frames.Dispose(); Audio.Dispose();
+            (random as IDisposable)?.Dispose(); (video as IDisposable)?.Dispose(); (audio as IDisposable)?.Dispose();
+        }
+        finally { videoGate.Release(); }
     }
 }

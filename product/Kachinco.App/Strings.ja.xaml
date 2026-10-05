@@ -106,5 +106,7 @@
   <system:String x:Key="Shell.PropertyValue">値</system:String>
   <system:String x:Key="Shell.NewPoint">新規ポイント</system:String>
   <system:String x:Key="Shell.DeletePoint">ポイント削除</system:String>
+  <system:String x:Key="Shell.PreviewBackend">プレビュー描画方式。CPUを選ぶとGPU障害から復帰できます。書き出しはCPU描画を使用します。</system:String>
+  <system:String x:Key="Shell.PreviewBackendAuto">自動</system:String>
 </ResourceDictionary>
 

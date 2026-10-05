@@ -237,6 +237,67 @@ public sealed class InteractivePreviewTests
     }
 
     [TestMethod]
+    public void BackendChangesJoinOldWorkPreserveRapidSwitchPlayAndRespectNewerScrub()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var snapshot = f.Session.GetProject();
+        var devices = new List<Device>();
+        var source = new Source { HoldFromTick = TimelineTime.FrameToTicks(2, new(30, 1)) };
+        using var p = new InteractivePreview(source, () => { var device = new Device(); devices.Add(device); return device; });
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted); p.Play();
+        pump.Until(() => source.Pending is not null);
+        var oldFrame = source.Pending!;
+        p.SetBackendPreference(PreviewBackendPreference.D3D11);
+        p.SetBackendPreference(PreviewBackendPreference.Auto);
+        p.SetBackendPreference(PreviewBackendPreference.Cpu);
+        Assert.IsTrue(source.Token.IsCancellationRequested); Assert.IsFalse(devices[0].Running);
+        Assert.AreEqual(0, source.Backends.Count, "Backend selection must wait for the old producer to join.");
+        source.HoldFromTick = long.MaxValue; oldFrame.SetResult(Frame(0));
+        pump.Until(() => devices.Count == 2 && p.State == InteractivePreviewState.Playing);
+        CollectionAssert.AreEqual(new[] { PreviewBackendPreference.Cpu }, source.Backends);
+        Assert.IsTrue(devices[0].Disposed);
+        p.SetBackendPreference(PreviewBackendPreference.D3D11);
+        p.Scrub(6 * Fixture.T);
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.AreEqual(InteractivePreviewState.Paused, p.State); Assert.AreEqual(6 * Fixture.T, p.Frame!.Tick);
+        Assert.AreEqual(PreviewBackendPreference.D3D11, source.Backends.Last());
+        Assert.AreEqual(snapshot, f.Session.GetProject());
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
+    public void SlowBackendSelectionCannotOverrideNewerCpuChoiceAndScrub()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source { HoldBackend = true };
+        using var p = new InteractivePreview(source, () => new Device());
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        p.SetBackendPreference(PreviewBackendPreference.D3D11);
+        Assert.IsNotNull(source.PendingBackend);
+        p.SetBackendPreference(PreviewBackendPreference.Cpu); p.Scrub(5 * Fixture.T);
+        Assert.IsFalse(p.Completion.IsCompleted);
+        source.HoldBackend = false; source.PendingBackend.SetResult();
+        pump.Until(() => p.Completion.IsCompleted);
+        Assert.AreEqual(PreviewBackendPreference.Cpu, source.Backends.Last());
+        Assert.AreEqual(InteractivePreviewState.Paused, p.State); Assert.AreEqual(5 * Fixture.T, p.Frame!.Tick);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
+    public void NewBackendChoiceDuringSlowSelectionPreservesRequestedPlayBeforeDeviceOpens()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source { HoldBackend = true };
+        var devices = new List<Device>();
+        using var p = new InteractivePreview(source, () => { var device = new Device(); devices.Add(device); return device; });
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        p.SetBackendPreference(PreviewBackendPreference.D3D11); p.Play();
+        Assert.IsNotNull(source.PendingBackend); Assert.AreEqual(0, devices.Count);
+        p.SetBackendPreference(PreviewBackendPreference.Cpu);
+        source.HoldBackend = false; source.PendingBackend!.SetResult();
+        pump.Until(() => p.State == InteractivePreviewState.Playing);
+        Assert.AreEqual(PreviewBackendPreference.Cpu, source.Backends.Last()); Assert.AreEqual(1, devices.Count);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
     public void ForwardProducerFailureClearsPresentationAndJoinsAudio()
     {
         using var pump = new Pump(); var f = new Fixture(); var device = new Device();
@@ -293,8 +354,10 @@ public sealed class InteractivePreviewTests
     private sealed class Source : IInteractivePreviewSource
     {
         public readonly List<long> Video = [], Audio = [];
+        public readonly List<PreviewBackendPreference> Backends = [];
         public readonly List<(long Tick, Guid ClipId, Guid MediaAssetId, long SourceTick)> Contributors = [];
-        public bool Hold, Fail, AudioFail, AudioHold;
+        public bool Hold, Fail, AudioFail, AudioHold, HoldBackend;
+        public TaskCompletionSource? PendingBackend;
         public long HoldFromTick = long.MaxValue, FailFromTick = long.MaxValue;
         public PreviewQuality LastQuality;
         public TaskCompletionSource<Result<RenderedAudioBlock>>? PendingAudio; public Result<RenderedAudioBlock>? HeldAudio; public CancellationToken Token; public TaskCompletionSource<Result<RenderedVideoFrame>>? Pending;
@@ -312,6 +375,11 @@ public sealed class InteractivePreviewTests
             if (AudioHold) { PendingAudio = new(); HeldAudio = Result<RenderedAudioBlock>.Ok(new(first, 48000, 2, new float[count * 2].ToImmutableArray())); return new(PendingAudio.Task); }
             return ValueTask.FromResult(AudioFail ? Result<RenderedAudioBlock>.Fail(Diagnostic.Error("AUDIO", "PCM failed")) :
                 Result<RenderedAudioBlock>.Ok(new(first, 48000, 2, new float[count * 2].ToImmutableArray())));
+        }
+        public async ValueTask SelectBackendAsync(PreviewBackendPreference preference, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested(); Backends.Add(preference);
+            if (HoldBackend) { PendingBackend = new(); await PendingBackend.Task; } // Deliberately join an uncancellable host callback.
         }
     }
     private sealed class Device : IPreviewAudioOutput

@@ -373,6 +373,29 @@ FLAMORISのキャラクター、キャラクターデザイン、イラスト、
 The shared MCP UI migration and package release order are documented in [shared MCP connection](docs/shared-mcp-connection.md).
 
 
+## GPU preview backend
+
+Windows preview offers **Auto / CPU / D3D11**. Auto keeps the native CPU identity
+copy fast path and uses GPU composition for layered/transform work when supported.
+The native D3D11 backend implements the same transform, opacity and Normal/Screen
+primitives; export keeps the native CPU reference. Device, format or allocation
+failure falls back to CPU with a diagnostic.
+
+Windowsのプレビューは **Auto / CPU / D3D11** を選択できます。単純な表示ではCPUの
+コピー処理を活かし、対応GPUでは変形・重ね合わせをGPUで処理します。GPUが使えない
+場合はCPUへ戻ります。書き出しとタイムライン・音声同期の基準は共通です。
+
+FFmpeg D3D11VA supports the initial 8-bit NV12 forward-decode path; unsupported
+formats, including 10-bit surfaces, retain software forward decoding. The current
+FFmpeg process and WPF array boundary requires decode download and one composition
+readback per frame. This implementation does not provide zero-copy preview.
+Compositor texture/constant payload is bounded to 256 MiB; at most two hardware
+decoder processes retain separate codec surfaces. Total VRAM and speedup on Mango
+6 GB remain physical acceptance, not a measured claim.
+
+See [ADR 0016](docs/decisions/0016-d3d11-preview.md),
+[measurement and acceptance steps](staging/windows-issue67.md), and [PROGRESS.md](PROGRESS.md).
+
 ## Still-image motion and reusable AI-authored effects
 
 Import PNG/JPEG/WebP into the Media Bin and place it on a video track. The default

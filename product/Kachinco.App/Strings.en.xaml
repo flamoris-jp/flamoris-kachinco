@@ -106,5 +106,7 @@
   <system:String x:Key="Shell.PropertyValue">Value</system:String>
   <system:String x:Key="Shell.NewPoint">New point</system:String>
   <system:String x:Key="Shell.DeletePoint">Delete point</system:String>
+  <system:String x:Key="Shell.PreviewBackend">Preview rendering backend. Select CPU to recover from GPU failures. Export uses CPU rendering.</system:String>
+  <system:String x:Key="Shell.PreviewBackendAuto">Auto</system:String>
 </ResourceDictionary>
 

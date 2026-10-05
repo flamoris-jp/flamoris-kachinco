@@ -4,6 +4,8 @@ using Kachinco.Core;
 using Kachinco.Infrastructure;
 
 if (args is ["--pixels", var pixelOutput]) { PreviewPixelBench.Run(pixelOutput); return; }
+if (args is ["--gpu-preview", var gpuDirectory, var gpuOutput])
+{ await GpuPreviewBench.Run(gpuDirectory, gpuOutput); return; }
 
 // Same driver can be copied into the pre-cutover checkout. Generated public fixtures only.
 if (args.Length == 4 && args[0] == "--preview")

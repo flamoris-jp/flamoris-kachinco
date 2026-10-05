@@ -42,6 +42,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public long DroppedVideoFrames { get; private set; }
     public long Underruns { get; private set; }
     public PreviewQuality Quality { get; private set; } = PreviewQuality.Half;
+    public PreviewBackendPreference BackendPreference { get; private set; } = source is InteractivePreviewSource owned ? owned.BackendDiagnostics.Requested : PreviewBackendPreference.Cpu;
     public bool HasPendingRequest { get { lock (gate) return pending is not null; } }
     public Task Completion { get { lock (gate) return runner ?? Task.CompletedTask; } }
     private readonly object gate = new();
@@ -57,7 +58,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public double MonitoringGain { get; private set; } = 1;
     private bool playSession;
     private Guid? playbackSessionId;
-    private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After);
+    private PreviewBackendPreference? pendingBackendPreference;
+    private long backendPreferenceVersion;
+    private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After,
+        PreviewBackendPreference? BackendPreference, long BackendVersion);
 
     public void SetMonitoringGain(double gain)
     {
@@ -82,8 +86,13 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 tick < value.Sequence.DurationTicks && old.WindowKey(tick, SaturatingEnd(tick)) == value.WindowKey(tick, SaturatingEnd(tick)))
             { context = value; return; }
             context = value;
-            if (value is null) { Cancel(); Frame = null; Presentation = null; PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
-            bool resume = (playSession || pending?.Play == true) && wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
+            if (value is null)
+            {
+                Cancel(); Frame = null; Presentation = null; PositionTicks = 0; SetState(InteractivePreviewState.Stopped);
+                if (!running) { running = true; runner = RunMailboxAsync(); }
+                return;
+            }
+            bool resume = wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
             long next = old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id ? Math.Min(tick, value.Sequence.DurationTicks - 1) : 0;
             RequestFrame(next, resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
@@ -124,7 +133,18 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             if (value is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(value));
             if (Quality == value) return;
-            Quality = value; bool resume = (playSession || pending?.Play == true) && wantPlay;
+            Quality = value; bool resume = wantPlay;
+            RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
+        }
+    }
+    public void SetBackendPreference(PreviewBackendPreference value)
+    {
+        if (!Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        lock (gate)
+        {
+            if (disposed || BackendPreference == value && pendingBackendPreference is null) return;
+            BackendPreference = value; pendingBackendPreference = value; backendPreferenceVersion++;
+            bool resume = wantPlay;
             RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
     }
@@ -153,7 +173,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             generation = ticket.Generation; PositionTicks = ticket.Position;
             long renderTick = ticket.RenderTick;
             wantPlay = play;
-            pending = new(generation, renderTick, play, after);
+            pending = new(generation, renderTick, play, after, pendingBackendPreference, backendPreferenceVersion);
             logger?.Debug("preview.playback", play ? "Preview playback requested" : "Preview frame requested", Properties(renderTick));
             SetState(play ? InteractivePreviewState.Buffering : InteractivePreviewState.Scrubbing);
             if (!running) { running = true; runner = RunMailboxAsync(); }
@@ -185,6 +205,15 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 }
                 try
                 {
+                    // Prior request/playback producers have joined before releasing GPU
+                    // textures and forward streams for this seek or changed context.
+                    await source.ResetAsync(cancellation.Token);
+                    if (request.BackendPreference is { } preference)
+                    {
+                        await source.SelectBackendAsync(preference, cancellation.Token);
+                        lock (gate)
+                            if (backendPreferenceVersion == request.BackendVersion) pendingBackendPreference = null;
+                    }
                     if (request.Play) await RunPlaybackAsync(request, cancellation.Token);
                     else
                     {
@@ -204,6 +233,13 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         }
         finally
         {
+            bool cleanup;
+            lock (gate) cleanup = disposed || context is null;
+            if (cleanup)
+            {
+                try { await source.ResetAsync(); }
+                catch (Exception e) { logger?.Error("preview.backend", "Preview resource cleanup failed", e); }
+            }
             lock (gate)
             {
                 running = false;
@@ -397,7 +433,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             properties["conversion"] = ConversionPerformance.Statistics;
             properties["presentation"] = PresentationPerformance.Statistics;
             if (source is InteractivePreviewSource measured)
-            { properties["videoPreparation"] = measured.VideoPerformance.Statistics; properties["audioPreparation"] = measured.AudioPerformance.Statistics; }
+            {
+                properties["videoPreparation"] = measured.VideoPerformance.Statistics; properties["audioPreparation"] = measured.AudioPerformance.Statistics;
+                properties["renderBackend"] = measured.BackendDiagnostics; properties["decodeBackend"] = measured.DecodeDiagnostics;
+            }
             logger.Info("preview.performance", force ? "Preview performance session summary" : "Preview playback performance", properties);
         }
     }
@@ -425,7 +464,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             if (disposed) return;
             disposed = true; Cancel(); Frame = null; Presentation = null;
-            if (!running) native.Dispose();
+            if (!running) { running = true; runner = RunMailboxAsync(); }
         }
     }
 }

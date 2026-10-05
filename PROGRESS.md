@@ -1,4 +1,59 @@
-# Delivery progress: still images and AI-authored effects
+# Delivery progress
+
+## GPU preview and effect pipeline — Issue #67
+
+Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
+
+| Work | Status | Evidence |
+| --- | --- | --- |
+| Current authority and design audit | Complete | AGENTS, Issue #67, native composition, FFmpeg process and WPF presentation inspected; ADR 0016 |
+| Native D3D11 backend and bounded resources | Implemented; Windows parity fix in progress | Native WARP shader executes; byte parity gate found a mismatch and blocks merge |
+| D3D11VA forward decoding | Complete | NV12 hardware download, two hardware processes, sticky software forward retry |
+| Preview integration and backend diagnostics | Complete | Same immutable frame/clock authority, Auto/CPU/D3D11, joined latest-wins switching |
+| Independent review and fixes | In progress | Separate read-only reviewer checks parity, lifetime, codec formats and total memory |
+| Automated verification and merge | In progress | CI #132 Linux: 270/270 and ASan/UBSan 5/5 pass; Windows native parity failure under repair |
+| Mango 6 GB performance acceptance | Pending physical verification | No measured FPS/utilization/VRAM claims; Issue #67 remains open for acceptance |
+
+- 2026-10-05: verified GitHub main through the connected integration. Preserved all
+  tracked source bytes against its Git tree; no unauthenticated clone required.
+- Design: existing executable FFmpeg and WPF array contracts require hardware
+  decode download plus one compositor output readback. Record transfers explicitly;
+  do not describe this slice as GPU-resident or zero-copy.
+- Native compositor pool has a 256 MiB payload ceiling. Separate bounded FFmpeg
+  decoder surfaces and driver overhead require physical total-memory measurement.
+- Work proceeds in focused design/foundation/decode/compositor/integration/review
+  commits. GPU initialization and shader failures must preserve CPU recovery.
+- Local verification: 268/268 managed tests pass (two existing named-pipe tests
+  require the CI host); native contracts 5/5; current WPF/smoke solution cross-build
+  has zero warnings/errors. Local ASan/UBSan 5/5 pass with leak detection disabled
+  because LeakSanitizer cannot inspect this traced host. Full CI Linux leak checks
+  and all 270 managed tests pass in Product run 37327415047.
+- Independent review fixed same-frame CPU recovery, canceled GPU completion before
+  pool reset, retained hardware failure state across seek, two-stream hardware
+  limits and rapid/slow backend selection races. Physical-audio assumptions were
+  removed from the new paused WPF selector smoke.
+- Windows CI caught a GPU/CPU pixel mismatch after successful real WARP shader
+  initialization. Preserve the byte-parity gate and improve sampling diagnostics
+  before rerunning; no merge while this regression exists.
+- CI #133 isolated the mismatch to partial-alpha Normal blending after a 90-degree
+  rotation: red/blue saturated while green matched. Opaque identity and earlier
+  transparent/Screen layers passed. Replaced the indexed/unrolled double-color
+  expression with explicit scalar RGB calls and a mode branch; keep double source
+  coordinates, CPU operation order and the one-byte quantization tolerance intact.
+  Windows execution must verify the fix before merge.
+- CI #134 kept Linux's full contracts green but the scalar rewrite still failed
+  Windows WARP parity: a partial-alpha Screen layer returned red 255 instead of
+  18, while green/blue matched. Shader compiler/disassembly diagnostics are the
+  next gate; no tolerance or source-sampling change is accepted as a workaround.
+- CI #135 confirmed the compiled 80-byte parameter layout and captured the actual
+  optimized DXBC. Its color arithmetic/dataflow follows the source, but WARP still
+  saturated red incorrectly. CI #136 replayed the identical failing layer with
+  optimization disabled: zero mismatched bytes, including the failing pixel.
+  This isolates an optimized execution problem; it does not prove which compiler
+  or driver stage is responsible. The next repair preserves optimized execution,
+  double arithmetic and tolerance while replacing byte conversion equivalently.
+
+## Completed: still images and AI-authored effects
 
 Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
 

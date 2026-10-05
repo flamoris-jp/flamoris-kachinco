@@ -10,7 +10,7 @@ public interface ICaptionRasterizer
 }
 
 public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPath = null, ICaptionRasterizer? captions = null,
-    FlamorisLogger? logger = null) : IFrameRenderer
+    FlamorisLogger? logger = null, PreviewRenderBackend? previewBackend = null) : IFrameRenderer
 {
     public ValueTask<Result<RenderedVideoFrame>> RenderPreviewAsync(Project project, EvaluatedFrame frame, PreviewQuality quality, CancellationToken token)
     {
@@ -23,11 +23,17 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
     }
     public async ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long frameIndex, CancellationToken cancellationToken)
     {
+        using var backendLease = previewBackend is null ? null : await previewBackend.EnterAsync(cancellationToken);
+        bool completed = false;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int width = frame.Settings.Width, height = frame.Settings.Height;
-            var output = new byte[checked(width * height * 4)];
-            for (int i = 3; i < output.Length; i += 4) output[i] = 255;
+            int byteCount = checked(width * height * 4);
+            bool gpu = previewBackend?.TryBegin(width, height, frame.VideoLayers.Length + (frame.Captions.IsEmpty ? 0 : 1),
+                frame.Captions.IsEmpty && (frame.VideoLayers.IsEmpty || frame.VideoLayers.Length == 1 && frame.VideoLayers[0].Appearance == ClipAppearance.Default)) == true;
+            byte[]? output = gpu ? null : Black();
+            List<(ImmutableArray<byte> Pixels, ClipAppearance Appearance)>? retained = gpu ? [] : null;
             var paths = MediaReferenceResolver.Inspect(project, projectPath).ToDictionary(x => x.MediaAssetId);
             foreach (var layer in frame.VideoLayers)
             {
@@ -35,15 +41,60 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
                 var path = paths[layer.MediaAssetId];
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MEDIA_MISSING", "Video source is missing.", layer.MediaAssetId));
                 var pixels = await DecodeVideoAsync(path.ResolvedPath, layer, frame, width, height, cancellationToken);
-                Composite(output, pixels, width, height, layer.Appearance, cancellationToken);
+                CompositeLayer(pixels, layer.Appearance);
             }
             if (!frame.Captions.IsEmpty)
             {
                 if (captions is null) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("CAPTION_RENDERER_REQUIRED", "A caption rasterizer is required."));
                 var pixels = await captions.RasterizeAsync(frame.Captions, width, height, cancellationToken);
-                Composite(output, pixels, width, height, ClipAppearance.Default, cancellationToken);
+                CompositeLayer(pixels, ClipAppearance.Default);
             }
-            return Result<RenderedVideoFrame>.Ok(new(frameIndex, frame.Tick, width, height, System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(output)));
+            if (gpu)
+            {
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    output = previewBackend!.Read();
+                    if (output.Length != byteCount) throw new InvalidDataException("GPU returned an incomplete RGBA frame.");
+                }
+                catch (Exception e) when (PreviewRenderBackend.IsGpuFailure(e)) { RecoverCpu(e); }
+            }
+            cancellationToken.ThrowIfCancellationRequested(); completed = true;
+            return Result<RenderedVideoFrame>.Ok(new(frameIndex, frame.Tick, width, height,
+                System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(output!)));
+
+            byte[] Black()
+            {
+                var pixels = new byte[byteCount];
+                for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+                return pixels;
+            }
+            void CompositeLayer(ImmutableArray<byte> pixels, ClipAppearance appearance)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (pixels.Length != byteCount) throw new InvalidDataException("Decoder returned an incomplete RGBA frame.");
+                if (gpu)
+                {
+                    retained!.Add((pixels, appearance));
+                    try
+                    {
+                        var t = appearance.Transform;
+                        previewBackend!.Composite(pixels.AsSpan(), new(t.X, t.Y, t.ScaleX, t.ScaleY, t.RotationDegrees, appearance.Opacity, (int)appearance.Blend));
+                    }
+                    catch (Exception e) when (PreviewRenderBackend.IsGpuFailure(e)) { RecoverCpu(e); }
+                }
+                else Composite(output!, pixels, width, height, appearance, cancellationToken);
+            }
+            void RecoverCpu(Exception e)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                previewBackend!.FallBack(e.Message); gpu = false; output = Black();
+                // Replay the exact decoded/evaluated inputs, including every prior layer.
+                foreach (var input in retained!) Composite(output, input.Pixels, width, height, input.Appearance, cancellationToken);
+                retained = null;
+                logger?.Log(LogLevel.Warn, "preview.backend", "GPU preview fell back to native CPU composition",
+                    new Dictionary<string, object?> { ["sequenceId"] = frame.SequenceId, ["timelineTick"] = frame.Tick, ["reason"] = e.Message }, e);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -54,6 +105,7 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
             });
             return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("FRAME_RENDER_FAILED", e.Message));
         }
+        finally { if (!completed) previewBackend?.AbandonFrame(); }
     }
 
     private async Task<ImmutableArray<byte>> DecodeVideoAsync(string path, EvaluatedVideoLayer layer, EvaluatedFrame frame,

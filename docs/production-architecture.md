@@ -307,6 +307,31 @@ Recipe object is introduced now. Kinetai/AudioAnalyzer are future adapters suppl
 ordinary assets/metadata/commands. No separate integration-owned timeline.
 
 
+## GPU preview backend (Issue #67)
+
+ADR 0016 adds an optional native D3D11 compositor to the existing shared evaluated
+frame path. Transform/opacity/Normal/Screen primitives consume the same native
+TimelineEvaluator output as CPU/export. Interactive preview selects Auto/CPU/D3D11;
+Auto preserves the single identity frame CPU fast path. Native owns pixel math,
+GPU capability checks, bounded reusable textures, command completion and device
+errors. The managed host serializes one complete frame and can replay bounded
+decoded inputs into native CPU composition after a GPU fault.
+
+The GPU pool charges four canvas textures plus its fixed constant buffer against
+256 MiB. Exact CPU recovery retains at most 256 MiB of transient input pixels;
+above that cap, composition uses the ordinary streamed CPU path. These budgets are
+separate from native frame cache, prepared/presented arrays and FFmpeg surfaces.
+Forward decoding can request D3D11VA with strict NV12 hardware download; at most
+two active hardware streams exist. Failed hardware requests permanently downgrade
+the owned decoder to software until an explicit backend reselection. Lifecycle
+resets preserve that downgrade and reset streams after producers join.
+
+The existing FFmpeg executable boundary returns host RGBA and WPF consumes owned
+BGRA arrays. Decode download, layer upload and one final composition readback are
+explicit. Cached frames retain no GPU handles. Export uses native CPU composition.
+Mango hardware performance, total VRAM and physical A/V acceptance remain in the
+Issue #67 staging checklist.
+
 ## Still images and visual Effect Library (Issues #62–#64)
 
 ADR 0015 supersedes earlier source-format/persistence limits: Image (wire/native 2)

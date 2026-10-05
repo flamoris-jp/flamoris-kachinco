@@ -23,7 +23,7 @@ public partial class MainWindow
 
     private void InitializeProduction()
     {
-        previewSource = new(new WindowsCaptionRasterizer(Dispatcher), logger: logger);
+        previewSource = new(new WindowsCaptionRasterizer(Dispatcher), logger: logger, backendPreference: PreviewBackendPreference.Auto);
         playback = new(previewSource, () => new WindowsPreviewAudioOutput(), logger);
         InitializeMonitoring();
         playback.Changed += (_, _) => RefreshPlaybackFeedback();
@@ -94,6 +94,12 @@ public partial class MainWindow
         if (playback is null) return;
         playback.SetQuality(PreviewQualityBox.SelectedIndex switch { 0 => PreviewQuality.Full, 2 => PreviewQuality.Quarter, _ => PreviewQuality.Half });
     }
+    private void PreviewBackend_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (playback is null) return;
+        playback.SetBackendPreference(PreviewBackendBox.SelectedIndex switch
+        { 1 => PreviewBackendPreference.Cpu, 2 => PreviewBackendPreference.D3D11, _ => PreviewBackendPreference.Auto });
+    }
     private void RefreshPlaybackFeedback()
     {
         if (playback is null || PlaybackStatus is null) return;
@@ -121,6 +127,13 @@ public partial class MainWindow
             InteractivePreviewState.Failed => EditorText.Failed, _ => EditorText.Stopped
         };
         PlaybackStatus.Text = label;
+        var backend = previewSource.BackendDiagnostics;
+        PreviewBackendStatus.Text = $"{backend.Active} · {backend.AllocatedBytes / (1024d * 1024d):F0} MiB";
+        var decode = previewSource.DecodeDiagnostics;
+        PreviewBackendStatus.ToolTip = EditorText.Choose("プレビュー合成: ", "Preview composition: ") + backend.Active +
+            EditorText.Choose("\nCPUメモリのRGBAをWPFで表示します。D3D11合成は読戻しを使用します。", "\nWPF presents CPU RGBA. D3D11 composition uses readback.") +
+            (backend.FallbackReason is { } reason ? "\n" + reason : "") +
+            (decode is null ? "" : "\nDecode: " + decode.ActiveBackend + (decode.FallbackReason is { } fallback ? "\n" + fallback : ""));
         PlaybackDetail.Text = playback.Error is { } error ? label + "\n" + error : label;
         if (playback.DroppedVideoFrames > 0) PlaybackStatus.Text += EditorText.Choose($" · 映像スキップ {playback.DroppedVideoFrames}（1/4で軽減）", $" · Video skipped {playback.DroppedVideoFrames} (try 1/4)");
         PlaybackOverlay.Visibility = playback.State is InteractivePreviewState.Scrubbing or InteractivePreviewState.Buffering or InteractivePreviewState.Failed ? Visibility.Visible : Visibility.Collapsed;
