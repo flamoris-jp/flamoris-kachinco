@@ -64,7 +64,8 @@ public sealed class MediaVisualizationService(string executable = "ffmpeg")
     {
         if (asset.Kind != MediaKind.Wav)
         {
-            var rgba = await new FfmpegMediaDecoder(executable).VideoAsync(path, 0, ThumbnailWidth, ThumbnailHeight, token);
+            using var decoder = new FfmpegMediaDecoder(executable);
+            var rgba = await decoder.VideoAsync(path, 0, ThumbnailWidth, ThumbnailHeight, token);
             return new(rgba, ThumbnailWidth, ThumbnailHeight, [], asset.DurationTicks);
         }
         const int rate = 8000;
@@ -104,4 +105,3 @@ public sealed class MediaVisualizationService(string executable = "ffmpeg")
         }
     }
 }
-

@@ -32,7 +32,7 @@ The narrow codec/resolution scope is intentional. Kachinco should first prove fa
 
 ## Core workflow
 
-1. Import MOV/MP4 video and WAV/MP3/M4A audio.
+1. Import PNG/JPEG/WebP images, MOV/MP4 video and WAV/MP3/M4A audio.
 2. Arrange normal clips on a timeline.
 3. Create a named **Clapper** that binds a time range and, optionally, a canvas region/path and target track.
 4. Ask an AI assistant for an edit using that name.
@@ -137,7 +137,7 @@ Initial capability groups are expected to include:
 
 ### Timeline mutation commands
 
-- import/register MOV/MP4 video and WAV/MP3/M4A audio
+- import/register PNG/JPEG/WebP images, MOV/MP4 video and WAV/MP3/M4A audio
 - insert/replace/move/trim/split clips
 - create subtitle tracks and captions
 - attach generated output to a Recipe and Clapper
@@ -252,11 +252,11 @@ For the native engine, also install CMake supporting your Visual Studio version 
 Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
 native runtime and copies it into app/test/publish outputs. Linux headless builds
 require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
-One native EditorSession owns commands, validation, history and v1/v2/v3 persistence.
+One native EditorSession owns commands, validation, history and v1/v2/v3/v4 persistence.
 The grouped Inspector pairs compact sliders with precise numeric inputs. Audio clips
 support editable volume points and fade-in/out with shared preview/export evaluation.
 The transport monitoring slider is an editor preference and leaves exported audio
-unchanged. Projects without volume points retain v2 format; curves use v3.
+unchanged. Legacy projects retain v2/v3 output; still images or visual automation select v4.
 C# exposes immutable queries and desktop/MCP adapters; canonical time and shared
 preview/export evaluation/composition are native. See [ADR 0010](docs/decisions/0010-native-editing-authority.md)
 and the [final audit](docs/reviews/issue-36-native-audit.md).
@@ -371,3 +371,35 @@ FLAMORISのキャラクター、キャラクターデザイン、イラスト、
 ## Shared desktop MCP connection
 
 The shared MCP UI migration and package release order are documented in [shared MCP connection](docs/shared-mcp-connection.md).
+
+
+## Still-image motion and reusable AI-authored effects
+
+Import PNG/JPEG/WebP into the Media Bin and place it on a video track. The default
+image duration is five seconds; trim changes its display duration. Inspector X/Y
+uses sequence-frame pixels, scale uses the fitted image, and rotation/opacity
+share ordinary preview/export semantics. Property automation points in the
+Transform section use clip-relative seconds and absolute values. AI may compose
+arbitrary sampled motion through `edit_batch`, including `SetClipPropertyCurve`
+and add/update/delete point commands. Motion is native, editable and undoable.
+
+Open **Effect Library** to set **Effect Library Path** (default: `library` beside
+the executable), save a clip's motion or a restricted Recipe, inspect/rename/delete
+saved items, or apply them. Visual effects expose intensity [0,1] and duration
+scale, copying curves into the target project in one shared history entry.
+Recipe effects bind to an existing Clapper; **Generate / Regenerate** creates the
+ordinary rendered clip using the existing bounded worker and explicit MOV output.
+The current Recipe API remains the existing literal-only text/particles primitive
+slice; saving an item does not expand its code execution capabilities.
+
+MCP library access is an explicit per-launch opt-in in that window. Reconnect after
+changing settings; read-only grants can list/get, while save/capture/apply/delete
+require Edit permission and the usual revision guard. No tool accepts a filesystem
+path or changes the configured root. `effect_save` with `expectedVersion` updates
+an item. Applied project state remains usable if a library item changes or is deleted.
+
+Back up the configured directory separately. Changing the path leaves existing
+files where they are; copy them explicitly to migrate. Application replacement
+must preserve the user library. v4 projects need a v4-capable Kachinco; keep an
+original project backup when upgrading. See [ADR 0015](docs/decisions/0015-still-images-and-effect-library.md)
+and [PROGRESS.md](PROGRESS.md).

@@ -30,7 +30,7 @@ for all operations; don't pair a stale sequence query with an unrelated revision
 
 - `CreateProject(projectId, name)` — only on an empty session.
 - `CreateSequence(sequenceId, name, settings, durationTicks)`.
-- `RegisterMedia(asset)` — explicit validated video/audio metadata (MOV/MP4 and WAV/MP3/M4A). Human import first
+- `RegisterMedia(asset)` — explicit validated image/video/audio metadata (PNG/JPEG/WebP, MOV/MP4 and WAV/MP3/M4A). Human import first
   obtains it through `IMediaProbe`; Core still has no file/process dependency.
 - `RelinkMedia(mediaAssetId, sourcePath, durationTicks, sampleRate, channels)` —
   replaces source metadata for the same logical asset after probe/compatibility
@@ -127,7 +127,7 @@ MCP tools: `get_project`, `edit_batch`, `undo`, `redo`, `clapper_resolve`,
 validation; Edit additionally exposes batch and shared history.
 Tool schemas describe arguments; batch command fields match camelCase C# constructor
 names. Int64 values are decimal strings, IDs are UUIDs, enums are exact names.
-`get_project` includes the v2/v3 envelope and transient visible sequence/clip/playhead.
+`get_project` includes the v2/v3/v4 envelope and transient visible sequence/clip/playhead.
 
 Example command within `edit_batch.commands`:
 
@@ -186,7 +186,7 @@ with runtime/document identity and decimal-string `expectedRevision`.
 ```
 
 `undo`/`redo` use empty `input` and the same required guard. `get_project` keeps its
-v2/v3 Project envelope, string revision, current UI context and shared history flags.
+v2/v3/v4 Project envelope, string revision, current UI context and shared history flags.
 Domain results retain `success`, string revision and structured diagnostics.
 Clients must check domain `success` as well as MCP `isError`: Core's `isError`
 represents boundary failures, whose structured/text content contains
@@ -238,3 +238,26 @@ actual container, selected stream and duration. MP4 follows the video path; MP3/
 follow the audio path. Relink may change container within a kind while retaining
 asset/clip IDs and source ranges. See [ADR 0006](decisions/0006-media-import-formats.md).
 This does not grant MCP file access: external raw registration/relink remain denied.
+
+
+## Visual automation and local Effect Library
+
+- `SetClipPropertyCurve(sequenceId, clipId, curve)` replaces one property atomically;
+  empty points removes it. `Add/Update/DeleteClipPropertyPoint` edit stable IDs.
+- Properties: `X`, `Y`, `ScaleX`, `ScaleY`, `RotationDegrees`, `Opacity`.
+  Point fields: `id`, decimal-string `tick` (signed clip-relative), finite `value`.
+- `get_project` exposes Image assets and complete appearance automation in v4.
+  Existing raw RegisterMedia/RelinkMedia permission policy remains unchanged.
+- Explicit desktop library opt-in adds `effect_list`, `effect_get`, `effect_save`,
+  `effect_capture`, `effect_apply`, `effect_delete`. List/get are queries; other
+  operations require Edit grant and guarded expected document revision.
+- `effect_save` creates an ID, or updates with `expectedVersion`; name changes use
+  the same operation. Version is checked under an exclusive library lock. Definitions
+  use schema/API 1 and either normalized visual curves or restricted Recipe source.
+- `effect_apply`: `{id, sequenceId, clipId, parameters?, dryRun?}` applies curves;
+  `{id, sequenceId, clapperId, dryRun?}` binds a Recipe. Exactly one target is required.
+  Parameters are `intensity` [0,1], `durationScale` (0,100]. Recipe output generation
+  remains an explicit desktop action through RecipeGenerationService.
+- Root comes solely from user settings. MCP cannot supply file paths, change root,
+  run arbitrary code, or bypass native history. Library file edits are user-asset
+  operations outside project Undo/Redo; applying to project shares project history.

@@ -39,6 +39,10 @@ public sealed class NativeTimeline : IDisposable
     {
         NativeMediaProcess.Check(Methods.Parameter(points, (uint)points.Length, tick, fallback, out double value)); return value;
     }
+    public static double SignedParameter(NativeParameterPoint[] points, long tick, double fallback)
+    {
+        NativeMediaProcess.Check(Methods.SignedParameter(points, (uint)points.Length, tick, fallback, out double value)); return value;
+    }
     public unsafe void MixAudio(int index, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int rate, int channels)
     {
         fixed (double* dst = mix)
@@ -68,6 +72,8 @@ public sealed class NativeTimeline : IDisposable
         internal static extern void Destroy(IntPtr handle);
         [DllImport(Library, EntryPoint = "kn_timeline_evaluate", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Evaluate(TimelineHandle handle, long tick, long duration, [Out] NativeEvaluationResult[] output, uint capacity, out uint count);
+        [DllImport(Library, EntryPoint = "kn_parameter_at_signed", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SignedParameter([In] NativeParameterPoint[] points, uint count, long tick, double fallback, out double output);
         [DllImport(Library, EntryPoint = "kn_parameter_at", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Parameter([In] NativeParameterPoint[] points, uint count, long tick, double fallback, out double output);
         [DllImport(Library, EntryPoint = "kn_timeline_set_property_curve", CallingConvention = CallingConvention.Cdecl)]

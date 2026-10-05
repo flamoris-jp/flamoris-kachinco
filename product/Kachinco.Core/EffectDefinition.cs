@@ -54,21 +54,17 @@ public static class EffectComposition
         var track = snapshot.Project?.Sequences.FirstOrDefault(s => s.Id == sequenceId)?.Tracks.FirstOrDefault(t => t.Clips.Any(c => c.Id == clipId));
         var clip = track?.Clips.FirstOrDefault(c => c.Id == clipId);
         if (clip is null || track!.Kind != TrackKind.Video) return Fail<EffectDefinition>("EFFECT_TARGET_REQUIRED", "Select a visual clip.");
-        var created = TimelineEvaluator.Create(snapshot.Project!, sequenceId);
-        if (!created.Success) return new(null, created.Diagnostics);
-        using var evaluator = created.Value!;
-        var first = evaluator.Evaluate(clip.StartTicks).Value!.VideoLayers.FirstOrDefault(l => l.ClipId == clipId);
-        var last = evaluator.Evaluate(clip.EndTicks - 1).Value!.VideoLayers.FirstOrDefault(l => l.ClipId == clipId);
-        if (first is null || last is null) return Fail<EffectDefinition>("EFFECT_TARGET_DISABLED", "Enable the visual clip and track before capture.");
         var curves = ImmutableArray.CreateBuilder<EffectCurve>();
         var properties = clip.Appearance.Automation.IsEmpty ? Enum.GetValues<VisualProperty>() : clip.Appearance.Automation.Select(c => c.Property).ToArray();
         foreach (var property in properties)
         {
-            var samples = new List<EffectSample> { new(0, Constant(first.Appearance, property)) };
             var curve = clip.Appearance.Automation.FirstOrDefault(c => c.Property == property);
+            var nativePoints = curve?.Points.Select(p => new Kachinco.Native.NativeParameterPoint(p.Tick, p.Value)).ToArray() ?? [];
+            double At(long tick) => Kachinco.Native.NativeTimeline.SignedParameter(nativePoints, tick, Constant(clip.Appearance, property));
+            var samples = new List<EffectSample> { new(0, At(0)) };
             if (curve is not null) samples.AddRange(curve.Points.Where(p => p.Tick > 0 && p.Tick < clip.DurationTicks)
                 .Select(p => new EffectSample((double)p.Tick / clip.DurationTicks, p.Value)));
-            samples.Add(new(1, Constant(last.Appearance, property)));
+            samples.Add(new(1, At(clip.DurationTicks)));
             curves.Add(new(property, [.. samples]));
         }
         var effect = new EffectDefinition(1, Guid.NewGuid(), name, "", 1, "1", curves.ToImmutable(), new());
@@ -98,7 +94,7 @@ public static class EffectComposition
                 {
                     long tick = checked((long)decimal.Round((decimal)sample.Time * clip.DurationTicks * (decimal)parameters.DurationScale));
                     // Blend without subtraction overflow. Collapsed ticks use the last ordered sample.
-                    points[tick] = baseline * (1 - parameters.Intensity) + sample.Value * parameters.Intensity;
+                    points[tick] = baseline == sample.Value ? baseline : Math.Clamp(baseline * (1 - parameters.Intensity) + sample.Value * parameters.Intensity, Math.Min(baseline, sample.Value), Math.Max(baseline, sample.Value));
                 }
                 commands.Add(new SetClipPropertyCurve(sequenceId, clipId, new(curve.Property, [.. points.Select(p => new PropertyPoint(Guid.NewGuid(), p.Key, p.Value))])));
             }

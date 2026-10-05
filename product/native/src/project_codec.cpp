@@ -103,7 +103,7 @@ json decode_file(const std::string& raw) {
     if(text(root.at("format"))!="flamoris-kachinco"||ticks(root.at("timebase"))!=KN_TICKS_PER_SECOND) throw std::invalid_argument("envelope");
     auto p=root.at("project"); fields(p,{"id","name","assets","sequences"}); p["id"]=guid(p.at("id")); p["name"]=text(p.at("name")); array(p.at("assets"));array(p.at("sequences"));
     for(auto& a:p["assets"]) {
-        fields(a,{"id","name","sourcePath","kind","durationTicks","sampleRate","channels"}); a["id"]=guid(a.at("id"));a["name"]=text(a.at("name"));a["sourcePath"]=text(a.at("sourcePath")); a["kind"]=enum_value(a.at("kind"),schema==4?media:std::vector<std::string>{"Mov","Wav"}); a["durationTicks"]=ticks(a.at("durationTicks")); a["sampleRate"]=optional_i32(a.at("sampleRate"));a["channels"]=optional_i32(a.at("channels"));a["provenance"]=nullptr;
+        fields(a,{"id","name","sourcePath","kind","durationTicks","sampleRate","channels"}); a["id"]=guid(a.at("id"));a["name"]=text(a.at("name"));a["sourcePath"]=text(a.at("sourcePath")); a["kind"]=(schema==4?strict_enum(a.at("kind"),media):enum_value(a.at("kind"),std::vector<std::string>{"Mov","Wav"})); a["durationTicks"]=ticks(a.at("durationTicks")); a["sampleRate"]=optional_i32(a.at("sampleRate"));a["channels"]=optional_i32(a.at("channels"));a["provenance"]=nullptr;
     }
     for(auto& s:p["sequences"]) {
         fields(s,{"id","name","settings","durationTicks","tracks"});s["id"]=guid(s.at("id"));s["name"]=text(s.at("name"));s["durationTicks"]=ticks(s.at("durationTicks"));

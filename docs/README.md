@@ -36,3 +36,7 @@
 - [Preview performance measurements](reviews/issue-53-preview-performance.md) and [Windows acceptance](../staging/windows-issue53.md): comparable benchmark and outstanding physical A/V checks.
 - [Native migration final audit](reviews/issue-36-native-audit.md): authority mapping, verification and remaining physical acceptance.
 - [Post-migration Windows acceptance](../staging/windows-native-phase2.md): final bundle and physical A/V workflow.
+
+
+- [Still images, visual automation and Effect Library](decisions/0015-still-images-and-effect-library.md): conditional v4, native time/value primitives and root-bounded reuse.
+- [Delivery progress](../PROGRESS.md): Issues #62–#64, evidence and remaining acceptance.

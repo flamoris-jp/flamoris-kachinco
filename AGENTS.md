@@ -265,7 +265,7 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 - Use .NET 10, WPF only in `product/Kachinco.App`, and headless Core/Infrastructure. Physical boundaries follow section 3.
 - Canonical time is 35,280,000 ticks/second. Use `TimelineTime` for all conversions, reduced rational FPS, and half-open ranges. Never copy 2D's timebase into this product.
 - All editing goes through `EditorSession.Execute(EditBatch)`; `ReplaceProject` is explicit Open/New lifecycle, not an editing shortcut. Use immutable snapshots and explicit expected revisions for concurrent clients.
-- Native project codec owns frozen v1/v2 input migration and conditional v2/v3 output (ADR 0014). Projects with volume curves write v3; projects without curves retain byte-compatible v2. Core records are immutable wire/query projections. Required fields, decimal-string ticks, version dispatch and unknown-field rejection remain compatibility contracts; changes require a schema decision and regression tests.
+- Native project codec owns frozen v1/v2 input migration and conditional v2/v3/v4 output (ADRs 0014–0015). Image assets or visual automation write v4; otherwise volume curves write v3 and projects without curves retain byte-compatible v2. Core records are immutable wire/query projections. Required fields, decimal-string ticks, version dispatch and unknown-field rejection remain compatibility contracts; changes require a schema decision and regression tests.
 - Preview, audio planning and export share `TimelineEvaluator`; encoding never interprets clip placement. `FfmpegEncodingBackend` now encodes rendered RGBA/PCM; it must never evaluate clip placement itself.
 - Issue #5 adds the bounded production slice documented in ADRs 0002–0004 and `staging/windows-production.md`; do not infer unrestricted Python, real-time preview or external integrations.
 - Run `dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release` for headless changes; build `Kachinco.slnx` on Windows for shell changes. CI separates Linux contracts from Windows build/startup and runs once on non-main branch pushes.
@@ -285,7 +285,7 @@ As the project grows, add a `docs/README.md` index and explicit architecture doc
 ## 17. Production slice authority (Issue #5)
 
 - Follow ADRs 0002–0004 and 0014. Frozen v1/v2 remain input migration contracts;
-  volume automation selects v3 output. Required authoring/provenance fields must not be dropped.
+  volume automation selects v3 output unless Image/visual automation requires v4. Required authoring/provenance fields must not be dropped.
 - Recipe source is parsed in the bounded worker and never executed with eval/exec.
   Preserve Windows job limits, POSIX limits, wall timeout and host IR revalidation.
 - Recipe generation prepares ordinary commands against one expected revision.

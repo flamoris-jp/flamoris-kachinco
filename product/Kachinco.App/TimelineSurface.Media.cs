@@ -49,9 +49,13 @@ public partial class TimelineSurface
                 VisualEntry? entry = null;
                 try
                 {
-                    var data = await Task.Run(async () => work.Asset.Kind != MediaKind.Wav ?
-                        new MediaVisualization(await new FfmpegMediaDecoder().VideoAsync(work.Path, work.SourceTicks, 160, 90, cancellation.Token), 160, 90, [], work.Asset.DurationTicks) :
-                        await visualizer.GenerateAsync(work.Asset, work.Path, cancellation.Token), cancellation.Token);
+                    var data = await Task.Run(async () =>
+                    {
+                        if (work.Asset.Kind == MediaKind.Wav)
+                            return await visualizer.GenerateAsync(work.Asset, work.Path, cancellation.Token);
+                        using var decoder = new FfmpegMediaDecoder();
+                        return new MediaVisualization(await decoder.VideoAsync(work.Path, work.SourceTicks, 160, 90, cancellation.Token), 160, 90, [], work.Asset.DurationTicks);
+                    }, cancellation.Token);
                     cancellation.Token.ThrowIfCancellationRequested();
                     if (work.Stamp != PreviewContext.FileStamp(work.Path)) throw new IOException("Media changed while decoding.");
                     BitmapSource? bitmap = null;
@@ -137,4 +141,3 @@ public partial class TimelineSurface
     private sealed record VisualWork(string Key, MediaAsset Asset, string Path, string Stamp, long SourceTicks);
     private sealed record VisualEntry(MediaVisualization? Data, BitmapSource? Image, string? Error, bool Omitted = false);
 }
-

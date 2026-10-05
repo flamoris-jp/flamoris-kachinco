@@ -46,7 +46,7 @@ Both preview and export call the same native evaluator/compositor/mixer.
 ADRs [0010](decisions/0010-native-editing-authority.md) and
 [0011](decisions/0011-native-cutover-cleanup.md) complete the cutover: one native
 EditorSession owns project mutation/validation, expected revisions, history and
-document generations. Native owns v1/v2/v3 schema conversion and canonical rational
+document generations. Native owns v1/v2/v3/v4 schema conversion and canonical rational
 frame/sample conversions. The C# facade publishes immutable queries and dispatches
 the same typed commands for UI/MCP; ProjectFileStore supplies bounded atomic I/O.
 Decimal input/display and transient authoring geometry remain managed projections.
@@ -305,3 +305,23 @@ they enter as normal media + clip commands in one batch. They require a schema
 change, not silently discarded unknown JSON fields. No Python worker or speculative
 Recipe object is introduced now. Kinetai/AudioAnalyzer are future adapters supplying
 ordinary assets/metadata/commands. No separate integration-owned timeline.
+
+
+## Still images and visual Effect Library (Issues #62–#64)
+
+ADR 0015 supersedes earlier source-format/persistence limits: Image (wire/native 2)
+uses the ordinary visual track and compositor, source time zero, and explicit clip
+length independent of source EOF. Native appearance automation covers X/Y,
+ScaleX/Y, RotationDegrees and Opacity with signed clip-relative points. Dedicated
+point/curve commands preserve the shared native session and history. Conditional
+v4 requires automation arrays; legacy projects retain conditional v2/v3 output.
+
+Effect Library is bounded Infrastructure file I/O over Core composition contracts.
+It stores definitions, not project state or rendered-only presets. Apply copies
+ordinary curves/Recipe authoring into one native transaction. List/get never run
+programs; Recipe save/apply validates through the same restricted worker. An
+explicit per-launch desktop opt-in registers only root-bounded library MCP tools.
+Settings changes revoke attachment before changing root/tools. User-managed NAS
+paths need ordinary filesystem rename/locking support; cloud synchronization,
+malicious concurrent filesystem writers and shared-database coordination are not
+part of this local asset contract.

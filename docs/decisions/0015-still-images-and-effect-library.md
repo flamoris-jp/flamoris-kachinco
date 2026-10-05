@@ -35,8 +35,10 @@ migrate to empty appearance automation; existing projects retain v2/v3 output.
 v4 requires appearance automation and volume arrays, strict known fields and
 decimal-string ticks. Older schemas reject Image instead of silently accepting
 a new token. Old applications reject v4 explicitly; users should keep backups.
-No change to the existing native timeline ABI structures: a new additive curve
-setter evaluates appearance inside native TimelineEvaluator for preview/export.
+Existing native timeline ABI structures stay unchanged. Additive curve setters
+and signed-parameter sampling share native interpolation for preview/export and
+visible-interval capture. Capability 8192 raises the managed requirement to 16383
+so an older DLL is rejected during startup, before calling new exports.
 
 ## Effect Library
 
@@ -46,7 +48,7 @@ is outside project/history, persisted in the user settings directory. Switching
 roots never moves/deletes items. Updates replace application binaries only;
 library backup/copy remains explicit. Do not silently fall back from an unwritable
 configured root. NAS coordination uses optimistic item version checks and atomic
-same-directory publication; root is user-selected, never supplied by MCP calls.
+same-directory publication on filesystems supporting rename and locking; root is user-selected, never supplied by MCP calls.
 
 Versioned JSON items contain a stable ID, name/description, normalized automation
 templates (time fractions [0,1]), parameter defaults, and optional restricted
@@ -56,13 +58,16 @@ constant property; generation validates all resulting ordinary commands.
 Applying replaces only properties present in the template, with fresh point IDs,
 and commits one ordinary native transaction. Recipe items use the existing
 compiler/RecipeGenerationService and explicit Clapper/track/output contracts.
-No saved code executes during list/get/load. Validate definitions and revalidate
+No saved code executes during list/get/load. Recipe library apply binds a copied
+program to an existing Clapper; the ordinary explicit Generate/Regenerate action
+renders its output. Current Recipe API remains the literal-only text/particles slice. Validate definitions and revalidate
 programs on save/apply. Unknown schema/API versions fail explicitly; never perform
 destructive implicit migration. Per-clip Recipe/provenance remains independent
 of mutable library assets; applied curves/programs are copied into project state.
 
 Local library list/get/save/update/delete tools use explicit MCP operation kinds;
 apply uses the shared edit transaction permission, expected revision and history.
-Filesystem tools reuse the existing host envelope/path permissions. Safe filenames
+Library tools require an explicit per-launch desktop opt-in plus existing host
+envelope/revision and ReadOnly/Edit permissions; no arbitrary path grant is added. Safe filenames
 derive solely from stable GUIDs; use bounded JSON, reject links/traversal and
 surface missing, invalid and unwritable root errors. No marketplace/cloud required.

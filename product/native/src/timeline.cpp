@@ -19,7 +19,8 @@ static double parameter_value(const kn_parameter_point* points,uint32_t count,in
     const auto elapsed=static_cast<uint64_t>(tick)-static_cast<uint64_t>(a.tick);
     const auto span=static_cast<uint64_t>(b.tick)-static_cast<uint64_t>(a.tick);
     const double ratio=static_cast<double>(elapsed)/static_cast<double>(span);
-    return a.value*(1-ratio)+b.value*ratio;
+    if(a.value==b.value) return a.value;
+    return std::clamp(a.value*(1-ratio)+b.value*ratio,std::min(a.value,b.value),std::max(a.value,b.value));
 }
 static double gain_at(const kn_timeline* timeline,const kn_eval_item& item,int64_t local) noexcept {
     const auto found=timeline->curves.find(item.index);
@@ -52,6 +53,13 @@ int32_t KN_CALL kn_parameter_at(const kn_parameter_point* points, uint32_t count
         if (points[i].tick < 0 || !std::isfinite(points[i].value) || (i && points[i-1].tick >= points[i].tick)) return KN_INVALID_ARGUMENT;
     *output=parameter_value(points,count,tick,fallback);
     return std::isfinite(*output) ? KN_OK : KN_OVERFLOW;
+}
+int32_t KN_CALL kn_parameter_at_signed(const kn_parameter_point* points,uint32_t count,int64_t tick,double fallback,double* output) noexcept {
+    if(!output) return KN_INVALID_ARGUMENT;
+    *output=0;
+    if((!points&&count)||count>4096||!std::isfinite(fallback)) return KN_INVALID_ARGUMENT;
+    for(uint32_t i=0;i<count;++i) if(!std::isfinite(points[i].value)||(i&&points[i-1].tick>=points[i].tick)) return KN_INVALID_ARGUMENT;
+    *output=parameter_value(points,count,tick,fallback);return std::isfinite(*output)?KN_OK:KN_OVERFLOW;
 }
 int32_t KN_CALL kn_timeline_create(int64_t duration, const kn_eval_item* items, uint32_t count, kn_timeline** output) noexcept {
     if (!output) return KN_INVALID_ARGUMENT;
