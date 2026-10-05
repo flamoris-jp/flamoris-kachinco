@@ -109,6 +109,7 @@ public interface IInteractivePreviewSource
     ValueTask<Result<RenderedVideoFrame>> FrameAsync(PreviewContext context, long tick, PreviewQuality quality, bool forward, CancellationToken token);
     ValueTask<Result<RenderedAudioBlock>> AudioAsync(PreviewContext context, long firstSample, int count, CancellationToken token);
     ValueTask ResetAsync(CancellationToken token = default) => ValueTask.CompletedTask;
+    ValueTask SelectBackendAsync(PreviewBackendPreference preference, CancellationToken token = default) => ValueTask.CompletedTask;
 }
 
 public sealed class InteractivePreviewSource : IInteractivePreviewSource, IDisposable

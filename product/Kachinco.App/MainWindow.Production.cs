@@ -20,7 +20,6 @@ public partial class MainWindow
     private System.Windows.Media.Imaging.WriteableBitmap? previewBitmap;
     private bool clockUpdate;
     private string? previewFailureSignature;
-    private long backendChangeGeneration;
 
     private void InitializeProduction()
     {
@@ -95,29 +94,11 @@ public partial class MainWindow
         if (playback is null) return;
         playback.SetQuality(PreviewQualityBox.SelectedIndex switch { 0 => PreviewQuality.Full, 2 => PreviewQuality.Quarter, _ => PreviewQuality.Half });
     }
-    private async void PreviewBackend_Changed(object sender, SelectionChangedEventArgs e)
+    private void PreviewBackend_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (playback is null) return;
-        long generation = ++backendChangeGeneration;
-        var preference = PreviewBackendBox.SelectedIndex switch { 1 => PreviewBackendPreference.Cpu, 2 => PreviewBackendPreference.D3D11, _ => PreviewBackendPreference.Auto };
-        bool resume = playback.State is InteractivePreviewState.Playing or InteractivePreviewState.Buffering;
-        long tick = playback.ReadPositionTicks();
-        playback.Pause();
-        try
-        {
-            await playback.Completion;
-            if (generation != backendChangeGeneration) return;
-            await previewSource.SelectBackendAsync(preference);
-            if (generation != backendChangeGeneration) return;
-            playback.Scrub(tick);
-            if (resume) playback.Play();
-            RefreshPlaybackFeedback();
-        }
-        catch (Exception exception)
-        {
-            logger.Error("preview.backend", "Preview backend selection failed", exception);
-            Status.Text = exception.Message;
-        }
+        playback.SetBackendPreference(PreviewBackendBox.SelectedIndex switch
+        { 1 => PreviewBackendPreference.Cpu, 2 => PreviewBackendPreference.D3D11, _ => PreviewBackendPreference.Auto });
     }
     private void RefreshPlaybackFeedback()
     {
@@ -150,7 +131,7 @@ public partial class MainWindow
         PreviewBackendStatus.Text = $"{backend.Active} · {backend.AllocatedBytes / (1024d * 1024d):F0} MiB";
         var decode = previewSource.DecodeDiagnostics;
         PreviewBackendStatus.ToolTip = EditorText.Choose("プレビュー合成: ", "Preview composition: ") + backend.Active +
-            EditorText.Choose("\nGPUからCPUへRGBAを転送し、WPFで表示します。", "\nRGBA is read back to CPU for WPF presentation.") +
+            EditorText.Choose("\nCPUメモリのRGBAをWPFで表示します。D3D11合成は読戻しを使用します。", "\nWPF presents CPU RGBA. D3D11 composition uses readback.") +
             (backend.FallbackReason is { } reason ? "\n" + reason : "") +
             (decode is null ? "" : "\nDecode: " + decode.ActiveBackend + (decode.FallbackReason is { } fallback ? "\n" + fallback : ""));
         PlaybackDetail.Text = playback.Error is { } error ? label + "\n" + error : label;

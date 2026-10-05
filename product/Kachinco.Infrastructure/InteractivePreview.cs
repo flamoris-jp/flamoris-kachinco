@@ -42,6 +42,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public long DroppedVideoFrames { get; private set; }
     public long Underruns { get; private set; }
     public PreviewQuality Quality { get; private set; } = PreviewQuality.Half;
+    public PreviewBackendPreference BackendPreference { get; private set; } = source is InteractivePreviewSource owned ? owned.BackendDiagnostics.Requested : PreviewBackendPreference.Cpu;
     public bool HasPendingRequest { get { lock (gate) return pending is not null; } }
     public Task Completion { get { lock (gate) return runner ?? Task.CompletedTask; } }
     private readonly object gate = new();
@@ -57,7 +58,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     public double MonitoringGain { get; private set; } = 1;
     private bool playSession;
     private Guid? playbackSessionId;
-    private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After);
+    private PreviewBackendPreference? pendingBackendPreference;
+    private long backendPreferenceVersion;
+    private sealed record Request(long Generation, long Tick, bool Play, InteractivePreviewState After,
+        PreviewBackendPreference? BackendPreference, long BackendVersion);
 
     public void SetMonitoringGain(double gain)
     {
@@ -133,6 +137,17 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
     }
+    public void SetBackendPreference(PreviewBackendPreference value)
+    {
+        if (!Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        lock (gate)
+        {
+            if (disposed || BackendPreference == value && pendingBackendPreference is null) return;
+            BackendPreference = value; pendingBackendPreference = value; backendPreferenceVersion++;
+            bool resume = (playSession || pending?.Play == true) && wantPlay;
+            RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
+        }
+    }
     public long ReadPositionTicks()
     {
         lock (gate)
@@ -158,7 +173,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             generation = ticket.Generation; PositionTicks = ticket.Position;
             long renderTick = ticket.RenderTick;
             wantPlay = play;
-            pending = new(generation, renderTick, play, after);
+            pending = new(generation, renderTick, play, after, pendingBackendPreference, backendPreferenceVersion);
             logger?.Debug("preview.playback", play ? "Preview playback requested" : "Preview frame requested", Properties(renderTick));
             SetState(play ? InteractivePreviewState.Buffering : InteractivePreviewState.Scrubbing);
             if (!running) { running = true; runner = RunMailboxAsync(); }
@@ -193,6 +208,12 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                     // Prior request/playback producers have joined before releasing GPU
                     // textures and forward streams for this seek or changed context.
                     await source.ResetAsync(cancellation.Token);
+                    if (request.BackendPreference is { } preference)
+                    {
+                        await source.SelectBackendAsync(preference, cancellation.Token);
+                        lock (gate)
+                            if (backendPreferenceVersion == request.BackendVersion) pendingBackendPreference = null;
+                    }
                     if (request.Play) await RunPlaybackAsync(request, cancellation.Token);
                     else
                     {
