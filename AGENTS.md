@@ -343,3 +343,20 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
   Windows applies it to the output handle, including queued sound, without resetting
   the consumed-sample clock. New outputs inherit the current preference.
 
+## GPU preview authority (Issue #67)
+
+- ADR 0016 defines optional native D3D11 composition over the existing evaluated
+  layers. Preserve CPU/export reference semantics, canonical time and consumed
+  audio clock. Backend preference is transient editor state, not project state.
+- GPU pools have explicit payload budgets. Decoder surfaces, retained recovery
+  inputs, cache and presentation buffers are separate memory owners. Do not infer
+  total VRAM from the compositor metric.
+- The current executable FFmpeg/WPF array contract includes CPU transfers. Do not
+  describe it as zero-copy or GPU-resident end to end. Hardware decode is confirmed
+  only after the strict hardware-frame download returns a complete valid frame.
+- Device/format/allocation failure preserves native CPU recovery. Cancellation
+  never publishes partial output or silently disables a healthy decoder. Reset
+  joins old work and preserves sticky hardware failure until explicit reselection.
+- Run native WARP parity/lifetime and managed adapter/codec/selection tests on
+  Windows. Physical performance and 6 GB acceptance are measured separately using
+  staging/windows-issue67.md; never substitute WARP speed for GPU speed.
