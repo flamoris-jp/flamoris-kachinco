@@ -147,6 +147,23 @@ Rules:
 
 Principle: **AI writes intent/programs; deterministic commands commit project state.**
 
+### AI-authored programmable effects (Issues #63–#64)
+
+- Prefer small expressive deterministic primitives and AI composition through MCP
+  or restricted Recipes over a growing hard-coded named-effect catalog.
+- Do not add a dedicated effect when existing primitives and automation/Recipe
+  express it cleanly. Named presets are compositions, never hidden authorities.
+- Ordinary property automation uses native typed commands, clip-relative ticks,
+  stable point IDs and shared UI/MCP history. Recipe effects retain the existing
+  bounded worker, host IR validation, explicit inputs and provenance.
+- AI-authored effects must be inspectable and reproducible. UI convenience
+  controls must not create a second renderer/evaluator or effect state.
+- Linear point sampling is an editing primitive, not an architectural ceiling:
+  AI can generate arbitrary sampled motion and bounded Recipe programs.
+- ADR 0015 defines still images, conditional v4 visual automation and configurable
+  local Effect Library semantics. Library changes never silently rewrite applied
+  project state; library path changes never move or delete assets.
+
 ## 7. Timeline and media rules
 
 - Keep one canonical timebase and rational FPS model.
@@ -325,3 +342,4 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
 - Monitoring gain is a bounded atomic editor preference outside project/history/export.
   Windows applies it to the output handle, including queued sound, without resetting
   the consumed-sample clock. New outputs inherit the current preference.
+
