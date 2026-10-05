@@ -45,6 +45,9 @@ extern "C" {
 #define KN_TIMEOUT INT32_C(8)
 #define KN_END_OF_STREAM INT32_C(9)
 #define KN_INVALID_MEDIA INT32_C(10)
+#define KN_GPU_UNSUPPORTED INT32_C(11)
+#define KN_GPU_FAILURE INT32_C(12)
+#define KN_GPU_BUDGET INT32_C(13)
 
 typedef struct kn_runtime kn_runtime;
 typedef struct kn_runtime_info {
@@ -115,6 +118,23 @@ KN_API int32_t KN_CALL kn_composite_rows(uint8_t* output, const uint8_t* source,
 KN_API int32_t KN_CALL kn_rgba_to_bgra(uint8_t* output, const uint8_t* source, uint32_t size) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_mix_add(double* mix, uint32_t mix_count, const float* source, uint32_t source_count, uint32_t offset, double gain) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_mix_finish(const double* mix, float* output, uint32_t count) KN_NOEXCEPT;
+
+/* Optional preview adapter. Calls on one handle (including destroy) must be serialized.
+   Begin clears opaque black; layers borrow canvas-sized RGBA8 buffers only during the call.
+   Four reusable textures plus the constant buffer are charged against the <=256 MiB
+   payload budget. Driver/device/shader bookkeeping is outside the reported payload.
+   Hardware is the default; force_warp=1 is a test-only software D3D11 adapter.
+   error receives an HRESULT on Windows or zero for validation/unsupported hosts. */
+typedef struct kn_gpu_preview kn_gpu_preview;
+KN_API int32_t KN_CALL kn_gpu_create(uint64_t budget_bytes, int32_t force_warp, kn_gpu_preview** output, int32_t* error) KN_NOEXCEPT;
+KN_API void KN_CALL kn_gpu_destroy(kn_gpu_preview* preview) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_gpu_begin(kn_gpu_preview* preview, int32_t width, int32_t height, int32_t* error) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_gpu_composite(kn_gpu_preview* preview, const uint8_t* source, uint32_t size, const kn_appearance* appearance, int32_t* error) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_gpu_read(kn_gpu_preview* preview, uint8_t* output, uint32_t size, int32_t* error) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_gpu_reset(kn_gpu_preview* preview, int32_t* error) KN_NOEXCEPT;
+KN_API uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview* preview) KN_NOEXCEPT;
+/* Borrowed thread-local diagnostic, valid until this thread's next GPU operation. */
+KN_API const char* KN_CALL kn_gpu_diagnostic(void) KN_NOEXCEPT;
 
 
 /* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting. */
