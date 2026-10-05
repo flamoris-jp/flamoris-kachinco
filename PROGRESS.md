@@ -35,6 +35,12 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
 - Windows CI caught a GPU/CPU pixel mismatch after successful real WARP shader
   initialization. Preserve the byte-parity gate and improve sampling diagnostics
   before rerunning; no merge while this regression exists.
+- CI #133 isolated the mismatch to partial-alpha Normal blending after a 90-degree
+  rotation: red/blue saturated while green matched. Opaque identity and earlier
+  transparent/Screen layers passed. Replaced the indexed/unrolled double-color
+  expression with explicit scalar RGB calls and a mode branch; keep double source
+  coordinates, CPU operation order and the one-byte quantization tolerance intact.
+  Windows execution must verify the fix before merge.
 
 ## Completed: still images and AI-authored effects
 
