@@ -7,11 +7,11 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
 | Work | Status | Evidence |
 | --- | --- | --- |
 | Current authority and design audit | Complete | AGENTS, Issue #67, native composition, FFmpeg process and WPF presentation inspected; ADR 0016 |
-| Native D3D11 backend and bounded resources | In progress | Hardware device, transform/opacity/normal/screen compute path, explicit CPU fallback |
-| D3D11VA forward decoding | In progress | Strict hardware download with software forward retry; existing time/seek authority |
-| Preview integration and backend diagnostics | In progress | Same immutable CPU frame contract; explicit transfer accounting |
+| Native D3D11 backend and bounded resources | Implemented; Windows parity fix in progress | Native WARP shader executes; byte parity gate found a mismatch and blocks merge |
+| D3D11VA forward decoding | Complete | NV12 hardware download, two hardware processes, sticky software forward retry |
+| Preview integration and backend diagnostics | Complete | Same immutable frame/clock authority, Auto/CPU/D3D11, joined latest-wins switching |
 | Independent review and fixes | In progress | Separate read-only reviewer checks parity, lifetime, codec formats and total memory |
-| Automated verification and merge | Pending | Native/headless and Windows runtime/package CI are merge gates |
+| Automated verification and merge | In progress | CI #132 Linux: 270/270 and ASan/UBSan 5/5 pass; Windows native parity failure under repair |
 | Mango 6 GB performance acceptance | Pending physical verification | No measured FPS/utilization/VRAM claims; Issue #67 remains open for acceptance |
 
 - 2026-10-05: verified GitHub main through the connected integration. Preserved all
@@ -23,6 +23,18 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
   decoder surfaces and driver overhead require physical total-memory measurement.
 - Work proceeds in focused design/foundation/decode/compositor/integration/review
   commits. GPU initialization and shader failures must preserve CPU recovery.
+- Local verification: 268/268 managed tests pass (two existing named-pipe tests
+  require the CI host); native contracts 5/5; current WPF/smoke solution cross-build
+  has zero warnings/errors. Local ASan/UBSan 5/5 pass with leak detection disabled
+  because LeakSanitizer cannot inspect this traced host. Full CI Linux leak checks
+  and all 270 managed tests pass in Product run 37327415047.
+- Independent review fixed same-frame CPU recovery, canceled GPU completion before
+  pool reset, retained hardware failure state across seek, two-stream hardware
+  limits and rapid/slow backend selection races. Physical-audio assumptions were
+  removed from the new paused WPF selector smoke.
+- Windows CI caught a GPU/CPU pixel mismatch after successful real WARP shader
+  initialization. Preserve the byte-parity gate and improve sampling diagnostics
+  before rerunning; no merge while this regression exists.
 
 ## Completed: still images and AI-authored effects
 
