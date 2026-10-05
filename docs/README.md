@@ -41,4 +41,5 @@
 - [Still images, visual automation and Effect Library](decisions/0015-still-images-and-effect-library.md): conditional v4, native time/value primitives and root-bounded reuse.
 - [D3D11 preview backend](decisions/0016-d3d11-preview.md): bounded native GPU composition, hardware decode download and explicit CPU fallback.
 - [GPU physical acceptance](../staging/windows-issue67.md): same-workload comparison driver and outstanding Mango 6 GB measurements.
-- [Delivery progress](../PROGRESS.md): Issues #62–#64, evidence and remaining acceptance.
+- [GPU preview review](reviews/issue-67-gpu-preview-review.md): authority, resource/recovery audit and review fixes.
+- [Delivery progress](../PROGRESS.md): Issues #62–#64 and #67, evidence and remaining acceptance.

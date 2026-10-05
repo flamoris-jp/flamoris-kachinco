@@ -7,11 +7,11 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
 | Work | Status | Evidence |
 | --- | --- | --- |
 | Current authority and design audit | Complete | AGENTS, Issue #67, native composition, FFmpeg process and WPF presentation inspected; ADR 0016 |
-| Native D3D11 backend and bounded resources | Implemented; Windows parity fix in progress | Native WARP shader executes; byte parity gate found a mismatch and blocks merge |
+| Native D3D11 backend and bounded resources | Complete | CI #137 optimized WARP: exhaustive color/alpha, seeded transforms, resource budget/reset and managed ABI pass |
 | D3D11VA forward decoding | Complete | NV12 hardware download, two hardware processes, sticky software forward retry |
 | Preview integration and backend diagnostics | Complete | Same immutable frame/clock authority, Auto/CPU/D3D11, joined latest-wins switching |
-| Independent review and fixes | In progress | Separate read-only reviewer checks parity, lifetime, codec formats and total memory |
-| Automated verification and merge | In progress | CI #132 Linux: 270/270 and ASan/UBSan 5/5 pass; Windows native parity failure under repair |
+| Independent review and fixes | Complete | Separate read-only source approval at the CI tree; parity, lifetime, codec formats, memory and switch races reviewed |
+| Automated verification and merge | Complete | CI #137 Linux/Windows all pass; PR #68 squash-merged as `9bd10ba` |
 | Mango 6 GB performance acceptance | Pending physical verification | No measured FPS/utilization/VRAM claims; Issue #67 remains open for acceptance |
 
 - 2026-10-05: verified GitHub main through the connected integration. Preserved all
@@ -52,6 +52,32 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
   This isolates an optimized execution problem; it does not prove which compiler
   or driver stage is responsible. The next repair preserves optimized execution,
   double arithmetic and tolerance while replacing byte conversion equivalently.
+- CI #137 passes optimized shader parity after exact IEEE double integer-bit byte
+  conversion, preserving the arithmetic, source sampler and one-byte tolerance.
+  Added all 65,536 front-byte/alpha-byte pairs, Normal/Screen and five opacity
+  values over varied opaque backdrops, alongside 80 seeded multilayer transforms.
+  Separate review verified the conversion mathematically and approved the exact
+  tree used by CI. Windows UI/package, packaged external MCP and clean-PATH startup
+  gates also pass.
+
+### Implemented delivery outcome
+
+- Reviewed and validated code head: `05def0d48ec9939b31cfd0b00188bab3ccd93d07`.
+- Product CI #137: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/37331815732
+  — Linux/headless and Windows/shell jobs both **success**. All 270 managed Linux
+  tests, native ASan/UBSan/leak contracts 5/5, optimized WARP pixel/resource
+  contracts, Windows managed ABI/backend 41/41, actual WPF selector/raster,
+  portable archive/publish, packaged external MCP and clean-PATH startup pass.
+- Separate read-only agent review approved the exact validated source tree. This
+  is not independent human review or Mango physical acceptance.
+- PR #68: https://github.com/flamoris-jp/flamoris-kachinco/pull/68 — squash-merged
+  to main as `9bd10ba0afd5334a3d940c260f8789dc028f6e88`.
+- Issue #67 stays open for representative 1080p speedup, total VRAM, actual
+  presented/drop behavior and physical A/V checks on Mango. The reproducible
+  benchmark and remaining scenarios are in `staging/windows-issue67.md`. No
+  hardware speedup or zero-copy result is claimed.
+- This outcome update changes documentation only; Product/test/workflow files
+  remain exactly the validated and merged implementation.
 
 ## Completed: still images and AI-authored effects
 
