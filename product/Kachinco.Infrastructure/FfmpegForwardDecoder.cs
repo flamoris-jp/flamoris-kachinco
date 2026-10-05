@@ -17,6 +17,9 @@ namespace Kachinco.Infrastructure;
 public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
 {
     public const int MaximumVideoStreams = 8;
+    // Each FFmpeg D3D11VA process owns its codec surface pool. Bound simultaneous
+    // hardware processes separately; other contributors retain software forward streams.
+    public const int MaximumHardwareVideoStreams = 2;
     public const int MaximumAudioStreams = 8;
     private readonly Dictionary<long, PoolEntry<VideoStream>> videos = [];
     private readonly Dictionary<long, PoolEntry<AudioStream>> audios = [];
@@ -26,21 +29,37 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     private readonly string role;
     private readonly IMediaDecoder randomVideoFallback;
     private readonly bool ownsRandomVideoFallback;
+    private readonly PreviewDecodePreference decodePreference;
+    private readonly Func<IEnumerable<string>, NativeMediaProcess>? startVideoProcess;
+    private PreviewDecodeDiagnostics decodeDiagnostics;
+    private string? hardwareFailure;
     private long accessSequence, streamSequence;
     private long processStarts;
     private long startElapsed, stopElapsed;
     public double ProcessStartMilliseconds => startElapsed * 1000d / Stopwatch.Frequency;
     public double ProcessStopMilliseconds => stopElapsed * 1000d / Stopwatch.Frequency;
     public int ActiveVideoStreams => videos.Count;
+    public int ActiveHardwareVideoStreams => videos.Values.Count(entry => entry.Stream.Hardware);
     public int ActiveAudioStreams => audios.Count;
+    public PreviewDecodeDiagnostics DecodeDiagnostics => Volatile.Read(ref decodeDiagnostics);
     public FfmpegForwardDecoder(string executable = "ffmpeg", FlamorisLogger? logger = null,
-        string role = "shared", IMediaDecoder? randomVideoFallback = null)
+        string role = "shared", IMediaDecoder? randomVideoFallback = null,
+        PreviewDecodePreference decodePreference = PreviewDecodePreference.Software)
+        : this(executable, logger, role, randomVideoFallback, decodePreference, null) { }
+    internal FfmpegForwardDecoder(string executable, FlamorisLogger? logger, string role,
+        IMediaDecoder? randomVideoFallback, PreviewDecodePreference decodePreference,
+        Func<IEnumerable<string>, NativeMediaProcess>? startVideoProcess)
     {
+        if (!Enum.IsDefined(decodePreference)) throw new ArgumentOutOfRangeException(nameof(decodePreference));
         this.executable = executable;
         this.logger = logger;
         this.role = role;
         this.randomVideoFallback = randomVideoFallback ?? new FfmpegMediaDecoder(executable);
         ownsRandomVideoFallback = randomVideoFallback is null;
+        this.decodePreference = decodePreference;
+        this.startVideoProcess = startVideoProcess;
+        decodeDiagnostics = new(decodePreference, PreviewDecodePreference.Software,
+            decodePreference == PreviewDecodePreference.D3D11, false, false, null);
     }
     private void Close(StreamProcess stream, string kind = "stream", long? streamId = null, string reason = "release")
     {
@@ -57,47 +76,103 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         if (MediaSourceFormats.TryGetKind(path, out var kind) && kind == MediaKind.Image)
+        {
+            PublishDecode(false, false, "Still images use the software codec adapter.");
             return await randomVideoFallback.VideoAsync(path, 0, width, height, token);
+        }
         string baseKey = Key(path) + $"|{width}|{height}";
         string fallbackKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(baseKey)));
         if (randomVideoFallbacks.TryGet(fallbackKey, out _))
+        {
+            PublishDecode(false, false, hardwareFailure ?? "Forward stream uses accurate software random access.");
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
+        }
         RemoveExpired(videos, baseKey, stream => stream.IsOwnedBy(token));
         var selection = NativePlayback.SelectDecoder(videos.Values.Select(candidate => candidate.Stream.Candidate(candidate.Id,
             candidate.LastUsed, candidate.BaseKey == baseKey && candidate.Stream.IsOwnedBy(token))).ToArray(), true, sourceTicks);
         videos.TryGetValue(selection.Selected, out var entry);
+        bool hardwareAttempt = entry?.Stream.Hardware ?? false;
         try
         {
-            if (entry is null) entry = Open();
-            entry.LastUsed = NextAccess();
-            try { return await entry.Stream.FrameAsync(sourceTicks, token); }
-            catch (IOException exception) when (exception is MediaEndOfStreamException or ForwardWindowExhaustedException)
-            {
-                Close(entry.Stream, "video", entry.Id, "window-ended"); videos.Remove(entry.Id); entry = Open();
-                return await entry.Stream.FrameAsync(sourceTicks, token);
-            }
+            return await ReadForward();
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception exception) when (IsDecodeFailure(exception))
+        {
+            // Native pipe closure can race owner cancellation. Cancellation never launches
+            // a replacement decoder or marks hardware permanently unavailable.
+            token.ThrowIfCancellationRequested();
+            if (hardwareAttempt)
+            {
+                hardwareFailure = CompactReason(exception);
+                foreach (var hardwareEntry in videos.Values.Where(value => value.Stream.Hardware).ToArray())
+                { Close(hardwareEntry.Stream, "video", hardwareEntry.Id, "hardware-fallback"); videos.Remove(hardwareEntry.Id); }
+                entry = null;
+                PublishDecode(false, false, hardwareFailure);
+                logger?.Log(LogLevel.Warn, "preview.decoder", "D3D11VA decode failed; restarting software forward decode",
+                    DecoderProperties(sourceTicks, width, height), exception);
+                try { return await ReadForward(); }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception softwareException) when (IsDecodeFailure(softwareException))
+                { token.ThrowIfCancellationRequested(); return await RandomFallback(softwareException); }
+            }
+            return await RandomFallback(exception);
+        }
+        async Task<ImmutableArray<byte>> RandomFallback(Exception exception)
         {
             if (entry is not null && videos.Remove(entry.Id)) Close(entry.Stream, "video", entry.Id, "degraded");
             randomVideoFallbacks.Put(fallbackKey, [], 0);
+            PublishDecode(false, false, hardwareFailure ?? CompactReason(exception));
             logger?.Log(LogLevel.Warn, "preview.decoder", "Forward video decoder degraded to accurate random access",
                 DecoderProperties(sourceTicks, width, height, entry?.Id), exception);
             return await randomVideoFallback.VideoAsync(path, sourceTicks, width, height, token);
         }
+        async Task<ImmutableArray<byte>> ReadForward()
+        {
+            if (entry is null) entry = Open();
+            entry.LastUsed = NextAccess();
+            ImmutableArray<byte> frame;
+            try { frame = await entry.Stream.FrameAsync(sourceTicks, token); }
+            catch (IOException exception) when (exception is MediaEndOfStreamException or ForwardWindowExhaustedException)
+            {
+                Close(entry.Stream, "video", entry.Id, "window-ended"); videos.Remove(entry.Id); entry = Open();
+                frame = await entry.Stream.FrameAsync(sourceTicks, token);
+            }
+            token.ThrowIfCancellationRequested();
+            PublishDecode(entry.Stream.Hardware, entry.Stream.Hardware, SoftwareReason(entry.Stream.Hardware));
+            return frame;
+        }
         PoolEntry<VideoStream> Open()
         {
             MakeRoom(videos, MaximumVideoStreams);
+            hardwareAttempt = decodePreference == PreviewDecodePreference.D3D11 && hardwareFailure is null &&
+                ActiveHardwareVideoStreams < MaximumHardwareVideoStreams;
+            PublishDecode(hardwareAttempt, false, SoftwareReason(hardwareAttempt));
             Interlocked.Increment(ref processStarts);
             long at = Stopwatch.GetTimestamp();
-            var stream = new VideoStream(executable, path, sourceTicks, width, height, token);
+            var stream = new VideoStream(executable, path, sourceTicks, width, height, token, hardwareAttempt, startVideoProcess);
             Interlocked.Add(ref startElapsed, Stopwatch.GetTimestamp() - at);
             var opened = new PoolEntry<VideoStream>(NextStream(), baseKey, stream, NextAccess()); videos.Add(opened.Id, opened);
             logger?.Debug("preview.decoder", "Opened forward video decoder", DecoderProperties(sourceTicks, width, height, opened.Id));
             return opened;
         }
+    }
+    private string? SoftwareReason(bool hardware) => hardware ? null : hardwareFailure ??
+        (decodePreference == PreviewDecodePreference.D3D11 ? "Hardware decoder stream limit reached; using software forward decode." : null);
+    private void PublishDecode(bool hardware, bool confirmed, string? reason) => Volatile.Write(ref decodeDiagnostics,
+        new PreviewDecodeDiagnostics(decodePreference, hardware ? PreviewDecodePreference.D3D11 : PreviewDecodePreference.Software,
+            decodePreference == PreviewDecodePreference.D3D11, confirmed, hardware, reason));
+    private static bool IsDecodeFailure(Exception exception) =>
+        exception is IOException or InvalidDataException or InvalidOperationException or System.ComponentModel.Win32Exception;
+    private static string CompactReason(Exception exception)
+    {
+        string prefix = exception.GetType().Name + ": ";
+        string detail = exception.Message.Replace('\r', ' ').Replace('\n', ' ');
+        int maximum = 512 - prefix.Length;
+        // FFmpeg puts device/codec failure details after its version/header text.
+        return prefix + (detail.Length <= maximum ? detail : "..." + detail[^(maximum - 3)..]);
     }
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
     {
@@ -121,16 +196,25 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         entry.LastUsed = NextAccess();
         return await entry.Stream.BlockAsync(count, token);
     }
-    public void Dispose()
+    // The caller joins outstanding work first. Ordinary seek/pause/play resets
+    // release codec surfaces without repeatedly probing a known broken GPU path.
+    public void ResetStreams()
     {
         foreach (var entry in videos.Values) Close(entry.Stream, "video", entry.Id, "dispose"); videos.Clear();
         foreach (var entry in audios.Values) Close(entry.Stream, "audio", entry.Id, "dispose"); audios.Clear();
+    }
+    public void Dispose()
+    {
+        ResetStreams();
         randomVideoFallbacks.Dispose();
         if (ownsRandomVideoFallback && randomVideoFallback is IDisposable disposable) disposable.Dispose();
     }
     private Dictionary<string, object?> DecoderProperties(long sourceTicks, int width, int height, long? streamId = null) => new()
     {
         ["role"] = role, ["sourceTicks"] = sourceTicks, ["width"] = width, ["height"] = height, ["streamId"] = streamId,
+        ["decodeRequested"] = decodePreference.ToString(), ["decodeActive"] = DecodeDiagnostics.ActiveBackend.ToString(),
+        ["hardwareConfirmed"] = DecodeDiagnostics.HardwareConfirmed, ["cpuTransferRequired"] = DecodeDiagnostics.RequiresCpuTransfer,
+        ["decodeFallbackReason"] = DecodeDiagnostics.FallbackReason,
     };
     private long NextAccess() => Interlocked.Increment(ref accessSequence);
     private long NextStream() => Interlocked.Increment(ref streamSequence);
@@ -164,11 +248,12 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         protected Task ErrorTask = Task.CompletedTask;
         protected readonly StringBuilder Error = new();
         protected bool disposed;
-        protected StreamProcess(string executable, IEnumerable<string> args, CancellationToken owner)
+        protected StreamProcess(string executable, IEnumerable<string> args, CancellationToken owner,
+            Func<IEnumerable<string>, NativeMediaProcess>? startProcess = null)
         {
             owner.ThrowIfCancellationRequested(); Owner = owner;
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(owner);
-            Process = NativeMediaProcess.Start(executable, args);
+            Process = startProcess is null ? NativeMediaProcess.Start(executable, args) : startProcess(args);
             cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
@@ -215,12 +300,11 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         private readonly TaskCompletionSource<(long Numerator, long Denominator)> timebase = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private static readonly Regex Config = new(@"config in time_base:\s*(\d+)/(\d+)");
         private static readonly Regex FramePts = new(@"\bn:\s*\d+\s+pts:\s*(-?\d+)");
-        public VideoStream(string executable, string path, long tick, int width, int height, CancellationToken token)
-            : base(executable, ["-v", "info", "-nostdin", "-threads", "1", "-filter_threads", "1", "-ss", FfmpegMediaDecoder.Seconds(tick),
-                "-i", Path.GetFullPath(path), "-map", "0:v:0", "-an", "-t", "2", "-frames:v", "64",
-                "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,showinfo=checksum=0",
-                "-fps_mode", "passthrough", "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], token)
-        { start = tick; this.width = width; this.height = height; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
+        public bool Hardware { get; }
+        public VideoStream(string executable, string path, long tick, int width, int height, CancellationToken token, bool hardware,
+            Func<IEnumerable<string>, NativeMediaProcess>? startProcess)
+            : base(executable, FfmpegVideoDecodeArguments.Build(path, tick, width, height, hardware), token, startProcess)
+        { start = tick; this.width = width; this.height = height; Hardware = hardware; size = checked(width * height * 4); ErrorTask = Task.Factory.StartNew(ReadMetadata, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
         public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, lastRequest, 0, eligible ? 1 : 0);
         public async Task<ImmutableArray<byte>> FrameAsync(long tick, CancellationToken token)
         {
@@ -293,4 +377,3 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         }
     }
 }
-
