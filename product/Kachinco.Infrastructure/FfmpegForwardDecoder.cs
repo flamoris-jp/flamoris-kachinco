@@ -57,6 +57,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
+        if (MediaSourceFormats.TryGetKind(path, out var kind) && kind == MediaKind.Image)
+            return await randomVideoFallback.VideoAsync(path, 0, width, height, token);
         string baseKey = Key(path) + $"|{width}|{height}";
         string fallbackKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(baseKey)));
         if (randomVideoFallbacks.TryGet(fallbackKey, out _))
@@ -291,3 +293,4 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         }
     }
 }
+

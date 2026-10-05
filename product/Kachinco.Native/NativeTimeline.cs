@@ -10,20 +10,22 @@ public readonly record struct NativeEvaluationResult(int Index, int Kind, long T
     long Duration, NativeAppearance Appearance, double Gain);
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct NativeParameterPoint(long Tick, double Value);
+public sealed record NativePropertyCurve(int Index, int Property, NativeParameterPoint[] Points);
 public sealed record NativeGainCurve(int Index, NativeParameterPoint[] Points);
 
 public sealed class NativeTimeline : IDisposable
 {
     private readonly TimelineHandle handle;
     private readonly int capacity;
-    public NativeTimeline(long duration, NativeEvaluationItem[] items, NativeGainCurve[]? curves = null)
+    public NativeTimeline(long duration, NativeEvaluationItem[] items, NativeGainCurve[]? curves = null, NativePropertyCurve[]? visual = null)
     {
         NativeMediaProcess.Check(Methods.Create(duration, items, (uint)items.Length, out handle));
         capacity = items.Length;
         try
         {
             foreach (var curve in curves ?? []) NativeMediaProcess.Check(Methods.SetGainCurve(handle, curve.Index, curve.Points, checked((uint)curve.Points.Length)));
-            handle.Account(checked(items.LongLength * Marshal.SizeOf<NativeEvaluationItem>() + (curves?.Sum(c => c.Points.LongLength * 16) ?? 0) + 32));
+            foreach (var curve in visual ?? []) NativeMediaProcess.Check(Methods.SetPropertyCurve(handle, curve.Index, curve.Property, curve.Points, checked((uint)curve.Points.Length)));
+            handle.Account(checked(items.LongLength * Marshal.SizeOf<NativeEvaluationItem>() + (curves?.Sum(c => c.Points.LongLength * 16) ?? 0) + (visual?.Sum(c => c.Points.LongLength * 16) ?? 0) + 32));
         }
         catch { handle.Dispose(); throw; }
     }
@@ -36,6 +38,10 @@ public sealed class NativeTimeline : IDisposable
     public static double Parameter(NativeParameterPoint[] points, long tick, double fallback)
     {
         NativeMediaProcess.Check(Methods.Parameter(points, (uint)points.Length, tick, fallback, out double value)); return value;
+    }
+    public static double SignedParameter(NativeParameterPoint[] points, long tick, double fallback)
+    {
+        NativeMediaProcess.Check(Methods.SignedParameter(points, (uint)points.Length, tick, fallback, out double value)); return value;
     }
     public unsafe void MixAudio(int index, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int rate, int channels)
     {
@@ -66,8 +72,12 @@ public sealed class NativeTimeline : IDisposable
         internal static extern void Destroy(IntPtr handle);
         [DllImport(Library, EntryPoint = "kn_timeline_evaluate", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Evaluate(TimelineHandle handle, long tick, long duration, [Out] NativeEvaluationResult[] output, uint capacity, out uint count);
+        [DllImport(Library, EntryPoint = "kn_parameter_at_signed", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SignedParameter([In] NativeParameterPoint[] points, uint count, long tick, double fallback, out double output);
         [DllImport(Library, EntryPoint = "kn_parameter_at", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Parameter([In] NativeParameterPoint[] points, uint count, long tick, double fallback, out double output);
+        [DllImport(Library, EntryPoint = "kn_timeline_set_property_curve", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SetPropertyCurve(TimelineHandle handle, int index, int property, [In] NativeParameterPoint[] points, uint count);
         [DllImport(Library, EntryPoint = "kn_timeline_set_gain_curve", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus SetGainCurve(TimelineHandle handle, int index, [In] NativeParameterPoint[] points, uint count);
         [DllImport(Library, EntryPoint = "kn_timeline_mix_audio", CallingConvention = CallingConvention.Cdecl)]
@@ -75,3 +85,4 @@ public sealed class NativeTimeline : IDisposable
             long firstSample, int rate, int channels);
     }
 }
+

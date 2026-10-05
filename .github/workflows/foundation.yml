@@ -65,6 +65,7 @@ jobs:
             artifacts/interactive-preview-metrics.json
             artifacts/inspector-properties.png
             artifacts/volume-automation.png
+            artifacts/effect-library.png
           retention-days: 3
       - name: Portable archive integrity contracts
         shell: pwsh
@@ -102,3 +103,4 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
+

@@ -16,16 +16,30 @@ public interface IMediaDecoder
 public sealed class MediaEndOfStreamException(string message) : IOException(message);
 
 // Each request is independently seekable. Sequential caching is derived future optimization.
-public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDecoder
+public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDecoder, IDisposable
 {
+    private readonly NativeByteCache imageFrames = new(64 * 1024 * 1024, 64);
+    public void Dispose() => imageFrames.Dispose();
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        string? imageKey = null;
+        if (MediaSourceFormats.TryGetKind(path, out var kind) && kind == MediaKind.Image) {
+            sourceTicks = 0;
+            imageKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes($"{Path.GetFullPath(path)}|{PreviewContext.FileStamp(path)}|{width}|{height}")));
+            if (imageFrames.TryGet(imageKey, out var cached)) return ImmutableArray.CreateRange(cached);
+        }
         int size = checked(width * height * 4);
         var bytes = await MediaProcess.ReadAsync(executable,
             ["-v", "error", "-nostdin", "-ss", Seconds(sourceTicks), "-i", Path.GetFullPath(path), "-map", "0:v:0",
              "-an", "-frames:v", "1", "-vf", $"scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0",
              "-threads", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"], size, token);
-        try { return ImmutableArray.CreateRange(NativeDecodedMedia.Rgba(bytes, width, height)); }
+        try {
+            var rgba = NativeDecodedMedia.Rgba(bytes, width, height);
+            token.ThrowIfCancellationRequested();
+            if (imageKey is not null) imageFrames.Put(imageKey, rgba, rgba.Length);
+            return ImmutableArray.CreateRange(rgba);
+        }
         catch (EndOfStreamException e) { throw new MediaEndOfStreamException(e.Message); }
     }
 
@@ -102,3 +116,4 @@ internal static class MediaProcess
         }
     }
 }
+

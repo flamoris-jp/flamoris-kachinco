@@ -101,4 +101,10 @@
   <system:String x:Key="Shell.ScaleY">拡大率 Y</system:String>
   <system:String x:Key="Shell.Rotation">回転</system:String>
   <system:String x:Key="Shell.Gain">クリップ音量</system:String>
+  <system:String x:Key="Shell.EffectLibrary">エフェクトライブラリ…</system:String>
+  <system:String x:Key="Shell.PropertyAutomation">時間変化ポイント</system:String>
+  <system:String x:Key="Shell.PropertyValue">値</system:String>
+  <system:String x:Key="Shell.NewPoint">新規ポイント</system:String>
+  <system:String x:Key="Shell.DeletePoint">ポイント削除</system:String>
 </ResourceDictionary>
+

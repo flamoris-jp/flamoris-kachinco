@@ -226,7 +226,7 @@ public static class TimelineEditPlanner
         var asset = project.Assets.FirstOrDefault(a => a.Id == mediaId);
         if (sequence is null || asset is null || newTrackId == Guid.Empty || ProjectValidator.ContainsId(project, newTrackId) || newTrackId == clipId)
             return Result<EditBatch>.Fail(Diagnostic.Error("INVALID_PLACEMENT", "Choose a sequence, media and unique track identity."));
-        var kind = asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
+        var kind = asset.Kind != MediaKind.Wav ? TrackKind.Video : TrackKind.Audio;
         int index = Array.FindIndex(sequence.Tracks.ToArray(), t => t.Kind == kind);
         if (index < 0) index = 0;
         string name = (kind == TrackKind.Video ? "V" : "A") + (sequence.Tracks.Count(t => t.Kind == kind) + 1);
@@ -288,7 +288,7 @@ public static class TimelineEditPlanner
 
         var asset = project.Assets.First(x => x.Id == clip.MediaAssetId);
         if (!TimelineTime.ValidRange(command.StartTicks, command.DurationTicks, sequence.DurationTicks) ||
-            !TimelineTime.ValidRange(command.SourceInTicks, command.DurationTicks, asset.DurationTicks))
+            !TimelineTime.ValidRange(command.SourceInTicks, command.DurationTicks, (asset.Kind == MediaKind.Image ? long.MaxValue : asset.DurationTicks)))
             return Result<TrimClip>.Fail(Diagnostic.Error("INVALID_TRIM", "Trim edge is outside the available timeline/source range.", clipId));
         if (Overlaps(track, command.StartTicks, command.DurationTicks, clipId)) return Result<TrimClip>.Fail(Overlap(track.Id));
         return Result<TrimClip>.Ok(command);
@@ -334,5 +334,6 @@ public static class TimelineEditPlanner
     }
 
     private static bool Compatible(TrackKind track, MediaKind media) =>
-        track == TrackKind.Video && media == MediaKind.Mov || track == TrackKind.Audio && media == MediaKind.Wav;
+        track == TrackKind.Video && media is MediaKind.Mov or MediaKind.Image || track == TrackKind.Audio && media == MediaKind.Wav;
 }
+

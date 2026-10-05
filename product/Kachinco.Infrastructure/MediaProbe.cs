@@ -38,7 +38,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         string fullPath;
         try
         {
-            if (string.IsNullOrWhiteSpace(path)) return Failure("MEDIA_PATH_REQUIRED", "Choose a MOV, MP4, WAV, MP3 or M4A file.");
+            if (string.IsNullOrWhiteSpace(path)) return Failure("MEDIA_PATH_REQUIRED", "Choose a PNG, JPEG, WebP, MOV, MP4, WAV, MP3 or M4A file.");
             fullPath = Path.GetFullPath(path);
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
@@ -47,7 +47,7 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         }
 
         if (!File.Exists(fullPath)) return Failure("MEDIA_NOT_FOUND", "The selected media file does not exist.", path: fullPath);
-        if (!MediaSourceFormats.TryGetKind(fullPath, out _)) return Failure("UNSUPPORTED_MEDIA_SOURCE", "Supported video: MOV/MP4; audio: WAV/MP3/M4A.", path: fullPath);
+        if (!MediaSourceFormats.TryGetKind(fullPath, out _)) return Failure("UNSUPPORTED_MEDIA_SOURCE", "Supported images: PNG/JPEG/WebP; video: MOV/MP4; audio: WAV/MP3/M4A.", path: fullPath);
 
         NativeMediaProcess process;
         try
@@ -145,7 +145,7 @@ public static class MediaProbeParser
     public static Result<MediaProbeInfo> Parse(string sourcePath, string ffprobeJson)
     {
         if (!MediaSourceFormats.TryGetKind(sourcePath, out var expectedKind))
-            return Fail("UNSUPPORTED_MEDIA_SOURCE", "Supported video: MOV/MP4; audio: WAV/MP3/M4A.", sourcePath);
+            return Fail("UNSUPPORTED_MEDIA_SOURCE", "Supported images: PNG/JPEG/WebP; video: MOV/MP4; audio: WAV/MP3/M4A.", sourcePath);
         try
         {
             using var document = JsonDocument.Parse(ffprobeJson, new() { MaxDepth = 32 });
@@ -187,18 +187,24 @@ public static class MediaProbeParser
                 }
             }
 
-            if ((expectedKind == MediaKind.Mov && !hasVideo) || (expectedKind == MediaKind.Wav && !hasAudio))
+            if ((expectedKind != MediaKind.Wav && !hasVideo) || (expectedKind == MediaKind.Wav && !hasAudio))
                 return Fail("MEDIA_KIND_MISMATCH", "The file has no stream of the video/audio kind required by its extension.", sourcePath);
             var container = Text(format, "format_name");
             if (!ContainerMatches(sourcePath, container))
                 return Fail("MEDIA_CONTAINER_MISMATCH", "The actual media container does not match a supported format for this extension.", sourcePath);
-            string? selectedCodec = expectedKind == MediaKind.Mov ? videoCodec : audioCodec;
+            string? selectedCodec = expectedKind != MediaKind.Wav ? videoCodec : audioCodec;
             if (string.IsNullOrWhiteSpace(selectedCodec) || selectedCodec == "unknown" ||
-                (expectedKind == MediaKind.Mov ? width is null || height is null : sampleRate is null || channels is null))
+                (expectedKind != MediaKind.Wav ? width is null || height is null : sampleRate is null || channels is null))
                 return Fail("MEDIA_STREAM_UNSUPPORTED", "The selected media stream has missing or unsupported codec metadata.", sourcePath);
             // Kachinco decodes 0:v:0 from video and 0:a:0 from audio. Embedded video audio is
             // intentionally excluded, so a longer audio/container tail must not extend a
             // video clip beyond the final decodable frame.
+            if (expectedKind == MediaKind.Image) {
+                var expectedCodec = Path.GetExtension(sourcePath).ToLowerInvariant() switch { ".png" => "png", ".jpg" or ".jpeg" => "mjpeg", ".webp" => "webp", _ => "" };
+                if (hasAudio || videoDuration is > 0 || formatDuration is > 0 || videoCodec != expectedCodec || width > 16384 || height > 16384 || (long)width! * height! > 67108864)
+                    return Fail("MEDIA_STREAM_UNSUPPORTED", "Use a bounded PNG/JPEG/WebP still image matching its extension.", sourcePath);
+                return Result<MediaProbeInfo>.Ok(new(Path.GetFullPath(sourcePath), expectedKind, TimelineTime.SecondsToTicks(5), null, null, width, height, null, codecs.ToImmutable()));
+            }
             decimal? durationSeconds = expectedKind == MediaKind.Mov
                 ? videoDuration ?? formatDuration
                 : audioDuration ?? formatDuration;
@@ -224,6 +230,9 @@ public static class MediaProbeParser
             ".mov" or ".mp4" or ".m4a" => formats.Any(f => f is "mov" or "mp4" or "m4a"),
             ".wav" => formats.Contains("wav", StringComparer.Ordinal),
             ".mp3" => formats.Contains("mp3", StringComparer.Ordinal),
+            ".png" => formats.Contains("png_pipe", StringComparer.Ordinal),
+            ".jpg" or ".jpeg" => formats.Any(f => f is "jpeg_pipe" or "image2"),
+            ".webp" => formats.Contains("webp_pipe", StringComparer.Ordinal),
             _ => false
         };
     }
@@ -252,3 +261,4 @@ public static class MediaProbeParser
     private static Result<MediaProbeInfo> Fail(string code, string message, string path) =>
         Result<MediaProbeInfo>.Fail(Diagnostic.Error(code, message, path: path));
 }
+

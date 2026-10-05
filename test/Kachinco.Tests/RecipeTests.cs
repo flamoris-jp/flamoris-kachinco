@@ -69,6 +69,31 @@ public sealed class RecipeTests
         }
         finally { Directory.Delete(folder,true); }
     }
+    [TestMethod]
+    public async Task LibraryBoundRecipeGeneratesThroughOrdinaryPipelineWithoutDuplicateRecipe()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "kachinco-bound-recipe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var f = new Fixture(); var clapper = new Clapper(Fixture.Id(20), "A-1", 0, Fixture.T / 10, null, f.VideoTrackId, null, "");
+            Assert.IsTrue(f.Edit(new AddClapper(f.SequenceId, clapper)).Success);
+            var effect = new EffectDefinition(1, Guid.NewGuid(), "Spark", "", 1, "1", [], new(), "text(text='x')", 42);
+            var plan = EffectComposition.PlanRecipe(f.Session.GetProject(), f.SequenceId, clapper.Id, effect);
+            Assert.IsTrue(plan.Success); Assert.IsTrue(f.Session.Execute(plan.Value!).Success);
+            var recipe = f.Project.Sequences[0].Recipes.Single(); var before = ProjectJson.Serialize(f.Project).Value;
+            var prepared = await new RecipeGenerationService(new RecipeCompiler(), new SolidRecipeRasterizer()).PrepareAsync(
+                f.Session.GetProject(), f.SequenceId, recipe, Path.Combine(folder, "bound.mov"));
+            Assert.IsTrue(prepared.Success, string.Join(";", prepared.Diagnostics.Select(d => d.Message)));
+            Assert.IsFalse(prepared.Value!.Batch.Commands.Any(c => c is AddRecipe or UpdateRecipe));
+            Assert.IsTrue(f.Session.Execute(prepared.Value.Batch).Success);
+            Assert.AreEqual(1, f.Project.Sequences[0].Recipes.Length);
+            Assert.AreEqual(recipe.Id, f.Project.Assets.Single(a => a.Id == prepared.Value.MediaAssetId).Provenance!.RecipeId);
+            Assert.IsTrue(f.Session.Undo().Success); Assert.AreEqual(before, ProjectJson.Serialize(f.Project).Value);
+            Assert.IsTrue(f.Session.Redo().Success);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
     private sealed class SolidRecipeRasterizer : IRecipeRasterizer
     {
         public ValueTask<System.Collections.Immutable.ImmutableArray<byte>> RenderAsync(RecipeIr ir,Recipe recipe,Clapper clapper,SequenceSettings settings,long localTicks,CancellationToken token)
@@ -97,3 +122,4 @@ public sealed class RecipeTests
         Assert.IsFalse(f.Edit(new DeleteClapper(f.SequenceId,clapper.Id)).Success);
     }
 }
+

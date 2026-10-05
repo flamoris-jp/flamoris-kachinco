@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -24,6 +25,8 @@ public static class McpTypedSchema
         if (type == typeof(bool)) return new() { ["type"] = "boolean" };
         if (type == typeof(int)) return new() { ["type"] = "integer", ["minimum"] = int.MinValue, ["maximum"] = int.MaxValue };
         if (type == typeof(double)) return new() { ["type"] = "number" };
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ImmutableArray<>))
+            return new() { ["type"] = "array", ["maxItems"] = 4096, ["items"] = Describe(type.GetGenericArguments()[0]) };
         if (type.IsEnum) return new() { ["type"] = "string", ["enum"] = new JsonArray(Enum.GetNames(type).Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) };
         var properties = new JsonObject(); var required = new JsonArray();
         foreach (var field in Fields(type))
@@ -58,6 +61,12 @@ public static class McpTypedSchema
         if (type == typeof(int)) { Require(value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out _)); return; }
         if (type == typeof(double)) { Require(value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var d) && double.IsFinite(d)); return; }
         if (type.IsEnum) { Require(value.ValueKind == JsonValueKind.String && Enum.GetNames(type).Contains(value.GetString(), StringComparer.Ordinal)); return; }
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ImmutableArray<>))
+        {
+            Require(value.ValueKind == JsonValueKind.Array && value.GetArrayLength() <= 4096);
+            foreach (var item in value.EnumerateArray()) Validate(type.GetGenericArguments()[0], item);
+            return;
+        }
         Require(value.ValueKind == JsonValueKind.Object);
         var fields = Fields(type).ToDictionary(Name);
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -72,3 +81,4 @@ public static class McpTypedSchema
     }
     private static void Require(bool condition) { if (!condition) throw new JsonException("Invalid typed field."); }
 }
+

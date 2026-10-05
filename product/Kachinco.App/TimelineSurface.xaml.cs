@@ -139,7 +139,7 @@ public partial class TimelineSurface : UserControl
         int row = geometry.HitRow(point.Y);
         if (row < 0 || row >= rows.Length || point.X < 0) return false;
         var asset = project.Assets.FirstOrDefault(x => x.Id == id);
-        if (asset is null || rows[row].Kind != (asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio)) return false;
+        if (asset is null || rows[row].Kind != (asset.Kind != MediaKind.Wav ? TrackKind.Video : TrackKind.Audio)) return false;
         mediaId = id; trackId = rows[row].TrackId ?? Guid.Empty;
         ticks = Coordinates.PlacementTicks((decimal)point.X, sequence.Settings.FrameRate, SnappingEnabled,
             TimelineEditPlanner.SnapTargets(sequence, null, playheadTicks));
@@ -154,7 +154,7 @@ public partial class TimelineSurface : UserControl
         if (valid && project is not null && sequence is not null)
         {
             var rows = TimelineLanes.Create(sequence);
-            var kind = project.Assets.First(a => a.Id == mediaId).Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
+            var kind = project.Assets.First(a => a.Id == mediaId).Kind != MediaKind.Wav ? TrackKind.Video : TrackKind.Audio;
             int row = Array.FindIndex(rows, t => (t.TrackId ?? Guid.Empty) == trackId && t.Kind == kind);
             var asset = project.Assets.First(a => a.Id == mediaId);
             dropGhost = new Border { Width = Math.Max(1, ToDouble(viewport.TicksToPixels(asset.DurationTicks))),
@@ -642,3 +642,4 @@ public partial class TimelineSurface : UserControl
         public Result<TimelineReorderPlan>? Ripple { get; set; }
     }
 }
+

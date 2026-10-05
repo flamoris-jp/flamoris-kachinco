@@ -101,4 +101,10 @@
   <system:String x:Key="Shell.ScaleY">Scale Y</system:String>
   <system:String x:Key="Shell.Rotation">Rotation</system:String>
   <system:String x:Key="Shell.Gain">Clip volume</system:String>
+  <system:String x:Key="Shell.EffectLibrary">Effect Library…</system:String>
+  <system:String x:Key="Shell.PropertyAutomation">Property automation</system:String>
+  <system:String x:Key="Shell.PropertyValue">Value</system:String>
+  <system:String x:Key="Shell.NewPoint">New point</system:String>
+  <system:String x:Key="Shell.DeletePoint">Delete point</system:String>
 </ResourceDictionary>
+

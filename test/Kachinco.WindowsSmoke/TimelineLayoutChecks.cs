@@ -22,7 +22,7 @@ internal static class TimelineLayoutChecks
         if (!japanese.Keys.Cast<string>().Order().SequenceEqual(english.Keys.Cast<string>().Order()) ||
             english.Keys.Cast<string>().Any(key => string.IsNullOrWhiteSpace(english[key]?.ToString())) ||
             import.Content?.ToString() != "Import media…" ||
-            !((TextBlock)main.FindName("WelcomeText")).Text.Contains("Import MOV / MP4 / WAV / MP3 / M4A") ||
+            !((TextBlock)main.FindName("WelcomeText")).Text.Contains("Import PNG / JPEG / WebP / MOV / MP4 / WAV / MP3 / M4A") ||
             ((TextBlock)main.FindName("PlaybackStatus")).Text != "Stopped")
             throw new Exception("English resources and live startup/transport labels must switch together.");
         ((MenuItem)main.FindName("JapaneseMenu")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

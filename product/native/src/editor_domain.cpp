@@ -67,15 +67,15 @@ json validate(const json& p) {
         if(a.is_null()) { e("INVALID_ASSET","Null media asset."); continue; }
         const auto& id=a.at("id"); identity(id,field(a,"name"),"assets"); assets.emplace(guid(id),&a);
         auto kind=integer(a.at("kind"));
-        if(kind<0||kind>1) e("INVALID_MEDIA_KIND","Unknown media kind.",id);
-        if(!valid_range(0,integer(a.at("durationTicks")))) e("INVALID_MEDIA_DURATION","Media duration must be positive.",id);
+        if(kind<0||kind>2) e("INVALID_MEDIA_KIND","Unknown media kind.",id);
+        if(!valid_range(0,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_MEDIA_DURATION","Media duration must be positive.",id);
         const auto& path=field(a,"sourcePath"); bool supported=false;
         if(text_ok(path,32768)) {
             const auto s=path.get<std::string>(); auto dot=s.find_last_of('.'); auto slash=s.find_last_of("/\\");
             std::string ext=dot!=std::string::npos&&(slash==std::string::npos||dot>slash)?s.substr(dot):"";
             for(char& c:ext) if(c>='A'&&c<='Z') c=static_cast<char>(c+32);
             supported=s.find('\0')==std::string::npos&&s.find('\r')==std::string::npos&&s.find('\n')==std::string::npos&&s.find("://")==std::string::npos&&
-                (kind==0?(ext==".mov"||ext==".mp4"):kind==1?(ext==".wav"||ext==".mp3"||ext==".m4a"):false);
+                (kind==0?(ext==".mov"||ext==".mp4"):kind==1?(ext==".wav"||ext==".mp3"||ext==".m4a"):kind==2?(ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".webp"):false);
         }
         if(!supported) e("UNSUPPORTED_MEDIA_SOURCE","Register a local MOV/MP4 video or WAV/MP3/M4A audio path matching its media kind.",id,"sourcePath");
         const auto& rate=field(a,"sampleRate"); const auto& channels=field(a,"channels");
@@ -133,14 +133,35 @@ json validate(const json& p) {
                 if(!valid_range(integer(c.at("startTicks")),cd,duration)) e("INVALID_TIMELINE_RANGE","Clip must fit inside the sequence.",cid);
                 auto it=assets.find(guid(c.at("mediaAssetId")));
                 if(it==assets.end()) e("MEDIA_NOT_FOUND","Clip references missing media.",cid,"mediaAssetId");
-                else { const auto& a=*it->second; if(!valid_range(integer(c.at("sourceInTicks")),cd,integer(a.at("durationTicks")))) e("INVALID_SOURCE_RANGE","Source range must fit inside the registered media.",cid);
-                    if((kind==0&&integer(a.at("kind"))!=0)||(kind==1&&integer(a.at("kind"))!=1)) e("TRACK_MEDIA_MISMATCH","Video tracks accept video assets; audio tracks accept audio assets.",cid); }
+                else { const auto& a=*it->second; if(!valid_range(integer(c.at("sourceInTicks")),cd,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_SOURCE_RANGE","Source range must fit inside the registered media.",cid);
+                    if((kind==0&&integer(a.at("kind"))!=0&&integer(a.at("kind"))!=2)||(kind==1&&integer(a.at("kind"))!=1)) e("TRACK_MEDIA_MISMATCH","Video tracks accept video assets; audio tracks accept audio assets.",cid); }
                 const auto& a=field(c,"appearance"); const auto& tr=field(a,"transform");
                 bool good=a.is_object()&&tr.is_object()&&integer(a.at("blend"))>=0&&integer(a.at("blend"))<=1&&finite(field(a,"opacity"));
                 if(good) good=a.at("opacity").get<double>()>=0&&a.at("opacity").get<double>()<=1;
                 for(const char* k:{"x","y","rotationDegrees","scaleX","scaleY"}) good=good&&finite(field(tr,k));
                 if(good) good=tr.at("scaleX").get<double>()>0&&tr.at("scaleY").get<double>()>0;
                 if(!good) e("INVALID_APPEARANCE","Transform must be finite, scales positive and opacity within [0,1].",cid);
+                const auto& automation=field(a,"automation");
+                if(!automation.is_null()) {
+                    if(!automation.is_array()||automation.size()>6) e("INVALID_AUTOMATION","At most six initialized visual curves are allowed.",cid);
+                    else {
+                        if(kind!=0&&!automation.empty()) e("PROPERTY_VISUAL_REQUIRED","Property curves belong to visual clips.",cid);
+                        std::set<int64_t> properties; std::set<std::string> point_ids;
+                        for(const auto& curve:automation) {
+                            if(!curve.is_object()||curve.size()!=2||!curve.contains("property")||!curve.contains("points")) {e("INVALID_AUTOMATION","Curve requires property and points.",cid);continue;}
+                            auto property=integer(curve.at("property"));const auto& ps=curve.at("points");
+                            if(property<0||property>5||!properties.insert(property).second||!ps.is_array()||ps.empty()||ps.size()>4096) {e("INVALID_AUTOMATION","Use distinct supported properties with 1–4096 points.",cid);continue;}
+                            int64_t previous=0;bool first=true;
+                            for(const auto& point:ps) {
+                                if(!point.is_object()||point.size()!=3||!point.contains("id")||!point.contains("tick")||!point.contains("value")) {e("INVALID_PROPERTY_POINT","Point requires id, tick and value.",cid);continue;}
+                                const auto key=guid(point.at("id"));auto tick=integer(point.at("tick"));bool valid=finite(field(point,"value"));
+                                if(valid) {auto v=point.at("value").get<double>();valid=((property!=2&&property!=3)||v>0)&&(property!=5||(v>=0&&v<=1));}
+                                if(!valid||key=="00000000-0000-0000-0000-000000000000"||!point_ids.insert(key).second||(!first&&tick<=previous)) e("INVALID_PROPERTY_POINT","Use unique IDs, strictly ordered ticks, finite values, positive scales and opacity [0,1].",cid);
+                                previous=tick;first=false;
+                            }
+                        }
+                    }
+                } else if(a.contains("automation")) e("INVALID_AUTOMATION","Automation must be initialized.",cid);
                 const auto& audio=field(c,"audio"); bool good_audio=audio.is_object()&&finite(field(audio,"gain"));
                 if(good_audio) good_audio=audio.at("gain").get<double>()>=0&&audio.at("gain").get<double>()<=16;
                 if(!good_audio) e("INVALID_AUDIO_PROPERTIES","Gain must be finite and within [0,16].",cid);
@@ -195,7 +216,7 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
     if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
@@ -257,7 +278,7 @@ json apply(json p,const json& request) {
             }
         }
         else if(type=="MoveClip") {json value=values[ci]; values.erase(values.begin()+static_cast<json::difference_type>(ci)); value["startTicks"]=c.at("startTicks"); auto target=find(s.at("tracks"),c.at("targetTrackId"),"TRACK_NOT_FOUND","Track not found."); s["tracks"][target]["clips"].push_back(value);}
-        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
+        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); if(right["appearance"].contains("automation")) for(auto& curve:right["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
         else if(type=="TrimClip") {
             if(values[ci]["audio"].contains("volumePoints")&&!values[ci]["audio"]["volumePoints"].empty()) {
                 auto source=integer(c.at("sourceInTicks"));
@@ -265,10 +286,17 @@ json apply(json p,const json& request) {
                 const auto delta=integer(values[ci].at("sourceInTicks"))-source;
                 for(auto& point:values[ci]["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),delta);
             }
+            if(values[ci]["appearance"].contains("automation")) {
+                const auto source=integer(c.at("sourceInTicks"));if(source<0) reject("INVALID_SOURCE_RANGE","Source in must be nonnegative.",id);
+                const auto delta=integer(values[ci].at("sourceInTicks"))-source;
+                for(auto& curve:values[ci]["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=add(integer(point.at("tick")),delta);
+            }
             for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);
         }
         else if(type=="SetClipProperties") {
+            auto automation=values[ci]["appearance"].value("automation",json::array());
             values[ci]["enabled"]=c.at("enabled");values[ci]["appearance"]=c.at("appearance");
+            values[ci]["appearance"]["automation"]=automation;
             values[ci]["audio"]["gain"]=c.at("audio").at("gain");values[ci]["audio"]["muted"]=c.at("audio").at("muted");
         }
         else if(type=="AddClipVolumePoint"||type=="UpdateClipVolumePoint"||type=="DeleteClipVolumePoint") {
@@ -282,8 +310,41 @@ json apply(json p,const json& request) {
             }
             std::stable_sort(points.begin(),points.end(),[](const json& a,const json& b){return integer(a.at("tick"))<integer(b.at("tick"));});
         }
+        else if(type=="SetClipPropertyCurve") {
+            if(integer(s["tracks"][ti].at("kind"))!=0) reject("PROPERTY_VISUAL_REQUIRED","Property curves belong to visual clips.",id);
+            const auto& value=c.at("curve");
+            if(!value.is_object()||value.size()!=2||!value.contains("property")||!value.contains("points")||!value.at("points").is_array()) reject("INVALID_AUTOMATION","Curve requires property and initialized points.",id);
+            const auto property=integer(value.at("property"));
+            auto& appearance=values[ci]["appearance"];if(!appearance.contains("automation")) appearance["automation"]=json::array();
+            auto& curves=appearance["automation"];
+            auto curve=std::find_if(curves.begin(),curves.end(),[&](const json& v){return integer(v.at("property"))==property;});
+            if(curve!=curves.end()) curves.erase(curve);
+            if(!c.at("curve").at("points").empty()) curves.push_back(c.at("curve"));
+            else if(property<0||property>5) reject("INVALID_PROPERTY","Unknown visual property.",id);
+            std::stable_sort(curves.begin(),curves.end(),[](const json& a,const json& b){return integer(a.at("property"))<integer(b.at("property"));});
+        }
+        else if(type=="AddClipPropertyPoint"||type=="UpdateClipPropertyPoint"||type=="DeleteClipPropertyPoint") {
+            if(integer(s["tracks"][ti].at("kind"))!=0) reject("PROPERTY_VISUAL_REQUIRED","Property curves belong to visual clips.",id);
+            const auto property=integer(c.at("property"));if(property<0||property>5) reject("INVALID_PROPERTY","Unknown visual property.",id);
+            auto& appearance=values[ci]["appearance"];if(!appearance.contains("automation")) appearance["automation"]=json::array();
+            auto& curves=appearance["automation"];auto curve=std::find_if(curves.begin(),curves.end(),[&](const json& v){return integer(v.at("property"))==property;});
+            if(curve==curves.end()) {
+                if(type!="AddClipPropertyPoint") reject("PROPERTY_POINT_NOT_FOUND","Property point not found.",id);
+                curves.push_back({{"property",property},{"points",json::array()}});curve=curves.end()-1;
+            }
+            auto& points=(*curve)["points"];
+            if(type=="AddClipPropertyPoint") points.push_back(c.at("point"));
+            else {
+                auto index=find(points,type=="DeleteClipPropertyPoint"?c.at("pointId"):c.at("point").at("id"),"PROPERTY_POINT_NOT_FOUND","Property point not found.");
+                if(type=="DeleteClipPropertyPoint") points.erase(points.begin()+static_cast<json::difference_type>(index));else points[index]=c.at("point");
+            }
+            std::stable_sort(points.begin(),points.end(),[](const json& a,const json& b){return integer(a.at("tick"))<integer(b.at("tick"));});
+            if(points.empty()) curves.erase(curve);
+            std::stable_sort(curves.begin(),curves.end(),[](const json& a,const json& b){return integer(a.at("property"))<integer(b.at("property"));});
+        }
         else if(type=="UpdateCaption") for(const char* k:{"startTicks","durationTicks","text","enabled"}) values[ci][k]=c.at(k);
     }
     return p;
 }
 }
+

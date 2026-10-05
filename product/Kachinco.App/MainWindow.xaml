@@ -49,6 +49,7 @@
         <MenuItem Header="{DynamicResource Shell.ImportSRT}" Click="ImportSrt_Click" />
         <MenuItem Header="{DynamicResource Shell.ExportSRT}" Click="ExportSrt_Click" />
       </MenuItem>
+      <MenuItem Header="{DynamicResource Shell.EffectLibrary}" Click="EffectLibrary_Click"/>
       <MenuItem x:Name="EditMenu" Header="{DynamicResource Shell.EditE}">
         <MenuItem x:Name="UndoMenuItem" Header="{DynamicResource Shell.UndoU}" Click="Undo_Click" InputGestureText="Ctrl+Z" />
         <MenuItem x:Name="RedoMenuItem" Header="{DynamicResource Shell.RedoR}" Click="Redo_Click" InputGestureText="Ctrl+Y" />
@@ -203,6 +204,12 @@
                 <local:PropertySlider x:Name="ScaleYControl" Tag="ScaleY" SliderMinimum="0.01" SliderMaximum="4" NumberMinimum="5E-324" NumberMaximum="Infinity" DisplayFactor="100" Suffix="%" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.ScaleY}" Margin="0,2,0,6"/>
                 <TextBlock Text="{DynamicResource Shell.Rotation}"/>
                 <local:PropertySlider x:Name="RotationControl" Tag="Rotation" SliderMinimum="-180" SliderMaximum="180" NumberMinimum="-Infinity" NumberMaximum="Infinity" DisplayFactor="1" Suffix="°" EditStarted="InspectorSlider_Started" EditPreview="InspectorSlider_Preview" EditCommitted="InspectorSlider_Committed" EditCancelled="InspectorSlider_Cancelled" AutomationProperties.Name="{DynamicResource Shell.Rotation}" Margin="0,2,0,6"/>
+                <TextBlock Text="{DynamicResource Shell.PropertyAutomation}" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <ComboBox x:Name="PropertyChoice" SelectionChanged="PropertyChoice_Changed"/>
+                <ListBox x:Name="PropertyPoints" DisplayMemberPath="Label" Height="92" SelectionChanged="PropertyPoints_Changed"/>
+                <TextBlock Text="{DynamicResource Shell.VolumeTime}"/><TextBox x:Name="PropertyTimeBox" Text="0"/>
+                <TextBlock Text="{DynamicResource Shell.PropertyValue}"/><TextBox x:Name="PropertyValueBox" Text="0"/>
+                <WrapPanel><Button Content="{DynamicResource Shell.NewPoint}" Click="PropertyPoint_New"/><Button Content="{DynamicResource Shell.Applychanges}" Click="PropertyPoint_Save"/><Button Content="{DynamicResource Shell.DeletePoint}" Click="PropertyPoint_Delete"/></WrapPanel>
               </StackPanel></Expander>
               <Expander x:Name="AudioSection" Header="{DynamicResource Shell.Audio}" Style="{StaticResource InspectorSection}"><StackPanel>
                 <TextBlock Text="{DynamicResource Shell.Gain}"/>
@@ -257,3 +264,4 @@
     </Grid>
   </DockPanel>
 </Window>
+
