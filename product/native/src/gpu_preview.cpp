@@ -4,6 +4,8 @@
 #include <new>
 #include <chrono>
 #include <thread>
+#include <cstddef>
+#include <cstdio>
 
 namespace {
 constexpr uint64_t maximum_budget = UINT64_C(256) * 1024 * 1024;
@@ -27,6 +29,7 @@ const char* KN_CALL kn_gpu_diagnostic() noexcept { return diagnostic; }
 #define NOMINMAX
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <d3d11shader.h>
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
 
@@ -34,6 +37,7 @@ struct kn_gpu_preview {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     ComPtr<ID3D11ComputeShader> shader;
+    ComPtr<ID3DBlob> shader_diagnostics;
     ComPtr<ID3D11Buffer> constants;
     ComPtr<ID3D11Query> completion;
     ComPtr<ID3D11Texture2D> upload, outputs[2], staging;
@@ -93,9 +97,11 @@ void main(uint3 id : SV_DispatchThreadID) {
     precise double b = (double)backBytes.a / (double)255;
     precise double alpha = a + b * ((double)1 - a);
     if (alpha == 0) { Target[id.xy] = uint4(0,0,0,0); return; }
-    Target[id.xy] = uint4(blend_channel(backBytes.r, frontBytes.r, a, b, alpha),
-        blend_channel(backBytes.g, frontBytes.g, a, b, alpha),
-        blend_channel(backBytes.b, frontBytes.b, a, b, alpha), quantize(alpha));
+    uint red = blend_channel(backBytes.r, frontBytes.r, a, b, alpha);
+    uint green = blend_channel(backBytes.g, frontBytes.g, a, b, alpha);
+    uint blue = blend_channel(backBytes.b, frontBytes.b, a, b, alpha);
+    uint alphaByte = quantize(alpha);
+    Target[id.xy] = uint4(red, green, blue, alphaByte);
 }
 )hlsl";
 struct parameters {
@@ -103,6 +109,32 @@ struct parameters {
     uint32_t width, height, mode, reserved, padding0, padding1;
 };
 static_assert(sizeof(parameters) == constant_bytes, "HLSL constant packing is ABI");
+
+HRESULT validate_constants(ID3DBlob* compiled) noexcept {
+    ComPtr<ID3D11ShaderReflection> reflection;
+    HRESULT hr = D3DReflect(compiled->GetBufferPointer(), compiled->GetBufferSize(), __uuidof(ID3D11ShaderReflection), reinterpret_cast<void**>(reflection.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+    auto buffer = reflection->GetConstantBufferByName("Parameters");
+    D3D11_SHADER_BUFFER_DESC buffer_desc{};
+    hr = buffer->GetDesc(&buffer_desc);
+    if (FAILED(hr)) return hr;
+    if (buffer_desc.Size != constant_bytes) {
+        std::snprintf(diagnostic, sizeof(diagnostic), "Shader constant payload is %u bytes, expected %u.", buffer_desc.Size, static_cast<unsigned>(constant_bytes));
+        return E_UNEXPECTED;
+    }
+    const char* names[] = {"X", "Y", "ScaleX", "ScaleY", "Cosine", "Sine", "Opacity", "Width", "Height", "Mode"};
+    const UINT offsets[] = {0, 8, 16, 24, 32, 40, 48, 56, 60, 64};
+    for (unsigned i=0;i<10;++i) {
+        D3D11_SHADER_VARIABLE_DESC desc{};
+        hr = buffer->GetVariableByName(names[i])->GetDesc(&desc);
+        if (FAILED(hr)) return hr;
+        if (desc.StartOffset != offsets[i]) {
+            std::snprintf(diagnostic, sizeof(diagnostic), "Shader constant %s offset is %u, expected %u.", names[i], desc.StartOffset, offsets[i]);
+            return E_UNEXPECTED;
+        }
+    }
+    return S_OK;
+}
 
 int32_t failure(HRESULT hr, int32_t* error) noexcept {
     if (error) *error = static_cast<int32_t>(hr);
@@ -170,6 +202,8 @@ int32_t KN_CALL kn_gpu_create(uint64_t budget, int32_t force_warp, kn_gpu_previe
     hr = D3DCompile(shader_source, sizeof(shader_source) - 1, "Kachinco.GpuPreview", nullptr, nullptr,
         "main", "cs_5_0", D3DCOMPILE_IEEE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &compiled, &errors);
     if (FAILED(hr) && errors) detail(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
+    if (SUCCEEDED(hr)) hr = validate_constants(compiled.Get());
+    if (SUCCEEDED(hr)) (void)D3DDisassemble(compiled->GetBufferPointer(), compiled->GetBufferSize(), 0, nullptr, &p->shader_diagnostics);
     if (SUCCEEDED(hr)) hr = p->device->CreateComputeShader(compiled->GetBufferPointer(), compiled->GetBufferSize(), nullptr, &p->shader);
     if (SUCCEEDED(hr)) {
         D3D11_BUFFER_DESC desc{}; desc.ByteWidth = static_cast<UINT>(constant_bytes);
@@ -265,6 +299,9 @@ int32_t KN_CALL kn_gpu_reset(kn_gpu_preview* p, int32_t* error) noexcept {
     reset(p); return health(p, error);
 }
 uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview* p) noexcept { return p ? p->allocated : 0; }
+const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview* p) noexcept {
+    return p && p->shader_diagnostics ? static_cast<const char*>(p->shader_diagnostics->GetBufferPointer()) : "Shader diagnostic unavailable.";
+}
 #else
 struct kn_gpu_preview {};
 int32_t KN_CALL kn_gpu_create(uint64_t budget, int32_t force_warp, kn_gpu_preview** output, int32_t* error) noexcept {
@@ -282,4 +319,5 @@ int32_t KN_CALL kn_gpu_composite(kn_gpu_preview*, const uint8_t*, uint32_t, cons
 int32_t KN_CALL kn_gpu_read(kn_gpu_preview*, uint8_t*, uint32_t, int32_t* error) noexcept { clear_error(error); return KN_GPU_UNSUPPORTED; }
 int32_t KN_CALL kn_gpu_reset(kn_gpu_preview*, int32_t* error) noexcept { clear_error(error); return KN_GPU_UNSUPPORTED; }
 uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview*) noexcept { return 0; }
+const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview*) noexcept { return "D3D11 is unavailable on this host."; }
 #endif

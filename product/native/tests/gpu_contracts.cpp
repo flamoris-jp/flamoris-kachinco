@@ -8,7 +8,7 @@
 #define REQUIRE(x) do { if (!(x)) { std::fprintf(stderr,"Failed line %d: %s\n",__LINE__,#x); std::abort(); } } while (false)
 
 #if defined(_WIN32)
-static void assert_parity(const std::vector<uint8_t>& actual, const std::vector<uint8_t>& expected,
+static void assert_parity(kn_gpu_preview* gpu, const std::vector<uint8_t>& actual, const std::vector<uint8_t>& expected,
     const std::vector<uint8_t>& backdrop, const std::vector<uint8_t>& source,
     int32_t width, int32_t height, const kn_appearance& a, unsigned iteration, unsigned layer) {
     for (size_t at=0;at<actual.size();++at) {
@@ -29,6 +29,7 @@ static void assert_parity(const std::vector<uint8_t>& actual, const std::vector<
             const auto from=(static_cast<size_t>(sy)*static_cast<size_t>(width)+static_cast<size_t>(sx))*4;
             std::fprintf(stderr,"expected source=(%u,%u,%u,%u) index=(%u,%u)\n",source[from],source[from+1],source[from+2],source[from+3],static_cast<unsigned>(sx),static_cast<unsigned>(sy));
         }
+        std::fprintf(stderr,"Compiled shader diagnostic:\n%s\n",kn_gpu_shader_diagnostics(gpu));
         std::fflush(stderr); REQUIRE(false);
     }
 }
@@ -59,7 +60,7 @@ int main() {
         expected=source;kn_appearance identity{0,0,1,1,0,1,0,0};
         REQUIRE(kn_gpu_composite(gpu,source.data(),static_cast<uint32_t>(source.size()),&identity,&error)==KN_OK);
         REQUIRE(kn_gpu_read(gpu,actual.data(),static_cast<uint32_t>(actual.size()),&error)==KN_OK);
-        assert_parity(actual,expected,backdrop,source,6,5,identity,999,0);
+        assert_parity(gpu,actual,expected,backdrop,source,6,5,identity,999,0);
     }
     std::mt19937 random(67001);
     for (unsigned iteration = 0; iteration < 80; ++iteration) {
@@ -84,7 +85,7 @@ int main() {
             REQUIRE(kn_gpu_read(gpu, actual.data(), size, &error) == KN_OK);
             // CPU and shader division are correctly rounded to <=0.5 ULP; permit 1 byte
             // at final SDR quantization, never changed nearest source selection.
-            assert_parity(actual,expected,backdrop,source,width,height,a,iteration,layer);
+            assert_parity(gpu,actual,expected,backdrop,source,width,height,a,iteration,layer);
         }
         kn_appearance invalid{0,0,0,1,0,1,0,0};
         REQUIRE(kn_gpu_composite(gpu, source.data(), size, &invalid, &error) == KN_INVALID_ARGUMENT);

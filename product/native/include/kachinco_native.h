@@ -135,6 +135,8 @@ KN_API int32_t KN_CALL kn_gpu_reset(kn_gpu_preview* preview, int32_t* error) KN_
 KN_API uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview* preview) KN_NOEXCEPT;
 /* Borrowed thread-local diagnostic, valid until this thread's next GPU operation. */
 KN_API const char* KN_CALL kn_gpu_diagnostic(void) KN_NOEXCEPT;
+/* Borrowed compiled shader diagnostic, valid until preview destruction. */
+KN_API const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview* preview) KN_NOEXCEPT;
 
 
 /* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting. */
