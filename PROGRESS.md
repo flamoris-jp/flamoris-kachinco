@@ -45,6 +45,13 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
   Windows WARP parity: a partial-alpha Screen layer returned red 255 instead of
   18, while green/blue matched. Shader compiler/disassembly diagnostics are the
   next gate; no tolerance or source-sampling change is accepted as a workaround.
+- CI #135 confirmed the compiled 80-byte parameter layout and captured the actual
+  optimized DXBC. Its color arithmetic/dataflow follows the source, but WARP still
+  saturated red incorrectly. CI #136 replayed the identical failing layer with
+  optimization disabled: zero mismatched bytes, including the failing pixel.
+  This isolates an optimized execution problem; it does not prove which compiler
+  or driver stage is responsible. The next repair preserves optimized execution,
+  double arithmetic and tolerance while replacing byte conversion equivalently.
 
 ## Completed: still images and AI-authored effects
 
