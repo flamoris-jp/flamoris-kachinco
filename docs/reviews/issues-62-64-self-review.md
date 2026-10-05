@@ -73,3 +73,12 @@ and in PROGRESS.md.
   close those separate physical acceptance items. Full parallax is not required
   by #62; existing Recipe API remains bounded literal text/particles, not arbitrary
   Python math or unrestricted extension execution.
+
+## Final outcome
+
+Product CI #130 passed at `e2f7b5a`: 249/249 headless managed tests,
+ASan/UBSan native 4/4, Windows ABI 23/23, image/property/library UI history,
+worker/raster, portable package, external MCP and clean-PATH startup.
+The Effect Library screenshot was inspected for readable controls.
+PR #65 squash-merged as `14fd5a9`; #62/#63/#64 were verified completed/closed.
+See PROGRESS.md for the final run link and complete outcome.

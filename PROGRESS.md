@@ -10,8 +10,8 @@ Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
 | Design and AI effects principle (#63) | Complete | ADR 0015 and AGENTS.md adopted before implementation |
 | Still images and native transform automation (#62) | Complete | PNG/JPEG/WebP, shared UI/MCP history and preview/export |
 | Configurable reusable Effect Library (#64) | Complete | executable-adjacent library default, explicit local path preference |
-| Regression tests and review/fix loop | In progress | native contracts and managed tests pass; final Windows CI/package smoke pending |
-| Merge and final verification | Pending | only after acceptance and required checks pass |
+| Regression tests and review/fix loop | Complete | Product CI #130: Linux 249/249; ASan/UBSan 4/4; Windows ABI/UI/worker/package/external MCP all pass |
+| Merge and final verification | Complete | PR #65 squash-merged as `14fd5a9`; Issues #62/#63/#64 closed as completed |
 
 ## Decisions and verification log
 
@@ -28,3 +28,11 @@ Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
 - PR #65 is the review/merge surface: https://github.com/flamoris-jp/flamoris-kachinco/pull/65. Self-review is implementation-author review, not independent human review. Exact final-head CI remains the merge gate.
 
 - Final local review checks: 247/247 managed tests passed (only the two existing socket-restricted McpEnvelopeTests excluded locally); native contracts 4/4; WPF and Windows smoke harness cross-build zero warnings/errors. Full headless tests and actual Windows runtime/package acceptance remain enabled in CI.
+
+## Completed delivery
+
+- Final reviewed code head: `e2f7b5a8180bf921828d2f5fec3780d903af20cd`.
+- Product CI #130: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/37314902947 — both Linux/headless and Windows/shell jobs **success**. Linux includes all 249 managed tests and native ASan/UBSan 4/4; Windows includes 23 ABI tests, actual image/automation/Effect Library UI/history, restricted worker/raster, package integrity/publish, packaged external MCP/media import and clean-PATH startup.
+- The Windows `effect-library.png` screenshot was inspected: path/explicit grant, list/details, save/update/delete/apply and parameter controls are readable within the scrollable window. It is layout evidence, not physical DPI/playback acceptance.
+- PR #65 merged to main with the repository-supported squash method: `14fd5a9aa9589d25a92935df6cca15cd7bc16ef5`. All three issues were verified closed as completed after merge.
+- This final documentation-only update records outcomes after the code merge. No Product/test files change. Physical Windows/DPI acceptance remains the existing #42/manual staging work; full parallax and unrestricted Python are outside these issues.
