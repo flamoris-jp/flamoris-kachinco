@@ -68,16 +68,25 @@ cbuffer Parameters : register(b0) {
 };
 uint quantize(double value) {
     precise double scaled = value * (double)255 + (double)0.5;
-    if (scaled < 0) return 0;
-    if (scaled > 255) return 255;
-    return (uint)scaled;
+    // Optimized WARP execution returned incorrect bytes for fractional inputs;
+    // recompiling identical math without optimization restored full parity.
+    // Decode the IEEE integer bits instead. For [1,256), the high mantissa alone
+    // contains every integer bit, so this is exact floor with no float conversion.
+    uint lowBits, highBits;
+    asuint(scaled, lowBits, highBits);
+    if ((highBits & 0x80000000u) != 0) return 0;
+    uint exponent = (highBits >> 20) & 0x7ffu;
+    if (exponent == 0x7ffu && ((highBits & 0xfffffu) != 0 || lowBits != 0)) return 0;
+    if (exponent < 1023u) return 0;
+    if (exponent > 1030u) return 255;
+    return ((highBits & 0xfffffu) | 0x100000u) >> (1043u - exponent);
 }
 uint blend_channel(uint backByte, uint frontByte, double a, double b, double alpha) {
     precise double back = (double)backByte / (double)255;
     precise double front = (double)frontByte / (double)255;
     precise double mixed = front;
-    // Explicit uniform branching and scalar output avoid FXC's double ternary /
-    // indexed-vector lowering, which corrupted R/B in the forced-WARP contracts.
+    // Keep per-channel arithmetic and the uniform mode branch explicit for
+    // shader diagnostics. CPU and GPU retain the same double operation order.
     [branch] if (Mode == 1) mixed = (double)1 - ((double)1 - back) * ((double)1 - front);
     precise double value = (((double)1 - a) * b * back + a * ((double)1 - b) * front + a * b * mixed) / alpha;
     return quantize(value);

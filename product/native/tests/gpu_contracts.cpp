@@ -82,6 +82,32 @@ int main() {
         REQUIRE(kn_gpu_read(gpu,actual.data(),static_cast<uint32_t>(actual.size()),&error)==KN_OK);
         assert_parity(gpu,actual,expected,backdrop,source,6,5,identity,999,0);
     }
+    {
+        // Every front-byte/alpha-byte pair covers optimized double quantization,
+        // including fractional opacity and Screen over a varying opaque backdrop.
+        constexpr int32_t width=256,height=256;
+        constexpr uint32_t size=static_cast<uint32_t>(width*height*4);
+        std::vector<uint8_t> source(size),backdrop(size),actual(size);
+        for(uint32_t alpha=0;alpha<256;++alpha) for(uint32_t front=0;front<256;++front) {
+            const auto at=(alpha*256+front)*4;
+            source[at]=static_cast<uint8_t>(front);source[at+1]=static_cast<uint8_t>(255-front);
+            source[at+2]=static_cast<uint8_t>((front*73)%256);source[at+3]=static_cast<uint8_t>(alpha);
+            backdrop[at]=static_cast<uint8_t>((front+alpha)%256);backdrop[at+1]=static_cast<uint8_t>((front*17+alpha*31)%256);
+            backdrop[at+2]=static_cast<uint8_t>((front*alpha)%256);backdrop[at+3]=255;
+        }
+        kn_appearance identity{0,0,1,1,0,1,0,0};
+        const double opacities[]={0,0.1,0.5,0.75,1};
+        for(int32_t mode=0;mode<2;++mode) for(unsigned opacity=0;opacity<5;++opacity) {
+            const kn_appearance a{0,0,1,1,0,opacities[opacity],mode,0};
+            auto expected=backdrop;
+            REQUIRE(kn_composite_rows(expected.data(),source.data(),size,width,height,&a,0,height)==KN_OK);
+            REQUIRE(kn_gpu_begin(gpu,width,height,&error)==KN_OK);
+            REQUIRE(kn_gpu_composite(gpu,backdrop.data(),size,&identity,&error)==KN_OK);
+            REQUIRE(kn_gpu_composite(gpu,source.data(),size,&a,&error)==KN_OK);
+            REQUIRE(kn_gpu_read(gpu,actual.data(),size,&error)==KN_OK);
+            assert_parity(gpu,actual,expected,backdrop,source,width,height,a,1000+static_cast<unsigned>(mode),opacity);
+        }
+    }
     std::mt19937 random(67001);
     for (unsigned iteration = 0; iteration < 80; ++iteration) {
         const int32_t width = 9 + static_cast<int32_t>(random() % 29), height = 5 + static_cast<int32_t>(random() % 23);
