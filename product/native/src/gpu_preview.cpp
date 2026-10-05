@@ -67,6 +67,16 @@ uint quantize(double value) {
     if (scaled > 255) return 255;
     return (uint)scaled;
 }
+uint blend_channel(uint backByte, uint frontByte, double a, double b, double alpha) {
+    precise double back = (double)backByte / (double)255;
+    precise double front = (double)frontByte / (double)255;
+    precise double mixed = front;
+    // Explicit uniform branching and scalar output avoid FXC's double ternary /
+    // indexed-vector lowering, which corrupted R/B in the forced-WARP contracts.
+    [branch] if (Mode == 1) mixed = (double)1 - ((double)1 - back) * ((double)1 - front);
+    precise double value = (((double)1 - a) * b * back + a * ((double)1 - b) * front + a * b * mixed) / alpha;
+    return quantize(value);
+}
 [numthreads(8,8,1)]
 void main(uint3 id : SV_DispatchThreadID) {
     if (id.x >= Width || id.y >= Height) return;
@@ -83,16 +93,9 @@ void main(uint3 id : SV_DispatchThreadID) {
     precise double b = (double)backBytes.a / (double)255;
     precise double alpha = a + b * ((double)1 - a);
     if (alpha == 0) { Target[id.xy] = uint4(0,0,0,0); return; }
-    uint4 result;
-    [unroll] for (uint channel=0;channel<3;++channel) {
-        precise double back = (double)backBytes[channel] / (double)255;
-        precise double front = (double)frontBytes[channel] / (double)255;
-        precise double mixed = Mode == 1 ? (double)1 - ((double)1 - back) * ((double)1 - front) : front;
-        precise double value = (((double)1 - a) * b * back + a * ((double)1 - b) * front + a * b * mixed) / alpha;
-        result[channel] = quantize(value);
-    }
-    result.a = quantize(alpha);
-    Target[id.xy] = result;
+    Target[id.xy] = uint4(blend_channel(backBytes.r, frontBytes.r, a, b, alpha),
+        blend_channel(backBytes.g, frontBytes.g, a, b, alpha),
+        blend_channel(backBytes.b, frontBytes.b, a, b, alpha), quantize(alpha));
 }
 )hlsl";
 struct parameters {
