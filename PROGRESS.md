@@ -41,6 +41,10 @@ Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
   expression with explicit scalar RGB calls and a mode branch; keep double source
   coordinates, CPU operation order and the one-byte quantization tolerance intact.
   Windows execution must verify the fix before merge.
+- CI #134 kept Linux's full contracts green but the scalar rewrite still failed
+  Windows WARP parity: a partial-alpha Screen layer returned red 255 instead of
+  18, while green/blue matched. Shader compiler/disassembly diagnostics are the
+  next gate; no tolerance or source-sampling change is accepted as a workaround.
 
 ## Completed: still images and AI-authored effects
 
