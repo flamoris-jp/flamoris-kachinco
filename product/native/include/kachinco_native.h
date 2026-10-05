@@ -137,6 +137,9 @@ KN_API uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview* preview) KN
 KN_API const char* KN_CALL kn_gpu_diagnostic(void) KN_NOEXCEPT;
 /* Borrowed compiled shader diagnostic, valid until preview destruction. */
 KN_API const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview* preview) KN_NOEXCEPT;
+/* Forced-WARP diagnostic only: recompile the same repository-owned shader without
+   optimization to isolate compiler defects. Never changes hardware/default policy. */
+KN_API int32_t KN_CALL kn_gpu_diagnostic_without_optimization(kn_gpu_preview* preview, int32_t* error) KN_NOEXCEPT;
 
 
 /* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting. */

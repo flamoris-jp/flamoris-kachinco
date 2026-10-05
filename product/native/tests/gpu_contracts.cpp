@@ -30,6 +30,26 @@ static void assert_parity(kn_gpu_preview* gpu, const std::vector<uint8_t>& actua
             std::fprintf(stderr,"expected source=(%u,%u,%u,%u) index=(%u,%u)\n",source[from],source[from+1],source[from+2],source[from+3],static_cast<unsigned>(sx),static_cast<unsigned>(sy));
         }
         std::fprintf(stderr,"Compiled shader diagnostic:\n%s\n",kn_gpu_shader_diagnostics(gpu));
+        int32_t error=0;
+        const auto recompiled=kn_gpu_diagnostic_without_optimization(gpu,&error);
+        if(recompiled==KN_OK) {
+            std::vector<uint8_t> alternate(actual.size());
+            const uint32_t size=static_cast<uint32_t>(alternate.size());
+            kn_appearance identity{0,0,1,1,0,1,0,0};
+            auto status=kn_gpu_begin(gpu,width,height,&error);
+            if(status==KN_OK) status=kn_gpu_composite(gpu,backdrop.data(),size,&identity,&error);
+            if(status==KN_OK) status=kn_gpu_composite(gpu,source.data(),size,&a,&error);
+            if(status==KN_OK) status=kn_gpu_read(gpu,alternate.data(),size,&error);
+            if(status==KN_OK) {
+                size_t different=0;
+                for(size_t index=0;index<alternate.size();++index)
+                    if(std::abs(static_cast<int>(alternate[index])-static_cast<int>(expected[index]))>1) ++different;
+                std::fprintf(stderr,"Unoptimized diagnostic mismatch bytes=%u failing pixel=(%u,%u,%u,%u) expected=(%u,%u,%u,%u)\n",
+                    static_cast<unsigned>(different),alternate[offset],alternate[offset+1],alternate[offset+2],alternate[offset+3],
+                    expected[offset],expected[offset+1],expected[offset+2],expected[offset+3]);
+                if(different) std::fprintf(stderr,"Unoptimized shader diagnostic:\n%s\n",kn_gpu_shader_diagnostics(gpu));
+            } else std::fprintf(stderr,"Unoptimized diagnostic composition failed status=%d HRESULT=0x%08x %s\n",status,static_cast<unsigned>(error),kn_gpu_diagnostic());
+        } else std::fprintf(stderr,"Unoptimized diagnostic compile failed status=%d HRESULT=0x%08x %s\n",recompiled,static_cast<unsigned>(error),kn_gpu_diagnostic());
         std::fflush(stderr); REQUIRE(false);
     }
 }

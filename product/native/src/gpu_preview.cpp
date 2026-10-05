@@ -6,6 +6,7 @@
 #include <thread>
 #include <cstddef>
 #include <cstdio>
+#include <utility>
 
 namespace {
 constexpr uint64_t maximum_budget = UINT64_C(256) * 1024 * 1024;
@@ -47,7 +48,7 @@ struct kn_gpu_preview {
     int32_t width = 0, height = 0;
     uint32_t size = 0;
     unsigned current = 0;
-    bool submitted = false, poisoned = false;
+    bool submitted = false, poisoned = false, force_warp = false;
 };
 namespace {
 /* Native computes trig once with the CPU compositor's formula. Shader double division
@@ -135,6 +136,25 @@ HRESULT validate_constants(ID3DBlob* compiled) noexcept {
     }
     return S_OK;
 }
+HRESULT compile_shader(kn_gpu_preview* p, UINT flags) noexcept {
+    ComPtr<ID3DBlob> compiled, errors, disassembled;
+    HRESULT hr = D3DCompile(shader_source, sizeof(shader_source) - 1, "Kachinco.GpuPreview", nullptr, nullptr,
+        "main", "cs_5_0", D3DCOMPILE_IEEE_STRICTNESS | flags, 0, &compiled, &errors);
+    if (FAILED(hr) && errors) detail(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
+    if (SUCCEEDED(hr)) hr = validate_constants(compiled.Get());
+    if (FAILED(hr)) return hr;
+    (void)D3DDisassemble(compiled->GetBufferPointer(), compiled->GetBufferSize(), 0, nullptr, &disassembled);
+    // Diagnostics are compiler/device bookkeeping, bounded independently of texture
+    // payload. Only one current disassembly is retained, including diagnostic mode.
+    if (disassembled && disassembled->GetBufferSize() > 128 * 1024) disassembled.Reset();
+    ComPtr<ID3D11ComputeShader> shader;
+    hr = p->device->CreateComputeShader(compiled->GetBufferPointer(), compiled->GetBufferSize(), nullptr, &shader);
+    if (SUCCEEDED(hr)) {
+        p->context->CSSetShader(nullptr, nullptr, 0);
+        p->shader = std::move(shader); p->shader_diagnostics = std::move(disassembled);
+    }
+    return hr;
+}
 
 int32_t failure(HRESULT hr, int32_t* error) noexcept {
     if (error) *error = static_cast<int32_t>(hr);
@@ -198,13 +218,7 @@ int32_t KN_CALL kn_gpu_create(uint64_t budget, int32_t force_warp, kn_gpu_previe
         (D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_SHADER_LOAD | D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW)) {
         delete p; return KN_GPU_UNSUPPORTED;
     }
-    ComPtr<ID3DBlob> compiled, errors;
-    hr = D3DCompile(shader_source, sizeof(shader_source) - 1, "Kachinco.GpuPreview", nullptr, nullptr,
-        "main", "cs_5_0", D3DCOMPILE_IEEE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &compiled, &errors);
-    if (FAILED(hr) && errors) detail(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
-    if (SUCCEEDED(hr)) hr = validate_constants(compiled.Get());
-    if (SUCCEEDED(hr)) (void)D3DDisassemble(compiled->GetBufferPointer(), compiled->GetBufferSize(), 0, nullptr, &p->shader_diagnostics);
-    if (SUCCEEDED(hr)) hr = p->device->CreateComputeShader(compiled->GetBufferPointer(), compiled->GetBufferSize(), nullptr, &p->shader);
+    hr = compile_shader(p, D3DCOMPILE_OPTIMIZATION_LEVEL3);
     if (SUCCEEDED(hr)) {
         D3D11_BUFFER_DESC desc{}; desc.ByteWidth = static_cast<UINT>(constant_bytes);
         desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -215,7 +229,7 @@ int32_t KN_CALL kn_gpu_create(uint64_t budget, int32_t force_warp, kn_gpu_previe
         hr = p->device->CreateQuery(&desc, &p->completion);
     }
     if (FAILED(hr)) { delete p; return failure(hr, error); }
-    p->budget = budget; *output = p; return KN_OK;
+    p->budget = budget; p->force_warp = force_warp != 0; *output = p; return KN_OK;
 }
 void KN_CALL kn_gpu_destroy(kn_gpu_preview* p) noexcept {
     if (p) { p->context->ClearState(); p->context->Flush(); delete p; }
@@ -302,6 +316,12 @@ uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview* p) noexcept { retu
 const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview* p) noexcept {
     return p && p->shader_diagnostics ? static_cast<const char*>(p->shader_diagnostics->GetBufferPointer()) : "Shader diagnostic unavailable.";
 }
+int32_t KN_CALL kn_gpu_diagnostic_without_optimization(kn_gpu_preview* p, int32_t* error) noexcept {
+    clear_error(error); if (!p || !p->force_warp) return KN_INVALID_ARGUMENT;
+    const auto status = drain(p, error); if (status != KN_OK) return status;
+    const auto hr = compile_shader(p, D3DCOMPILE_SKIP_OPTIMIZATION);
+    return FAILED(hr) ? failure(hr, error) : KN_OK;
+}
 #else
 struct kn_gpu_preview {};
 int32_t KN_CALL kn_gpu_create(uint64_t budget, int32_t force_warp, kn_gpu_preview** output, int32_t* error) noexcept {
@@ -320,4 +340,5 @@ int32_t KN_CALL kn_gpu_read(kn_gpu_preview*, uint8_t*, uint32_t, int32_t* error)
 int32_t KN_CALL kn_gpu_reset(kn_gpu_preview*, int32_t* error) noexcept { clear_error(error); return KN_GPU_UNSUPPORTED; }
 uint64_t KN_CALL kn_gpu_allocated_bytes(const kn_gpu_preview*) noexcept { return 0; }
 const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview*) noexcept { return "D3D11 is unavailable on this host."; }
+int32_t KN_CALL kn_gpu_diagnostic_without_optimization(kn_gpu_preview*, int32_t* error) noexcept { clear_error(error); return KN_GPU_UNSUPPORTED; }
 #endif
