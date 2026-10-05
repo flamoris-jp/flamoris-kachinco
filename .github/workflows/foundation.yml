@@ -54,7 +54,7 @@ jobs:
           ffmpeg -version
       - run: dotnet build Kachinco.slnx -c Release
       - name: Windows managed-native ABI parity
-        run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests"
+        run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests|FullyQualifiedName~GpuDecodeTests|FullyQualifiedName~PreviewBackendTests|FullyQualifiedName~NativeGpuPreviewTests"
       - name: Windows worker and raster acceptance
         run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
       - uses: actions/upload-artifact@v4
@@ -103,4 +103,3 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
-
