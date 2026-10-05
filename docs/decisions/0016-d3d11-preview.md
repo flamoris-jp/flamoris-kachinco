@@ -1,6 +1,7 @@
 # ADR 0016: bounded D3D11 preview backend
 
-Status: implementation and automated acceptance in progress (Issue #67).
+Status: accepted and implemented in PR #68. Automated acceptance passed in
+Product CI #137; physical performance acceptance remains open in Issue #67.
 
 ## Authority and boundary
 
@@ -78,7 +79,11 @@ existing software forward stream, rather than entering per-frame random seeks.
 Automated gates cover Linux unsupported capability, injected backend failures,
 CPU fallback, cancellation/lifetime, hardware argument/fallback semantics,
 Windows WARP pixel parity, bounded allocation/reset and existing codec, clock,
-cache, export, UI and package behavior.
+cache, export, UI and package behavior. Product CI #137 passes all 270 managed
+Linux tests, native ASan/UBSan/leak contracts 5/5, optimized WARP contracts, 41
+Windows managed ABI/backend tests, actual WPF acceptance, portable packaging,
+packaged external MCP and clean-PATH startup. See PROGRESS.md for the exact head,
+run and merge evidence.
 
 Mango measurements must compare this backend with the checkpoint and forced CPU:
 1080p H.264, layered transforms, seek, clip transitions and deliberate overload,

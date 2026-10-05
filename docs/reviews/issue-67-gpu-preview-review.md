@@ -68,9 +68,18 @@ is the implementation and merge surface. PROGRESS.md records the final outcome.
   reference pixels, including opaque/transparent inputs, alpha, source edges,
   exact integer sampling boundaries, rotation, nonuniform scale and layer order.
   The one-byte SDR quantization tolerance never permits different source sampling.
-  Windows parity currently blocks merge; the compiler diagnostic/fix loop is
-  recorded in PROGRESS.md. Remaining Windows gates include managed ABI/backend
-  tests, actual WPF selector/raster, portable packaging, external MCP and startup.
+  Optimized WARP initially failed byte conversion despite coherent generated
+  shader arithmetic and parameter layout. The identical failing layer passed
+  without optimization. Exact IEEE double integer-bit quantization repaired the
+  optimized shader without changing its math, nearest sampler or tolerance.
+  All 65,536 front-byte/alpha-byte pairs at Normal/Screen and five opacity values
+  over varied opaque backdrops now pass alongside the transformed cases.
+- Product CI #137 passed at `05def0d48ec9939b31cfd0b00188bab3ccd93d07`: Linux
+  270/270, native ASan/UBSan/leak 5/5, optimized Windows native WARP contracts,
+  Windows managed ABI/backend 41/41, actual WPF selector/raster, portable package
+  integrity/publish, packaged external MCP and clean-PATH startup.
+- Separate read-only agent review approved the exact CI tree. PR #68 was
+  squash-merged to main as `9bd10ba0afd5334a3d940c260f8789dc028f6e88`.
 
 ## Physical acceptance
 
