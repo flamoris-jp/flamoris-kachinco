@@ -49,7 +49,7 @@ public partial class TimelineSurface
                 VisualEntry? entry = null;
                 try
                 {
-                    var data = await Task.Run(async () => work.Asset.Kind == MediaKind.Mov ?
+                    var data = await Task.Run(async () => work.Asset.Kind != MediaKind.Wav ?
                         new MediaVisualization(await new FfmpegMediaDecoder().VideoAsync(work.Path, work.SourceTicks, 160, 90, cancellation.Token), 160, 90, [], work.Asset.DurationTicks) :
                         await visualizer.GenerateAsync(work.Asset, work.Path, cancellation.Token), cancellation.Token);
                     cancellation.Token.ThrowIfCancellationRequested();
@@ -76,6 +76,7 @@ public partial class TimelineSurface
     }
     private VisualEntry? RequestVisual(MediaAsset asset, long tick)
     {
+        if (asset.Kind == MediaKind.Image) tick = 0;
         var path = MediaReferenceResolver.Inspect(project!, visualizationProjectPath).First(a => a.MediaAssetId == asset.Id);
         if (!path.IsAvailable || path.ResolvedPath is null) return new(null, null, EditorText.VisualFailed);
         string stamp = PreviewContext.FileStamp(path.ResolvedPath);
@@ -98,7 +99,7 @@ public partial class TimelineSurface
         var area = new Canvas { Margin = new Thickness(start + 3, 21, 0, 3), Width = Math.Max(0, end - start - 6),
             HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false, ClipToBounds = true };
         grid.Children.Insert(0, area);
-        if (asset.Kind == MediaKind.Mov)
+        if (asset.Kind != MediaKind.Wav)
         {
             foreach (var slot in ThumbnailStrip.Plan(clip, viewport, start, end - start))
             {
@@ -136,3 +137,4 @@ public partial class TimelineSurface
     private sealed record VisualWork(string Key, MediaAsset Asset, string Path, string Stamp, long SourceTicks);
     private sealed record VisualEntry(MediaVisualization? Data, BitmapSource? Image, string? Error, bool Omitted = false);
 }
+

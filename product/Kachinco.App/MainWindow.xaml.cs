@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeEffects();
         InitializeMcp();
         InitializeProduction();
         BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
@@ -175,7 +176,8 @@ public partial class MainWindow : Window
         {
             MediaKind.Mov => MediaSourceFormats.VideoExtensions,
             MediaKind.Wav => MediaSourceFormats.AudioExtensions,
-            _ => MediaSourceFormats.VideoExtensions.AddRange(MediaSourceFormats.AudioExtensions)
+            MediaKind.Image => MediaSourceFormats.ImageExtensions,
+            _ => MediaSourceFormats.VideoExtensions.AddRange(MediaSourceFormats.AudioExtensions).AddRange(MediaSourceFormats.ImageExtensions)
         };
         string patterns = string.Join(";", extensions.Select(extension => "*" + extension));
         return $"{EditorText.Choose("素材", "Media")} ({patterns})|{patterns}";
@@ -197,7 +199,7 @@ public partial class MainWindow : Window
     }
 
     private static string MediaDescription(MediaAsset asset) =>
-        (asset.Kind == MediaKind.Mov ? EditorText.Choose("映像", "Video") : EditorText.Choose("音声", "Audio")) +
+        (asset.Kind != MediaKind.Wav ? EditorText.Choose("映像", "Video") : EditorText.Choose("音声", "Audio")) +
         " · " + System.IO.Path.GetExtension(asset.SourcePath).TrimStart('.').ToUpperInvariant();
 
     private void Insert_Click(object sender, RoutedEventArgs e)
@@ -206,7 +208,7 @@ public partial class MainWindow : Window
         { Refresh("素材とシーケンスを選択してください。"); return; }
         var project = session.GetProject().Project!;
         var sequence = project.Sequences.First(s => s.Id == sequenceId);
-        var kind = row.Asset.Kind == MediaKind.Mov ? TrackKind.Video : TrackKind.Audio;
+        var kind = row.Asset.Kind != MediaKind.Wav ? TrackKind.Video : TrackKind.Audio;
         var track = sequence.Tracks.FirstOrDefault(x => x.Kind == kind);
         if (track is null) { Refresh("互換トラックがありません。"); return; }
         PlaceMedia(row.Asset.Id, track.Id, Timeline.PlayheadTicks);
@@ -492,6 +494,7 @@ public partial class MainWindow : Window
             ScaleXControl.Value = transform.ScaleX; ScaleYControl.Value = transform.ScaleY; RotationControl.Value = transform.RotationDegrees;
             GainControl.Value = value.Clip.Audio.Gain; MutedBox.IsChecked = value.Clip.Audio.Muted;
             RefreshVolumePoints(value.Clip);
+            RefreshPropertyPoints(value.Clip);
         }
         else if (SelectedAsset(project) is { } asset)
         {
@@ -554,3 +557,4 @@ public partial class MainWindow : Window
             availability.IsAvailable ? Brushes.SeaGreen : Brushes.OrangeRed);
     }
 }
+

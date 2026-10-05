@@ -28,7 +28,7 @@ public sealed class RecipeGenerationService(RecipeCompiler compiler, IRecipeRast
         var existing = replaceMediaId is { } mediaId ? snapshot.Project.Assets.FirstOrDefault(a => a.Id == mediaId) : null;
         var previous = sequence.Recipes.FirstOrDefault(r => r.Id == recipe.Id);
         if (replaceMediaId is not null && (existing?.Provenance?.RecipeId != recipe.Id || previous is null)) return Fail("RECIPE_LINEAGE_MISMATCH", "Replacement must follow the same Recipe lineage.");
-        if (replaceMediaId is null && previous is not null) return Fail("RECIPE_EXISTS", "Use explicit regeneration for an existing Recipe.");
+        if (replaceMediaId is null && previous is not null && (snapshot.Project.Assets.Any(a => a.Provenance?.RecipeId == recipe.Id) || previous != recipe)) return Fail("RECIPE_EXISTS", "Use explicit regeneration for an existing Recipe.");
         var compiled = await compiler.CompileAsync(recipe.Source, token);
         if (!compiled.Success) return new(null, compiled.Diagnostics);
         string? temporary = null; bool published = false;
@@ -43,7 +43,8 @@ public sealed class RecipeGenerationService(RecipeCompiler compiler, IRecipeRast
             {
                 var provenance = new GeneratedProvenance(recipe.Id, recipe.Revision, sourceHash, hash);
                 var commands = new List<EditCommand>();
-                commands.Add(previous is null ? new AddRecipe(sequenceId, recipe) : new UpdateRecipe(sequenceId, recipe));
+                if (previous is null) commands.Add(new AddRecipe(sequenceId, recipe));
+                else if (replaceMediaId is not null) commands.Add(new UpdateRecipe(sequenceId, recipe));
                 if (existing is null)
                 {
                     commands.Add(new RegisterMedia(new MediaAsset(assetId, Path.GetFileName(output), output, MediaKind.Mov, clapper.DurationTicks) { Provenance = provenance }));
@@ -56,7 +57,7 @@ public sealed class RecipeGenerationService(RecipeCompiler compiler, IRecipeRast
                 }
                 return new([.. commands], snapshot.Revision);
             }
-            var validation = new EditorSession(); validation.ReplaceProject(snapshot.Project);
+            using var validation = new EditorSession(); validation.ReplaceProject(snapshot.Project);
             var check = validation.Execute(Build(new string('0',64)) with { ExpectedRevision = validation.GetProject().Revision, DryRun = true });
             if (!check.Success) return new(null, check.Diagnostics);
             temporary = Path.Combine(Path.GetDirectoryName(output)!, ".kachinco-recipe-" + Guid.NewGuid().ToString("N") + ".mov");
@@ -94,3 +95,4 @@ public sealed class RecipeGenerationService(RecipeCompiler compiler, IRecipeRast
     }
     private static Result<PreparedGeneration> Fail(string code, string message) => Result<PreparedGeneration>.Fail(Diagnostic.Error(code, message));
 }
+

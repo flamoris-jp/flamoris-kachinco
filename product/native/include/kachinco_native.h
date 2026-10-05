@@ -140,6 +140,7 @@ KN_API int32_t KN_CALL kn_timeline_evaluate(const kn_timeline* timeline, int64_t
 typedef struct kn_parameter_point { int64_t tick; double value; } kn_parameter_point;
 KN_API int32_t KN_CALL kn_parameter_at(const kn_parameter_point* points, uint32_t count, int64_t tick, double fallback, double* output) KN_NOEXCEPT;
 /* Immutable snapshot setup: bounded signed clip-relative volume multiplier curve. */
+KN_API int32_t KN_CALL kn_timeline_set_property_curve(kn_timeline*, int32_t index, int32_t property, const kn_parameter_point*, uint32_t count) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_timeline_set_gain_curve(kn_timeline* timeline, int32_t index, const kn_parameter_point* points, uint32_t count) KN_NOEXCEPT;
 /* Shared preview/export PCM: envelope sampled at the canonical timeline sample tick. */
 KN_API int32_t KN_CALL kn_timeline_mix_audio(const kn_timeline* timeline, int32_t index, double* mix, uint32_t mix_count,
@@ -176,3 +177,4 @@ KN_API int32_t KN_CALL kn_editor_request(kn_editor_session* session, const uint8
 }
 #endif
 #endif
+

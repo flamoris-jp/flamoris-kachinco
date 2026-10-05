@@ -21,6 +21,10 @@ public sealed record SetClipProperties(Guid SequenceId, Guid ClipId, bool Enable
 public sealed record AddClipVolumePoint(Guid SequenceId, Guid ClipId, VolumePoint Point) : EditCommand;
 public sealed record UpdateClipVolumePoint(Guid SequenceId, Guid ClipId, VolumePoint Point) : EditCommand;
 public sealed record DeleteClipVolumePoint(Guid SequenceId, Guid ClipId, Guid PointId) : EditCommand;
+public sealed record SetClipPropertyCurve(Guid SequenceId, Guid ClipId, PropertyCurve Curve) : EditCommand;
+public sealed record AddClipPropertyPoint(Guid SequenceId, Guid ClipId, VisualProperty Property, PropertyPoint Point) : EditCommand;
+public sealed record UpdateClipPropertyPoint(Guid SequenceId, Guid ClipId, VisualProperty Property, PropertyPoint Point) : EditCommand;
+public sealed record DeleteClipPropertyPoint(Guid SequenceId, Guid ClipId, VisualProperty Property, Guid PointId) : EditCommand;
 public sealed record SetTrackEnabled(Guid SequenceId, Guid TrackId, bool Enabled) : EditCommand;
 public sealed record ReorderTrack(Guid SequenceId, Guid TrackId, int NewIndex) : EditCommand;
 public sealed record AddCaption(Guid SequenceId, Guid TrackId, Caption Caption) : EditCommand;
@@ -30,3 +34,4 @@ public sealed record DeleteCaption(Guid SequenceId, Guid CaptionId) : EditComman
 public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? ExpectedRevision = null, bool DryRun = false);
 public sealed record EditResult(bool Success, long Revision, ImmutableArray<Diagnostic> Diagnostics);
 public sealed record ProjectSnapshot(long Revision, Project? Project, bool CanUndo, bool CanRedo);
+

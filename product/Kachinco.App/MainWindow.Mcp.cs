@@ -32,7 +32,8 @@ public partial class MainWindow
         var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
             () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
                 playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-            () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))),
+            () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Concat(allowAiEffectLibrary && effectLibrary is not null
+                ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : []),
             new McpOptions(), new McpDiagnostics(logger));
         try { return new(boundary, await boundary.EnableAsync(permission)); }
         catch (Exception exception)
@@ -62,3 +63,4 @@ public partial class MainWindow
         }
     }
 }
+

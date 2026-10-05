@@ -25,6 +25,16 @@ int main() {
     REQUIRE(values[0].index==1 && values[0].source_start==22 && values[1].source_start==26);
     REQUIRE(kn_timeline_evaluate(timeline,20,0,values,2,&count)==KN_INVALID_ARGUMENT);
     REQUIRE(kn_timeline_evaluate(timeline,0,0,values,1,&count)==KN_INVALID_ARGUMENT);
+    kn_parameter_point visual_curve[]={{-10,0},{10,20}};
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,0,visual_curve,2)==KN_OK);
+    visual_curve[1].value=999; // Native snapshot owns a copy.
+    REQUIRE(kn_timeline_evaluate(timeline,0,0,values,2,&count)==KN_OK && values[1].appearance.x==10);
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,6,visual_curve,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,2,visual_curve,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,5,visual_curve,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,0,nullptr,4097)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_property_curve(timeline,0,0,nullptr,0)==KN_OK);
+    REQUIRE(kn_timeline_evaluate(timeline,0,0,values,2,&count)==KN_OK && values[1].appearance.x==0);
     kn_timeline_destroy(timeline);
     kn_eval_item curve_item{0,KN_TICKS_PER_SECOND,0,0,1,0,0,1,1,a,2,0,1};
     REQUIRE(kn_timeline_create(KN_TICKS_PER_SECOND,&curve_item,1,&timeline)==KN_OK);
@@ -76,3 +86,4 @@ int main() {
     REQUIRE(kn_decoder_select(candidates,3,0,0,4800,&selected,&oldest)==KN_OK && selected==2);
     std::puts("Native raster, PCM, snapshot and playback policy contracts passed.");
 }
+

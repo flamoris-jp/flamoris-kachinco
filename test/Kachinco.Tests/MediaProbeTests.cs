@@ -87,7 +87,7 @@ public sealed class MediaProbeTests
         Assert.AreEqual("MEDIA_KIND_MISMATCH", MediaProbeParser.Parse(Path.GetFullPath("fake.mov"),
             "{\"streams\":[{\"codec_type\":\"audio\"}],\"format\":{\"format_name\":\"wav\",\"duration\":\"1\"}}").Diagnostics[0].Code);
         Assert.AreEqual("MEDIA_PROBE_INVALID", MediaProbeParser.Parse(Path.GetFullPath("bad.wav"), "not-json").Diagnostics[0].Code);
-        Assert.AreEqual("UNSUPPORTED_MEDIA_SOURCE", MediaProbeParser.Parse(Path.GetFullPath("image.png"), "{}").Diagnostics[0].Code);
+        Assert.AreEqual("UNSUPPORTED_MEDIA_SOURCE", MediaProbeParser.Parse(Path.GetFullPath("image.gif"), "{}").Diagnostics[0].Code);
     }
 
     [TestMethod]
@@ -140,3 +140,4 @@ public sealed class MediaProbeTests
         return process.ExitCode;
     }
 }
+

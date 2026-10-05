@@ -62,7 +62,7 @@ public sealed class MediaVisualizationService(string executable = "ffmpeg")
     public const int ThumbnailHeight = 90;
     public async Task<MediaVisualization> GenerateAsync(MediaAsset asset, string path, CancellationToken token)
     {
-        if (asset.Kind == MediaKind.Mov)
+        if (asset.Kind != MediaKind.Wav)
         {
             var rgba = await new FfmpegMediaDecoder(executable).VideoAsync(path, 0, ThumbnailWidth, ThumbnailHeight, token);
             return new(rgba, ThumbnailWidth, ThumbnailHeight, [], asset.DurationTicks);
@@ -104,3 +104,4 @@ public sealed class MediaVisualizationService(string executable = "ffmpeg")
         }
     }
 }
+

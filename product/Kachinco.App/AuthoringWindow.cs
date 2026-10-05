@@ -102,11 +102,11 @@ public sealed class AuthoringWindow : Window
         if (!int.TryParse(seed.Text, out var randomSeed)) { status.Text = "シードには整数を入力してください。"; return; }
         var previous = recipes.SelectedItem as Recipe;
         var asset = previous is null ? null : session.GetProject().Project!.Assets.FirstOrDefault(a => a.Provenance?.RecipeId == previous.Id);
-        if (previous is not null && asset is null) { status.Text = "再生成対象の素材がありません。"; return; }
+        
         var picker = new SaveFileDialog { Filter = "Generated MOV (*.mov)|*.mov", DefaultExt = ".mov", FileName = "recipe-"+Guid.NewGuid().ToString("N")+".mov" };
         if (picker.ShowDialog(this) != true) return;
         var snapshot = session.GetProject();
-        var recipe = new Recipe(previous?.Id ?? Guid.NewGuid(),c.Id,source.Text,(previous?.Revision ?? 0)+1,randomSeed,"1","1");
+        var recipe = new Recipe(previous?.Id ?? Guid.NewGuid(),c.Id,source.Text,previous is not null && asset is null ? previous.Revision : (previous?.Revision ?? 0)+1,randomSeed,"1","1");
         rendering = new(); var token = rendering.Token;
         status.Text = "生成しています…";
         try
@@ -128,3 +128,4 @@ public sealed class AuthoringWindow : Window
     private static void AddButton(Panel panel,string title,RoutedEventHandler handler) { var button=new Button{Content=title};button.Click+=handler;panel.Children.Add(button); }
     private static string Seconds(long ticks) => ((decimal)ticks/TimelineTime.TicksPerSecond).ToString("0.###",CultureInfo.CurrentCulture);
 }
+

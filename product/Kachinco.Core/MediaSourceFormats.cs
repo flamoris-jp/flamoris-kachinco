@@ -8,14 +8,18 @@ public static class MediaSourceFormats
     public static ImmutableArray<string> VideoExtensions { get; } = [".mov", ".mp4"];
     public static ImmutableArray<string> AudioExtensions { get; } = [".wav", ".mp3", ".m4a"];
 
+    public static ImmutableArray<string> ImageExtensions { get; } = [".png", ".jpg", ".jpeg", ".webp"];
+
     public static bool TryGetKind(string? path, out MediaKind kind)
     {
         var extension = Path.GetExtension(path) ?? "";
         if (VideoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) { kind = MediaKind.Mov; return true; }
         if (AudioExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) { kind = MediaKind.Wav; return true; }
+        if (ImageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) { kind = MediaKind.Image; return true; }
         kind = default;
         return false;
     }
 
     public static bool Supports(MediaKind kind, string? path) => TryGetKind(path, out var expected) && kind == expected;
 }
+

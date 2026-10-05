@@ -29,7 +29,7 @@ public sealed class ExtendedMediaTests
     }
 
     [TestMethod]
-    [DataRow("image.png")] [DataRow("movie.avi")] [DataRow("sound.flac")]
+    [DataRow("image.gif")] [DataRow("movie.avi")] [DataRow("sound.flac")]
     [DataRow("movie.mp4.exe")] [DataRow("no-extension")] [DataRow("")]
     public void UnsupportedReferencesFailWithoutMutation(string path)
     {
@@ -141,3 +141,4 @@ public sealed class ExtendedMediaTests
         Assert.AreEqual(0, process.ExitCode, await stderr);
     }
 }
+

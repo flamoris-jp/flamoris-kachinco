@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace Kachinco.Core;
 
 // Persisted compatibility tokens: Mov is video (MOV/MP4), Wav is audio (WAV/MP3/M4A).
-public enum MediaKind { Mov, Wav }
+public enum MediaKind { Mov, Wav, Image }
 public enum TrackKind { Video, Audio, Subtitle }
 public enum BlendMode { Normal, Screen }
 
@@ -41,6 +41,7 @@ public sealed record Transform2D(double X, double Y, double ScaleX, double Scale
 }
 public sealed record ClipAppearance(Transform2D Transform, double Opacity, BlendMode Blend)
 {
+    public ImmutableArray<PropertyCurve> Automation { get; init; } = [];
     public static ClipAppearance Default => new(Transform2D.Identity, 1, BlendMode.Normal);
 }
 public sealed record AudioProperties(double Gain, bool Muted)
@@ -50,6 +51,11 @@ public sealed record AudioProperties(double Gain, bool Muted)
 }
 // Point identity is clip-scoped; signed ticks are relative to the current clip start.
 public sealed record VolumePoint(Guid Id, long Tick, double Multiplier);
+
+// Absolute visual values, signed clip-relative ticks; same deterministic sampling as volume.
+public enum VisualProperty { X, Y, ScaleX, ScaleY, RotationDegrees, Opacity }
+public sealed record PropertyPoint(Guid Id, long Tick, double Value);
+public sealed record PropertyCurve(VisualProperty Property, ImmutableArray<PropertyPoint> Points);
 
 public enum DiagnosticSeverity { Error, Warning, Info }
 public sealed record Diagnostic(string Code, DiagnosticSeverity Severity, string Message,
@@ -65,3 +71,4 @@ public sealed record Result<T>(T? Value, ImmutableArray<Diagnostic> Diagnostics)
     public static Result<T> Ok(T value) => new(value, []);
     public static Result<T> Fail(params Diagnostic[] diagnostics) => new(default, [.. diagnostics]);
 }
+
