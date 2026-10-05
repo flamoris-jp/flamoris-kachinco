@@ -82,7 +82,12 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 tick < value.Sequence.DurationTicks && old.WindowKey(tick, SaturatingEnd(tick)) == value.WindowKey(tick, SaturatingEnd(tick)))
             { context = value; return; }
             context = value;
-            if (value is null) { Cancel(); Frame = null; Presentation = null; PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
+            if (value is null)
+            {
+                Cancel(); Frame = null; Presentation = null; PositionTicks = 0; SetState(InteractivePreviewState.Stopped);
+                if (!running) { running = true; runner = RunMailboxAsync(); }
+                return;
+            }
             bool resume = (playSession || pending?.Play == true) && wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
             long next = old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id ? Math.Min(tick, value.Sequence.DurationTicks - 1) : 0;
             RequestFrame(next, resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
@@ -185,6 +190,9 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 }
                 try
                 {
+                    // Prior request/playback producers have joined before releasing GPU
+                    // textures and forward streams for this seek or changed context.
+                    await source.ResetAsync(cancellation.Token);
                     if (request.Play) await RunPlaybackAsync(request, cancellation.Token);
                     else
                     {
@@ -204,6 +212,13 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         }
         finally
         {
+            bool cleanup;
+            lock (gate) cleanup = disposed || context is null;
+            if (cleanup)
+            {
+                try { await source.ResetAsync(); }
+                catch (Exception e) { logger?.Error("preview.backend", "Preview resource cleanup failed", e); }
+            }
             lock (gate)
             {
                 running = false;
@@ -397,7 +412,10 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             properties["conversion"] = ConversionPerformance.Statistics;
             properties["presentation"] = PresentationPerformance.Statistics;
             if (source is InteractivePreviewSource measured)
-            { properties["videoPreparation"] = measured.VideoPerformance.Statistics; properties["audioPreparation"] = measured.AudioPerformance.Statistics; }
+            {
+                properties["videoPreparation"] = measured.VideoPerformance.Statistics; properties["audioPreparation"] = measured.AudioPerformance.Statistics;
+                properties["renderBackend"] = measured.BackendDiagnostics; properties["decodeBackend"] = measured.DecodeDiagnostics;
+            }
             logger.Info("preview.performance", force ? "Preview performance session summary" : "Preview playback performance", properties);
         }
     }
@@ -425,7 +443,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             if (disposed) return;
             disposed = true; Cancel(); Frame = null; Presentation = null;
-            if (!running) native.Dispose();
+            if (!running) { running = true; runner = RunMailboxAsync(); }
         }
     }
 }
