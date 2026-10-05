@@ -92,7 +92,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 if (!running) { running = true; runner = RunMailboxAsync(); }
                 return;
             }
-            bool resume = (playSession || pending?.Play == true) && wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
+            bool resume = wantPlay && old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id;
             long next = old?.Sequence.Id == value.Sequence.Id && old.Project.Id == value.Project.Id ? Math.Min(tick, value.Sequence.DurationTicks - 1) : 0;
             RequestFrame(next, resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
@@ -133,7 +133,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             if (value is not (PreviewQuality.Full or PreviewQuality.Half or PreviewQuality.Quarter)) throw new ArgumentOutOfRangeException(nameof(value));
             if (Quality == value) return;
-            Quality = value; bool resume = (playSession || pending?.Play == true) && wantPlay;
+            Quality = value; bool resume = wantPlay;
             RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
     }
@@ -144,7 +144,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         {
             if (disposed || BackendPreference == value && pendingBackendPreference is null) return;
             BackendPreference = value; pendingBackendPreference = value; backendPreferenceVersion++;
-            bool resume = (playSession || pending?.Play == true) && wantPlay;
+            bool resume = wantPlay;
             RequestFrame(ReadPositionTicks(), resume, resume ? InteractivePreviewState.Playing : InteractivePreviewState.Paused);
         }
     }

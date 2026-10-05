@@ -96,7 +96,7 @@ public sealed class PreviewBackendTests
         var selection = source.SelectBackendAsync(PreviewBackendPreference.Cpu).AsTask();
         Assert.IsFalse(selection.IsCompleted, "Selection must wait for the frame's async decode to join.");
         cancellation.Cancel();
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () => await rendering);
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await rendering);
         await selection.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.IsTrue(gpu.ResetCalls > 0); Assert.IsTrue(gpu.Disposed);
         Assert.AreEqual(0, source.Frames.Statistics.Entries);

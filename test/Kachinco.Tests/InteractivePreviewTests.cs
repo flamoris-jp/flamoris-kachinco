@@ -282,6 +282,22 @@ public sealed class InteractivePreviewTests
     }
 
     [TestMethod]
+    public void NewBackendChoiceDuringSlowSelectionPreservesRequestedPlayBeforeDeviceOpens()
+    {
+        using var pump = new Pump(); var f = new Fixture(); var source = new Source { HoldBackend = true };
+        var devices = new List<Device>();
+        using var p = new InteractivePreview(source, () => { var device = new Device(); devices.Add(device); return device; });
+        p.SetContext(Context(f)); pump.Until(() => p.Completion.IsCompleted);
+        p.SetBackendPreference(PreviewBackendPreference.D3D11); p.Play();
+        Assert.IsNotNull(source.PendingBackend); Assert.AreEqual(0, devices.Count);
+        p.SetBackendPreference(PreviewBackendPreference.Cpu);
+        source.HoldBackend = false; source.PendingBackend!.SetResult();
+        pump.Until(() => p.State == InteractivePreviewState.Playing);
+        Assert.AreEqual(PreviewBackendPreference.Cpu, source.Backends.Last()); Assert.AreEqual(1, devices.Count);
+        p.Dispose(); pump.Until(() => p.Completion.IsCompleted);
+    }
+
+    [TestMethod]
     public void ForwardProducerFailureClearsPresentationAndJoinsAudio()
     {
         using var pump = new Pump(); var f = new Fixture(); var device = new Device();
