@@ -1,5 +1,18 @@
 # Delivery progress
 
+## Preview playback lifetime repair — Issue #70
+
+- Baseline: `5cfc7bb`; 2026-10-06 physical log confirms hardware decode, subsequent
+  stream-limit fallback and media-tail retries. Latest Full preparation maximum
+  2064.737 ms; presentation maximum 3.5856 ms. Private logs/media stay uncommitted.
+- Scope: bounded continuous video streams, retire inactive contributors before
+  decode (including cache hits), clean EOF/tail reuse and per-explicit-Play skip reset.
+- Design recorded in ADR 0016. No project schema, effect, audio clock or export
+  evaluation change; decoder selection remains native. CPU recovery is retained.
+- Implementation and focused decoder/renderer/playback regressions: in progress.
+- Review and exact-head Linux/Windows CI: pending. Physical improvement is not
+  claimed until the same workload is rerun on Mango.
+
 ## GPU preview and effect pipeline — Issue #67
 
 Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.
