@@ -89,6 +89,30 @@ public sealed class GpuDecodeTests
     }
 
     [TestMethod]
+    public async Task ResetJoinsContinuousCodecReadersBeforeDeletingTheirSource()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "kachinco-continuous-release-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string original = Path.Combine(dir, "original.mov");
+            await CreateVideo(original);
+            using var decoder = new FfmpegForwardDecoder();
+            for (int i = 0; i < 8; i++)
+            {
+                string path = Path.Combine(dir, $"source-{i}.mov");
+                File.Copy(original, path);
+                await decoder.VideoAsync(path, 0, 64, 36, default);
+                decoder.ResetStreams();
+                Assert.AreEqual(0, decoder.ActiveVideoStreams);
+                File.Delete(path); // Windows forbids this while the codec still owns its source.
+                Assert.IsFalse(File.Exists(path));
+            }
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [TestMethod]
     public void InvalidDecodePreferenceIsRejectedBeforeStartingAProcess() =>
         Assert.Throws<ArgumentOutOfRangeException>(() => new FfmpegForwardDecoder(decodePreference: (PreviewDecodePreference)99));
 

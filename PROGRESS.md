@@ -20,6 +20,12 @@
 - Author self-review fixed a tail replay bug: pixels consumed during a failed
   request cannot be associated with an older successful request tick. Added a
   regression, preserving the exact-first-retry rule without another retained buffer.
+- CI #141: Linux 278/278 and native sanitizers pass; Windows build/native WARP
+  passes, but real-codec teardown catches a locked source file. The dedicated
+  stderr reader pins the native process SafeHandle; cancellation alone did not
+  guarantee immediate child/file/GPU release. Join that reader before disposing
+  the native process, use context-free PCM drain completion, and add repeated
+  reset/immediate-delete coverage. Windows CI rerun remains pending.
 - Exact-head Linux/Windows CI: pending. Physical improvement is not
   claimed until the same workload is rerun on Mango.
 

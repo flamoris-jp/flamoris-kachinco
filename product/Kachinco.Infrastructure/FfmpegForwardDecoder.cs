@@ -304,9 +304,12 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         {
             if (disposed) return; disposed = true;
             lifetime.Cancel(); MediaProcess.Kill(Process); cancellation.Dispose();
-            // Drainers own no unmanaged memory and finish after process pipe closure.
-            _ = ErrorTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-            Process.Dispose(); lifetime.Dispose();
+            // A native stderr read pins the SafeHandle. Join the dedicated reader
+            // after killing its writer, so Dispose really waits for child/file/GPU
+            // release instead of deferring destruction until that reader returns.
+            try { ErrorTask.GetAwaiter().GetResult(); }
+            catch (Exception) { /* Observe drain faults; frame reads own decode diagnostics. */ }
+            finally { Process.Dispose(); lifetime.Dispose(); }
         }
     }
     private sealed class VideoStream : StreamProcess
@@ -403,7 +406,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             : base(executable, ["-v", "error", "-nostdin", "-threads", "1", "-ss", FfmpegMediaDecoder.Seconds(tick), "-i", Path.GetFullPath(path),
                 "-map", "0:a:0", "-vn", "-t", "2", "-ac", "2", "-ar", "48000", "-f", "f32le", "pipe:1"], token)
         { start = tick; ErrorTask = Drain(); }
-        private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime));
+        private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime).ConfigureAwait(false));
 
         public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, 0, consumed, eligible ? 1 : 0);
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
