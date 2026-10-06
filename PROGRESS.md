@@ -1,5 +1,39 @@
 # Delivery progress
 
+## Preview playback lifetime repair — Issue #70
+
+- Baseline: `5cfc7bb`; 2026-10-06 physical log confirms hardware decode, subsequent
+  stream-limit fallback and media-tail retries. Latest Full preparation maximum
+  2064.737 ms; presentation maximum 3.5856 ms. Private logs/media stay uncommitted.
+- Scope: bounded continuous video streams, retire inactive contributors before
+  decode (including cache hits), clean EOF/tail reuse and per-explicit-Play skip reset.
+- Design recorded in ADR 0016. No project schema, effect, audio clock or export
+  evaluation change; decoder selection remains native. CPU recovery is retained.
+- Implementation complete in PR #71: continuous video/PTS backpressure, complete
+  contributor retirement (including cache hits), EOF/tail repair and explicit Play reset.
+- Local managed build: zero warnings/errors. Focused decoder/codec/playback tests
+  pass 48/48; full temporary reflection-runner execution passes 277 tests, excluding only
+  the two pre-existing named-pipe McpEnvelopeTests restricted by this host. The
+  runner copied the existing recipe worker to its temporary app directory; no test
+  assertions or Product sandbox were relaxed. Native regular and ASan/UBSan
+  contracts pass 5/5 (local leak detection disabled for the traced host; CI keeps it).
+- Author self-review fixed a tail replay bug: pixels consumed during a failed
+  request cannot be associated with an older successful request tick. Added a
+  regression, preserving the exact-first-retry rule without another retained buffer.
+- CI #141: Linux 278/278 and native sanitizers pass; Windows build/native WARP
+  passes, but real-codec teardown catches a locked source file. The dedicated
+  stderr reader pins the native process SafeHandle; cancellation alone did not
+  guarantee immediate child/file/GPU release. Join that reader before disposing
+  the native process, use context-free PCM drain completion, and add repeated
+  reset/immediate-delete coverage. CI #142 confirms that teardown regression passes.
+- Product CI #142 (`88222389beffebab436f101356df3cfacf40cf61`): Linux 279/279,
+  native regular/sanitizer contracts 5/5, Windows ABI/codec tests 48/48, full solution
+  build/native WARP, worker/raster, archive/publish, packaged external MCP and shell
+  startup all pass. Run: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/37463769971
+  This final progress update changes documentation only; Product/Test trees remain
+  identical to the validated commit. Physical improvement is not claimed until
+  the same workload is rerun on Mango.
+
 ## GPU preview and effect pipeline — Issue #67
 
 Baseline: reviewed main/tag `v0.1-pre-gpu`, `b0d9bad`.

@@ -22,7 +22,7 @@ internal static class FfmpegVideoDecodeArguments
     {
         List<string> args = ["-v", "info", "-nostdin", "-threads", "1", "-filter_threads", "1", "-ss", FfmpegMediaDecoder.Seconds(tick)];
         if (hardware) args.AddRange(["-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11", "-extra_hw_frames", "0"]);
-        args.AddRange(["-i", Path.GetFullPath(path), "-map", "0:v:0", "-an", "-t", "2", "-frames:v", "64"]);
+        args.AddRange(["-i", Path.GetFullPath(path), "-map", "0:v:0", "-an"]);
         // hwdownload must receive hardware frames. If FFmpeg silently chooses a software
         // codec, this filter fails and the caller restarts a clean software forward stream.
         // This first CLI hardware slice downloads 8-bit NV12 surfaces. Other surface

@@ -33,10 +33,10 @@ public sealed class InteractiveCodecTests
     }
 
     [TestMethod]
-    [DataRow(30, 75, 2)]
-    [DataRow(60, 135, 3)]
-    [DataRow(120, 145, 3)]
-    public async Task ForwardVideoRollsOverBoundedWindowsWithoutRandomFallback(int fps, int frames, int minimumStarts)
+    [DataRow(30, 75)]
+    [DataRow(60, 135)]
+    [DataRow(120, 145)]
+    public async Task ForwardVideoKeepsOneBoundedContinuousStreamWithoutRandomFallback(int fps, int frames)
     {
         string dir = Path.Combine(Path.GetTempPath(), "kachinco-forward-rollover-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
         try
@@ -58,8 +58,7 @@ public sealed class InteractiveCodecTests
                 }
                 Assert.IsTrue(forward.ActiveVideoStreams <= FfmpegForwardDecoder.MaximumVideoStreams);
             }
-            Assert.IsTrue(forward.ProcessStarts >= minimumStarts, "Bounded windows must reopen as the stream advances.");
-            Assert.IsTrue(forward.ProcessStarts <= minimumStarts + 1, "Normal playback must not start a process per frame.");
+            Assert.AreEqual(1L, forward.ProcessStarts, "Crossing two seconds/64/128 frames must not reopen the process.");
             Assert.IsTrue(forward.ActiveVideoStreams is > 0 and <= FfmpegForwardDecoder.MaximumVideoStreams);
 
             // A fresh playback token owns a fresh bounded stream; cancellation must still stop it.

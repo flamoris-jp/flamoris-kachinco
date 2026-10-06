@@ -185,6 +185,13 @@ public sealed class InteractivePreviewSource : IInteractivePreviewSource, IDispo
             string key = context.VideoKey(tick, quality);
             var frame = context.Evaluator.Evaluate(tick);
             if (!frame.Success) return new(null, frame.Diagnostics);
+            if (forward && video is FfmpegForwardDecoder forwardDecoder)
+            {
+                var paths = MediaReferenceResolver.Inspect(context.Project, context.ProjectPath).ToDictionary(x => x.MediaAssetId);
+                var requests = frame.Value!.VideoLayers.Where(layer => paths[layer.MediaAssetId].IsAvailable && paths[layer.MediaAssetId].ResolvedPath is not null)
+                    .Select(layer => (paths[layer.MediaAssetId].ResolvedPath!, layer.SourceTicks));
+                forwardDecoder.RetainVideoStreams(requests, frame.Value.Settings.Width / (int)quality, frame.Value.Settings.Height / (int)quality, token);
+            }
             bool cacheHit = Frames.TryGet(key, out var cached);
             LogContributors(frame.Value!, forward, token, cacheHit);
             if (cacheHit) { RecordVideo(); return Result<RenderedVideoFrame>.Ok(cached); }

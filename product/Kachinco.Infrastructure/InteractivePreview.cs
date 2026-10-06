@@ -105,7 +105,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         lock (gate)
         {
             if (context is null || disposed) return;
-            RequestFrame(PositionTicks, true, InteractivePreviewState.Playing);
+            RequestFrame(PositionTicks, true, InteractivePreviewState.Playing, resetVideoCounter: true);
         }
     }
     public void Pause()
@@ -161,12 +161,13 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             return PositionTicks;
         }
     }
-    private void RequestFrame(long tick, bool play, InteractivePreviewState after)
+    private void RequestFrame(long tick, bool play, InteractivePreviewState after, bool resetVideoCounter = false)
     {
         lock (gate)
         {
             if (disposed) return;
             Cancel(); Error = null; Frame = null; Presentation = null;
+            if (resetVideoCounter) DroppedVideoFrames = 0;
             if (context is null) { PositionTicks = 0; SetState(InteractivePreviewState.Stopped); return; }
             ticket = native.Request(context.Sequence.DurationTicks, context.Sequence.Settings.FrameRate.Numerator,
                 context.Sequence.Settings.FrameRate.Denominator, tick, play);
@@ -269,6 +270,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
         }
         using var deviceLifetime = device;
         long startSample = playbackTicket.StartSample;
+        long sessionDroppedFrames = 0;
         var audioReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task? audioTask = null, videoTask = null;
         var ready = new List<PreviewPresentation>(ForwardVideoFrames);
@@ -295,7 +297,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                     ct.ThrowIfCancellationRequested();
                     var step = native.Presentation(request.Generation, device.PlayedFrames,
                         ready.Count > 0 ? ready[0].Frame.Tick : -1, ready.Count > 1 ? ready[1].Frame.Tick : -1);
-                    PositionTicks = step.Position; DroppedVideoFrames += step.Dropped;
+                    PositionTicks = step.Position; DroppedVideoFrames += step.Dropped; sessionDroppedFrames += step.Dropped;
                     if (step.Ended != 0)
                     {
                         RequestFrame(context!.Sequence.DurationTicks, false, InteractivePreviewState.Stopped);
@@ -330,7 +332,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                 lock (gate)
                 {
                     ReadyVideoFrames = 0;
-                    ReportPerformance(force: true);
+                    ReportPerformance(force: true, sessionDroppedFrames);
                     logger?.Info("preview.playback", "Preview playback session stopped", Properties(PositionTicks));
                     if (playbackSessionId == sessionId) playbackSessionId = null;
                     if (ReferenceEquals(output, device)) { output = null; playSession = false; }
@@ -351,7 +353,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
                         // Reserve against the same ready-queue snapshot used by presentation.
                         // -1 suppresses presentation: only the consumer removes ready frames.
                         step = native.Video(request.Generation, device.PlayedFrames, ready.Count, -1);
-                        DroppedVideoFrames += step.Dropped;
+                        DroppedVideoFrames += step.Dropped; sessionDroppedFrames += step.Dropped;
                         if (step.Ended != 0) break;
                         if (step.VideoTick >= 0)
                             MaximumVideoFrames = Math.Max(MaximumVideoFrames, ready.Count + 1);
@@ -421,7 +423,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
     }
     private void Publish(PreviewPresentation prepared) { Frame = prepared.Frame; Presentation = prepared; }
     public void RecordPresentation(double milliseconds) => PresentationPerformance.Record(milliseconds);
-    private void ReportPerformance(bool force = false)
+    private void ReportPerformance(bool force = false, long? sessionDroppedFrames = null)
     {
         lock (gate)
         {
@@ -429,7 +431,7 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             var properties = Properties(PositionTicks);
             properties["requestedTick"] = RequestedVideoTick; properties["presentedTick"] = Frame?.Tick;
             properties["queueDepth"] = ReadyVideoFrames; properties["maximumVideoFrames"] = MaximumVideoFrames;
-            properties["droppedFrames"] = DroppedVideoFrames; properties["audioUnderruns"] = Underruns;
+            properties["droppedFrames"] = sessionDroppedFrames ?? DroppedVideoFrames; properties["audioUnderruns"] = Underruns;
             properties["conversion"] = ConversionPerformance.Statistics;
             properties["presentation"] = PresentationPerformance.Statistics;
             if (source is InteractivePreviewSource measured)

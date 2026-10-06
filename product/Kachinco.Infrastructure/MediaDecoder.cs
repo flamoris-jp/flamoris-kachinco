@@ -13,7 +13,12 @@ public interface IMediaDecoder
     Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token);
 }
 
-public sealed class MediaEndOfStreamException(string message) : IOException(message);
+public sealed class MediaEndOfStreamException(string message) : IOException(message)
+{
+    // Exact successful request, not an inferred source PTS or arbitrary held image.
+    internal long? RetainedRequestTick { get; init; }
+    internal ImmutableArray<byte> RetainedFrame { get; init; }
+}
 
 // Each request is independently seekable. Sequential caching is derived future optimization.
 public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDecoder, IDisposable
@@ -116,4 +121,3 @@ internal static class MediaProcess
         }
     }
 }
-

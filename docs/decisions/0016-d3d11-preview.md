@@ -76,6 +76,28 @@ existing software forward stream, rather than entering per-frame random seeks.
 
 ## Verification and outstanding physical acceptance
 
+### Playback lifetime repair (Issue #70)
+
+Forward video processes stream until source EOF instead of reopening every two
+seconds/64 frames. Storage stays bounded by OS pipes, a 64-entry PTS channel,
+one retained decoded frame per stream and the existing eight-stream/two-hardware
+limits. The metadata reader applies cancellable backpressure. Native selection
+limits the distance from the last request to less than two seconds, so large
+forward jumps and backward seeks still open an accurately positioned stream.
+
+Before each forward preview frame, retain only streams usable by at least one
+of its evaluated contributors, including multiple offsets into the same source.
+This runs on cache hits too. It releases obsolete GPU slots before new clips open.
+Clean source EOF closes the process without disabling hardware or poisoning the
+random-access fallback cache. The renderer may reuse a retained frame only when
+its successful request tick exactly matches the first existing tail retry; all
+other cases retain the existing bounded accurate retry/pixel policy.
+
+An explicit Play/resume clears the displayed video skip count after cancellation
+of old work. Pause, Stop, quality/backend changes and internal refills retain it.
+Session summaries keep their own skip totals while teardown joins old producers.
+Preparation and conversion statistics continue to describe the object lifetime.
+
 Automated gates cover Linux unsupported capability, injected backend failures,
 CPU fallback, cancellation/lifetime, hardware argument/fallback semantics,
 Windows WARP pixel parity, bounded allocation/reset and existing codec, clock,

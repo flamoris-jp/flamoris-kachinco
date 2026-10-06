@@ -112,14 +112,18 @@ test clocks do not establish physical sound/A-V acceptance. Perceptual checks re
   Source samples use a half-second grid clamped to the clip's source-in. The 16 MiB cache
   owns WPF thumbnail pixels or waveform peaks, with a 256-entry cap. Small bookkeeping
   overhead is included in the byte charge; runtime/decoder overhead is separate.
-- Codec streams use separate eight-entry video and audio LRU pools, each stream capped at
-  two seconds; video additionally caps 64 frames and timestamp entries. This covers ordinary
+- Codec streams use separate eight-entry video and audio LRU pools. Audio is capped at
+  two seconds; video streams continue to EOF with 64 timestamp entries and pipe backpressure.
+  Native selection caps each forward request's discard distance below two seconds. This covers ordinary
   multi-track contributor sets without rotating a process for every frame/block while retaining
   a hard 16-process ceiling. Pool identity is a stream instance rather than a source path: the
-  same asset may retain multiple forward windows when clips use different source-in times, and
-  each video request selects the accepting window with the shortest forward distance (then LRU
+  same asset may retain multiple forward streams when clips use different source-in times, and
+  each video request selects the accepting stream with the shortest forward distance (then LRU
   recency), while PCM requires the exact next sample. Raw pipe
-  backpressure bounds ahead-of-consumption bytes. Full
+  backpressure bounds ahead-of-consumption bytes. Each preview frame, including cache hits,
+  retires streams unusable by its complete evaluated contributor set before opening new ones.
+  Natural source EOF releases process/GPU resources without a device downgrade; exact cached
+  first-tail-retry frames can be reused under the existing eight-retry policy (Issue #70). Full
   identity opaque composition uses an equivalent bulk copy; alpha/transform/blend paths keep
   the shared reference equations.
 - Creation rows are compact 24 DIPs; existing clip lanes remain 72 DIPs. Both header and

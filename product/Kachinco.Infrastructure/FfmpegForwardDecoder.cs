@@ -39,7 +39,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     public double ProcessStartMilliseconds => startElapsed * 1000d / Stopwatch.Frequency;
     public double ProcessStopMilliseconds => stopElapsed * 1000d / Stopwatch.Frequency;
     public int ActiveVideoStreams => videos.Count;
-    public int ActiveHardwareVideoStreams => videos.Values.Count(entry => entry.Stream.Hardware);
+    public int ActiveHardwareVideoStreams => videos.Values.Count(entry => entry.Stream.Hardware && entry.Stream.IsOpen);
     public int ActiveAudioStreams => audios.Count;
     public PreviewDecodeDiagnostics DecodeDiagnostics => Volatile.Read(ref decodeDiagnostics);
     public FfmpegForwardDecoder(string executable = "ffmpeg", FlamorisLogger? logger = null,
@@ -74,6 +74,20 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
     }
     public long ProcessStarts => Interlocked.Read(ref processStarts);
     private static string Key(string path) => Path.GetFullPath(path) + "|" + PreviewContext.FileStamp(path);
+    // Called under the preview video gate with the complete evaluated contributor
+    // set. Per-call eviction would break layered clips using one source at offsets.
+    internal void RetainVideoStreams(IEnumerable<(string Path, long Tick)> requests, int width, int height, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var needed = requests.Select(request => (Key: Key(request.Path) + $"|{width}|{height}", request.Tick)).ToArray();
+        foreach (var entry in videos.Values.ToArray())
+        {
+            bool retain = entry.Stream.IsOwnedBy(token) && needed.Any(request => entry.BaseKey == request.Key &&
+                NativePlayback.SelectDecoder([entry.Stream.Candidate(entry.Id, entry.LastUsed, true)], true, request.Tick).Selected == entry.Id);
+            if (retain) continue;
+            Close(entry.Stream, "video", entry.Id, "inactive-contributor"); videos.Remove(entry.Id);
+        }
+    }
     public async Task<ImmutableArray<byte>> VideoAsync(string path, long sourceTicks, int width, int height, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -99,6 +113,15 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             return await ReadForward();
         }
         catch (OperationCanceledException) { throw; }
+        catch (MediaEndOfStreamException)
+        {
+            token.ThrowIfCancellationRequested();
+            // Natural EOF is not a device failure. Keep only the stream's bounded
+            // last-frame/EOF metadata for exact tail recovery; release GPU surfaces.
+            if (entry is not null) Close(entry.Stream, "video", entry.Id, "media-ended");
+            PublishDecode(false, false, "Source video ended; preserving accurate tail recovery.");
+            throw;
+        }
         catch (Exception exception) when (IsDecodeFailure(exception))
         {
             // Native pipe closure can race owner cancellation. Cancellation never launches
@@ -115,6 +138,12 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                     DecoderProperties(sourceTicks, width, height), exception);
                 try { return await ReadForward(); }
                 catch (OperationCanceledException) { throw; }
+                catch (MediaEndOfStreamException)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (entry is not null) Close(entry.Stream, "video", entry.Id, "media-ended");
+                    throw;
+                }
                 catch (Exception softwareException) when (IsDecodeFailure(softwareException))
                 { token.ThrowIfCancellationRequested(); return await RandomFallback(softwareException); }
             }
@@ -133,13 +162,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         {
             if (entry is null) entry = Open();
             entry.LastUsed = NextAccess();
-            ImmutableArray<byte> frame;
-            try { frame = await entry.Stream.FrameAsync(sourceTicks, token); }
-            catch (IOException exception) when (exception is MediaEndOfStreamException or ForwardWindowExhaustedException)
-            {
-                Close(entry.Stream, "video", entry.Id, "window-ended"); videos.Remove(entry.Id); entry = Open();
-                frame = await entry.Stream.FrameAsync(sourceTicks, token);
-            }
+            var frame = await entry.Stream.FrameAsync(sourceTicks, token);
             token.ThrowIfCancellationRequested();
             PublishDecode(entry.Stream.Hardware, entry.Stream.Hardware, SoftwareReason(entry.Stream.Hardware));
             return frame;
@@ -248,6 +271,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         protected Task ErrorTask = Task.CompletedTask;
         protected readonly StringBuilder Error = new();
         protected bool disposed;
+        public bool IsOpen => !disposed;
+        protected virtual bool RetainsEndFrame => false;
         protected StreamProcess(string executable, IEnumerable<string> args, CancellationToken owner,
             Func<IEnumerable<string>, NativeMediaProcess>? startProcess = null)
         {
@@ -257,7 +282,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             cancellation = lifetime.Token.Register(() => MediaProcess.Kill(Process));
         }
         protected CancellationToken Lifetime => lifetime.Token;
-        public bool IsOwnedBy(CancellationToken token) => !disposed && Owner == token && !Owner.IsCancellationRequested;
+        public bool IsOwnedBy(CancellationToken token) => (!disposed || RetainsEndFrame) && Owner == token && !Owner.IsCancellationRequested;
         protected async Task<byte[]> ReadAsync(int size, CancellationToken token, bool padPcmTail = false)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, Lifetime);
@@ -279,22 +304,23 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         {
             if (disposed) return; disposed = true;
             lifetime.Cancel(); MediaProcess.Kill(Process); cancellation.Dispose();
-            // Drainers own no unmanaged memory and finish after process pipe closure.
-            _ = ErrorTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-            Process.Dispose(); lifetime.Dispose();
+            // A native stderr read pins the SafeHandle. Join the dedicated reader
+            // after killing its writer, so Dispose really waits for child/file/GPU
+            // release instead of deferring destruction until that reader returns.
+            try { ErrorTask.GetAwaiter().GetResult(); }
+            catch (Exception) { /* Observe drain faults; frame reads own decode diagnostics. */ }
+            finally { Process.Dispose(); lifetime.Dispose(); }
         }
-    }
-    // A bounded stream ran out of its frame budget; the media itself has not failed.
-    private sealed class ForwardWindowExhaustedException : IOException
-    {
-        public ForwardWindowExhaustedException() : base("Forward decode window ended.") { }
     }
     private sealed class VideoStream : StreamProcess
     {
         private readonly long start;
         private readonly int size, width, height;
         private long lastRequest = -1, lastPts = long.MinValue;
-        private int frames;
+        private long? lastSuccessfulRequest;
+        private long lastSuccessfulPts = long.MinValue;
+        private MediaEndOfStreamException? ended;
+        protected override bool RetainsEndFrame => ended is not null;
         private ImmutableArray<byte> last;
         private readonly Channel<long> timestamps = Channel.CreateBounded<long>(64);
         private readonly TaskCompletionSource<(long Numerator, long Denominator)> timebase = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -308,6 +334,8 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, lastRequest, 0, eligible ? 1 : 0);
         public async Task<ImmutableArray<byte>> FrameAsync(long tick, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+            if (ended is not null) throw ended;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
             var tb = await timebase.Task.WaitAsync(timeout.Token);
@@ -317,12 +345,23 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             lastRequest = tick;
             while (last.IsDefault || lastPts < target)
             {
-                if (frames >= 64) throw new ForwardWindowExhaustedException();
-                var bytes = await ReadAsync(size, timeout.Token);
+                byte[] bytes;
+                try { bytes = await ReadAsync(size, timeout.Token); }
+                catch (MediaEndOfStreamException exception)
+                {
+                    // A failed request may have consumed newer frames before EOF.
+                    // Those pixels cannot stand in for an earlier successful tick.
+                    bool exact = lastSuccessfulRequest is not null && lastSuccessfulPts == lastPts;
+                    ended = new(exception.Message) { RetainedRequestTick = exact ? lastSuccessfulRequest : null,
+                        RetainedFrame = exact ? last : default };
+                    throw ended;
+                }
                 long pts = await timestamps.Reader.ReadAsync(timeout.Token);
                 if (pts <= lastPts) throw new InvalidDataException("Non-monotonic source video timestamps.");
-                lastPts = pts; frames++; last = ImmutableCollectionsMarshal.AsImmutableArray(NativeDecodedMedia.Rgba(bytes, width, height));
+                lastPts = pts; last = ImmutableCollectionsMarshal.AsImmutableArray(NativeDecodedMedia.Rgba(bytes, width, height));
             }
+            lastSuccessfulRequest = tick;
+            lastSuccessfulPts = lastPts;
             return last;
         }
         private void ReadMetadata()
@@ -352,8 +391,9 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 timebase.TrySetResult((n, d));
             }
             var frame = FramePts.Match(line);
-            if (frame.Success && !timestamps.Writer.TryWrite(long.Parse(frame.Groups[1].Value, CultureInfo.InvariantCulture)))
-                throw new InvalidDataException("Source timestamp queue exceeds 64-frame window.");
+            if (frame.Success)
+                timestamps.Writer.WriteAsync(long.Parse(frame.Groups[1].Value, CultureInfo.InvariantCulture), Lifetime)
+                    .AsTask().GetAwaiter().GetResult();
             if (!line.Contains("showinfo", StringComparison.Ordinal) && Error.Length < 4096)
                 Error.Append(line.AsSpan(0, Math.Min(line.Length, 4096 - Error.Length)));
         }
@@ -366,7 +406,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
             : base(executable, ["-v", "error", "-nostdin", "-threads", "1", "-ss", FfmpegMediaDecoder.Seconds(tick), "-i", Path.GetFullPath(path),
                 "-map", "0:a:0", "-vn", "-t", "2", "-ac", "2", "-ar", "48000", "-f", "f32le", "pipe:1"], token)
         { start = tick; ErrorTask = Drain(); }
-        private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime));
+        private async Task Drain() => Error.Append(await MediaProcess.DrainErrorAsync(Process.StandardError, Lifetime).ConfigureAwait(false));
 
         public NativeDecoderCandidate Candidate(long id, long used, bool eligible) => new(id, used, start, 0, consumed, eligible ? 1 : 0);
         public async Task<ImmutableArray<float>> BlockAsync(int count, CancellationToken token)
