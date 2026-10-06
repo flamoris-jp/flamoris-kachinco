@@ -9,8 +9,18 @@
   decode (including cache hits), clean EOF/tail reuse and per-explicit-Play skip reset.
 - Design recorded in ADR 0016. No project schema, effect, audio clock or export
   evaluation change; decoder selection remains native. CPU recovery is retained.
-- Implementation and focused decoder/renderer/playback regressions: in progress.
-- Review and exact-head Linux/Windows CI: pending. Physical improvement is not
+- Implementation complete in PR #71: continuous video/PTS backpressure, complete
+  contributor retirement (including cache hits), EOF/tail repair and explicit Play reset.
+- Local managed build: zero warnings/errors. Focused decoder/codec/playback tests
+  pass; full temporary reflection-runner execution passes 276 tests, excluding only
+  the two pre-existing named-pipe McpEnvelopeTests restricted by this host. The
+  runner copied the existing recipe worker to its temporary app directory; no test
+  assertions or Product sandbox were relaxed. Native regular and ASan/UBSan
+  contracts pass 5/5 (local leak detection disabled for the traced host; CI keeps it).
+- Author self-review fixed a tail replay bug: pixels consumed during a failed
+  request cannot be associated with an older successful request tick. Added a
+  regression, preserving the exact-first-retry rule without another retained buffer.
+- Exact-head Linux/Windows CI: pending. Physical improvement is not
   claimed until the same workload is rerun on Mango.
 
 ## GPU preview and effect pipeline — Issue #67

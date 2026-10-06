@@ -322,9 +322,16 @@ The GPU pool charges four canvas textures plus its fixed constant buffer against
 above that cap, composition uses the ordinary streamed CPU path. These budgets are
 separate from native frame cache, prepared/presented arrays and FFmpeg surfaces.
 Forward decoding can request D3D11VA with strict NV12 hardware download; at most
-two active hardware streams exist. Failed hardware requests permanently downgrade
+two active hardware streams exist. Hardware decode faults permanently downgrade
 the owned decoder to software until an explicit backend reselection. Lifecycle
 resets preserve that downgrade and reset streams after producers join.
+Video processes stream continuously with bounded pipe/PTS backpressure; native
+selection limits each request's forward discard distance. Each forward preview
+frame, including cache hits, retires inactive contributors before opening new
+streams. Natural source EOF closes its process without a device downgrade. Exact
+previously successful first-tail-retry pixels can be reused under the existing
+renderer policy. Explicit Play/resume clears the visible skip count; pause/stop
+and internal quality/backend restarts retain it (Issue #70).
 
 The existing FFmpeg executable boundary returns host RGBA and WPF consumes owned
 BGRA arrays. Decode download, layer upload and one final composition readback are
