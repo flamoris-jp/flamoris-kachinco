@@ -12,7 +12,7 @@
 - Implementation complete in PR #71: continuous video/PTS backpressure, complete
   contributor retirement (including cache hits), EOF/tail repair and explicit Play reset.
 - Local managed build: zero warnings/errors. Focused decoder/codec/playback tests
-  pass; full temporary reflection-runner execution passes 276 tests, excluding only
+  pass 48/48; full temporary reflection-runner execution passes 277 tests, excluding only
   the two pre-existing named-pipe McpEnvelopeTests restricted by this host. The
   runner copied the existing recipe worker to its temporary app directory; no test
   assertions or Product sandbox were relaxed. Native regular and ASan/UBSan
@@ -25,9 +25,14 @@
   stderr reader pins the native process SafeHandle; cancellation alone did not
   guarantee immediate child/file/GPU release. Join that reader before disposing
   the native process, use context-free PCM drain completion, and add repeated
-  reset/immediate-delete coverage. Windows CI rerun remains pending.
-- Exact-head Linux/Windows CI: pending. Physical improvement is not
-  claimed until the same workload is rerun on Mango.
+  reset/immediate-delete coverage. CI #142 confirms that teardown regression passes.
+- Product CI #142 (`88222389beffebab436f101356df3cfacf40cf61`): Linux 279/279,
+  native regular/sanitizer contracts 5/5, Windows ABI/codec tests 48/48, full solution
+  build/native WARP, worker/raster, archive/publish, packaged external MCP and shell
+  startup all pass. Run: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/37463769971
+  This final progress update changes documentation only; Product/Test trees remain
+  identical to the validated commit. Physical improvement is not claimed until
+  the same workload is rerun on Mango.
 
 ## GPU preview and effect pipeline — Issue #67
 
