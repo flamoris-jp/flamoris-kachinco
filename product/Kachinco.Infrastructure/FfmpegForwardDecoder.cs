@@ -315,6 +315,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
         private readonly int size, width, height;
         private long lastRequest = -1, lastPts = long.MinValue;
         private long? lastSuccessfulRequest;
+        private long lastSuccessfulPts = long.MinValue;
         private MediaEndOfStreamException? ended;
         protected override bool RetainsEndFrame => ended is not null;
         private ImmutableArray<byte> last;
@@ -345,7 +346,11 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 try { bytes = await ReadAsync(size, timeout.Token); }
                 catch (MediaEndOfStreamException exception)
                 {
-                    ended = new(exception.Message) { RetainedRequestTick = lastSuccessfulRequest, RetainedFrame = last };
+                    // A failed request may have consumed newer frames before EOF.
+                    // Those pixels cannot stand in for an earlier successful tick.
+                    bool exact = lastSuccessfulRequest is not null && lastSuccessfulPts == lastPts;
+                    ended = new(exception.Message) { RetainedRequestTick = exact ? lastSuccessfulRequest : null,
+                        RetainedFrame = exact ? last : default };
                     throw ended;
                 }
                 long pts = await timestamps.Reader.ReadAsync(timeout.Token);
@@ -353,6 +358,7 @@ public sealed class FfmpegForwardDecoder : IMediaDecoder, IDisposable
                 lastPts = pts; last = ImmutableCollectionsMarshal.AsImmutableArray(NativeDecodedMedia.Rgba(bytes, width, height));
             }
             lastSuccessfulRequest = tick;
+            lastSuccessfulPts = lastPts;
             return last;
         }
         private void ReadMetadata()

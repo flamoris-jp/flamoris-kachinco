@@ -245,6 +245,19 @@ public sealed class GpuDecodeTests
     }
 
     [TestMethod]
+    public async Task FailedForwardRequestCannotLabelNewlyConsumedPixelsWithAnOlderSuccessfulTick()
+    {
+        List<string[]> launches = [];
+        using var decoder = FakeDecoder(launches, "tail");
+        await decoder.VideoAsync("fixture.mov", 0, 16, 16, default);
+        long step = TimelineTime.FrameToTicks(1, new(30, 1));
+        var end = await Assert.ThrowsExactlyAsync<MediaEndOfStreamException>(() => decoder.VideoAsync("fixture.mov", 2 * step, 16, 16, default));
+        Assert.IsNull(end.RetainedRequestTick, "Frame 1 was consumed during the failed request, not at successful request 0.");
+        Assert.IsTrue(end.RetainedFrame.IsDefault);
+        Assert.AreEqual(1, launches.Count);
+    }
+
+    [TestMethod]
     public async Task RendererReusesOnlyTheExactExistingFirstTailRetryWithoutAnotherProcess()
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mov");
