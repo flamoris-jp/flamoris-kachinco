@@ -136,9 +136,12 @@ int32_t KN_CALL kn_decoder_select(const kn_decoder_candidate* candidates, uint32
         if (!c.eligible || c.start < 0) continue;
         int64_t distance=0;
         if (video) {
-            if (tick < c.last_request || tick < c.start || tick-c.start >= 2*KN_TICKS_PER_SECOND) continue;
+            if (tick < c.last_request || tick < c.start) continue;
             // last_request=-1 is the unconsumed sentinel.
-            distance=c.last_request < 0 ? tick : tick-c.last_request;
+            distance=tick-(c.last_request < 0 ? c.start : c.last_request);
+            // Continuous streams keep bounded seek/discard work per request;
+            // their process lifetime is not a two-second decode window.
+            if (distance >= 2*KN_TICKS_PER_SECOND) continue;
         } else {
             if (c.consumed < 0 || c.consumed > 96000-samples) continue;
             int64_t delta=0; kn_time::rounded(c.consumed,KN_TICKS_PER_SECOND,48000,&delta);

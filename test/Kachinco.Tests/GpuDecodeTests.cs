@@ -11,7 +11,7 @@ namespace Kachinco.Tests;
 public sealed class GpuDecodeTests
 {
     [TestMethod]
-    public void HardwareArgumentsRequireD3D11FramesAndExplicitDownloadWithoutChangingTheForwardWindow()
+    public void HardwareArgumentsRequireD3D11FramesAndExplicitDownloadWithBoundedContinuousPipes()
     {
         string[] software = FfmpegVideoDecodeArguments.Build("source.mov", Fixture.T / 2, 64, 36, false);
         string[] hardware = FfmpegVideoDecodeArguments.Build("source.mov", Fixture.T / 2, 64, 36, true);
@@ -21,11 +21,11 @@ public sealed class GpuDecodeTests
         Assert.AreEqual("0", Value(hardware, "-extra_hw_frames"));
         string softwareFilter = Value(software, "-vf"), hardwareFilter = Value(hardware, "-vf");
         Assert.AreEqual("hwdownload,format=nv12," + softwareFilter, hardwareFilter);
-        foreach (string option in new[] { "-ss", "-i", "-map", "-t", "-frames:v", "-fps_mode", "-pix_fmt" })
+        foreach (string option in new[] { "-ss", "-i", "-map", "-fps_mode", "-pix_fmt" })
             Assert.AreEqual(Value(software, option), Value(hardware, option), option);
         Assert.AreEqual("0.5", Value(hardware, "-ss"));
-        Assert.AreEqual("2", Value(hardware, "-t"));
-        Assert.AreEqual("64", Value(hardware, "-frames:v"));
+        Assert.IsFalse(hardware.Contains("-t"));
+        Assert.IsFalse(hardware.Contains("-frames:v"));
         Assert.AreEqual("passthrough", Value(hardware, "-fps_mode"));
     }
 
@@ -58,16 +58,16 @@ public sealed class GpuDecodeTests
                 Assert.IsFalse(string.IsNullOrWhiteSpace(decoder.DecodeDiagnostics.FallbackReason));
                 Assert.AreEqual(0, decoder.ActiveHardwareVideoStreams);
             }
-            Assert.AreEqual(3L, decoder.ProcessStarts, "One failing hardware launch, then two bounded software windows.");
+            Assert.AreEqual(2L, decoder.ProcessStarts, "One failing hardware launch, then one continuous software stream.");
             // A new playback owner and resolution must not repeatedly try a broken
             // hardware device/codec path for this decoder instance.
             using var renewed = new CancellationTokenSource();
             await decoder.VideoAsync(path, 0, 32, 18, renewed.Token);
-            Assert.AreEqual(4L, decoder.ProcessStarts);
+            Assert.AreEqual(3L, decoder.ProcessStarts);
             decoder.ResetStreams();
             Assert.AreEqual(0, decoder.ActiveVideoStreams);
             await decoder.VideoAsync(path, 0, 64, 36, renewed.Token);
-            Assert.AreEqual(5L, decoder.ProcessStarts, "Playback lifecycle reset preserves the sticky hardware failure.");
+            Assert.AreEqual(4L, decoder.ProcessStarts, "Playback lifecycle reset preserves the sticky hardware failure.");
         }
         finally { Directory.Delete(dir, true); }
     }
@@ -156,6 +156,125 @@ public sealed class GpuDecodeTests
         Assert.IsTrue(decoder.DecodeDiagnostics.HardwareConfirmed);
     }
 
+    [TestMethod]
+    public async Task HardwareStreamContinuesPast64FramesAndTwoSecondsWithoutLosingItsSlot()
+    {
+        List<string[]> launches = [];
+        using var decoder = FakeDecoder(launches, "long");
+        for (int frame = 0; frame < 180; frame++)
+        {
+            long tick = TimelineTime.FrameToTicks(frame, new(30, 1));
+            decoder.RetainVideoStreams([("fixture.mov", tick)], 16, 16, default);
+            await decoder.VideoAsync("fixture.mov", tick, 16, 16, default);
+            Assert.IsTrue(decoder.DecodeDiagnostics.HardwareConfirmed);
+            Assert.AreEqual(1, decoder.ActiveHardwareVideoStreams);
+        }
+        Assert.AreEqual(1, launches.Count);
+        long seek = 9 * Fixture.T;
+        decoder.RetainVideoStreams([("fixture.mov", seek)], 16, 16, default);
+        Assert.AreEqual(0, decoder.ActiveHardwareVideoStreams, "A large forward seek releases the old surface pool before opening.");
+        await decoder.VideoAsync("fixture.mov", seek, 16, 16, default);
+        Assert.AreEqual(2, launches.Count);
+        Assert.IsTrue(launches[1].Contains("-hwaccel"));
+    }
+
+    [TestMethod]
+    public async Task ContributorRetirementReleasesHardwareBeforeTheNextClipAndPreservesOffsets()
+    {
+        List<string[]> launches = [];
+        using var decoder = FakeDecoder(launches, "long");
+        // Opening decreasing source positions creates independent streams.
+        await decoder.VideoAsync("fixture.mov", Fixture.T, 16, 16, default);
+        await decoder.VideoAsync("fixture.mov", 0, 16, 16, default);
+        decoder.RetainVideoStreams([("fixture.mov", Fixture.T), ("fixture.mov", 0)], 16, 16, default);
+        Assert.AreEqual(2, decoder.ActiveHardwareVideoStreams);
+        await decoder.VideoAsync("fixture.mov", Fixture.T, 16, 16, default);
+        await decoder.VideoAsync("fixture.mov", 0, 16, 16, default);
+        Assert.AreEqual(2, launches.Count, "Both simultaneous offsets must stay reusable.");
+        decoder.RetainVideoStreams([("next.mov", 0)], 16, 16, default);
+        Assert.AreEqual(0, decoder.ActiveVideoStreams);
+        await decoder.VideoAsync("next.mov", 0, 16, 16, default);
+        Assert.IsTrue(launches[2].Contains("-hwaccel"));
+        decoder.RetainVideoStreams([], 16, 16, default);
+        Assert.AreEqual(0, decoder.ActiveHardwareVideoStreams);
+    }
+
+    [TestMethod]
+    public async Task NaturalEofReleasesHardwareWithoutRestartOrStickyDowngradeAndRetainsExactTail()
+    {
+        List<string[]> launches = [];
+        using var decoder = FakeDecoder(launches, "tail");
+        long frameTick = TimelineTime.FrameToTicks(1, new(30, 1));
+        await decoder.VideoAsync("fixture.mov", 0, 16, 16, default);
+        var last = await decoder.VideoAsync("fixture.mov", frameTick, 16, 16, default);
+        var end = await Assert.ThrowsExactlyAsync<MediaEndOfStreamException>(() => decoder.VideoAsync("fixture.mov", 2 * frameTick, 16, 16, default));
+        Assert.AreEqual(frameTick, end.RetainedRequestTick);
+        CollectionAssert.AreEqual(last.ToArray(), end.RetainedFrame.ToArray());
+        Assert.AreEqual(1, launches.Count, "EOF must not reopen at the same missing timestamp.");
+        Assert.AreEqual(0, decoder.ActiveHardwareVideoStreams);
+        await Assert.ThrowsExactlyAsync<MediaEndOfStreamException>(() => decoder.VideoAsync("fixture.mov", 3 * frameTick, 16, 16, default));
+        Assert.AreEqual(1, launches.Count);
+        await decoder.VideoAsync("next.mov", 0, 16, 16, default);
+        Assert.IsTrue(launches[1].Contains("-hwaccel"));
+        Assert.IsTrue(decoder.DecodeDiagnostics.HardwareConfirmed, "Natural EOF must not disable healthy hardware.");
+    }
+
+    [TestMethod]
+    public async Task PreviewCacheHitStillRetiresOldContributors()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mov");
+        File.WriteAllText(path, "decoder fixture");
+        try
+        {
+            var fixture = new Fixture();
+            Assert.IsTrue(fixture.Edit(new RelinkMedia(fixture.MovId, path, 10 * Fixture.T),
+                new SetTrackEnabled(fixture.SequenceId, fixture.SubtitleTrackId, false)).Success);
+            List<string[]> launches = [];
+            using var decoder = FakeDecoder(launches, "long");
+            using var source = new InteractivePreviewSource(forwardVideo: decoder);
+            var context = PreviewContext.Create(fixture.Session.GetProject(), fixture.SequenceId).Value!;
+            Assert.IsTrue((await source.FrameAsync(context, 0, PreviewQuality.Quarter, true, default)).Success);
+            await decoder.VideoAsync("obsolete.mov", 0, 480, 270, default);
+            Assert.AreEqual(2, decoder.ActiveHardwareVideoStreams);
+            Assert.IsTrue((await source.FrameAsync(context, 0, PreviewQuality.Quarter, true, default)).Success);
+            Assert.AreEqual(1L, source.Frames.Statistics.Hits);
+            Assert.AreEqual(1, decoder.ActiveHardwareVideoStreams);
+            Assert.AreEqual(2, launches.Count, "Cache hit must retire obsolete streams without decoding another frame.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public async Task RendererReusesOnlyTheExactExistingFirstTailRetryWithoutAnotherProcess()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mov");
+        File.WriteAllText(path, "decoder fixture");
+        try
+        {
+            var fixture = new Fixture();
+            Assert.IsTrue(fixture.Edit(new RelinkMedia(fixture.MovId, path, 10 * Fixture.T)).Success);
+            List<string[]> launches = [];
+            using var decoder = FakeDecoder(launches, "tail");
+            var renderer = new SharedFrameRenderer(decoder);
+            using var evaluator = TimelineEvaluator.Create(fixture.Project, fixture.SequenceId).Value!;
+            long step = TimelineTime.FrameToTicks(1, new(30, 1));
+            Result<RenderedVideoFrame>? last = null;
+            for (int i = 0; i < 3; i++)
+            {
+                var frame = evaluator.Evaluate(i * step).Value!;
+                frame = frame with { Settings = frame.Settings with { Width = 16, Height = 16 } };
+                var result = await renderer.RenderAsync(fixture.Project, frame, i, default);
+                Assert.IsTrue(result.Success, string.Join(";", result.Diagnostics));
+                Assert.AreEqual(i * step, result.Value!.Tick);
+                if (i == 2) CollectionAssert.AreEqual(last!.Value!.Rgba8.ToArray(), result.Value.Rgba8.ToArray());
+                last = result;
+            }
+            Assert.AreEqual(1, launches.Count, "Natural tail uses the exact previously decoded retry tick.");
+            Assert.AreEqual(0, decoder.ActiveHardwareVideoStreams);
+        }
+        finally { File.Delete(path); }
+    }
+
     private static FfmpegForwardDecoder FakeDecoder(List<string[]> launches, string mode) =>
         new("unused", null, "test", new UnexpectedRandomFallback(), PreviewDecodePreference.D3D11, args =>
         {
@@ -186,7 +305,7 @@ if mode=='partial-hardware' and hardware:
     sys.stdout.buffer.flush()
     sys.exit(1)
 frame=bytes([99 if hardware else 23,0,0,255])*(w*h)
-for i in range(64):
+for i in range(256 if mode=='long' else 2 if mode=='tail' else 64):
     sys.stderr.write('[Parsed_showinfo_0] n: %d pts: %d\n'%(i,i))
     sys.stderr.flush()
     sys.stdout.buffer.write(frame)

@@ -84,6 +84,9 @@ int main() {
     kn_decoder_candidate candidates[3]={{1,1,0,0,0,1},{2,2,0,10,0,1},{3,0,0,0,0,0}};
     int64_t selected,oldest;REQUIRE(kn_decoder_select(candidates,3,1,20,0,&selected,&oldest)==KN_OK && selected==2 && oldest==3);
     REQUIRE(kn_decoder_select(candidates,3,0,0,4800,&selected,&oldest)==KN_OK && selected==2);
+    kn_decoder_candidate continuous={4,4,0,10*KN_TICKS_PER_SECOND,0,1};
+    REQUIRE(kn_decoder_select(&continuous,1,1,11*KN_TICKS_PER_SECOND,0,&selected,&oldest)==KN_OK && selected==4);
+    REQUIRE(kn_decoder_select(&continuous,1,1,12*KN_TICKS_PER_SECOND,0,&selected,&oldest)==KN_OK && selected==0);
+    REQUIRE(kn_decoder_select(&continuous,1,1,9*KN_TICKS_PER_SECOND,0,&selected,&oldest)==KN_OK && selected==0);
     std::puts("Native raster, PCM, snapshot and playback policy contracts passed.");
 }
-

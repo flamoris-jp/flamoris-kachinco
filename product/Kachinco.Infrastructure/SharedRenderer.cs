@@ -117,10 +117,13 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
             long frameTicks = Math.Max(1, TimelineTime.FrameToTicks(1, frame.Settings.FrameRate));
             for (int attempt = 1; attempt <= 8; attempt++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 long fallbackTick = Math.Max(0, layer.SourceTicks - checked(frameTicks * attempt));
                 if (fallbackTick == layer.SourceTicks) break;
                 try
                 {
+                    if (attempt == 1 && original.RetainedRequestTick == fallbackTick && !original.RetainedFrame.IsDefault)
+                        return original.RetainedFrame;
                     var pixels = await decoder.VideoAsync(path, fallbackTick, width, height, cancellationToken);
                     logger?.Log(LogLevel.Warn, "preview.decoder", "Held the last decodable video frame across a short media tail",
                         new Dictionary<string, object?>
