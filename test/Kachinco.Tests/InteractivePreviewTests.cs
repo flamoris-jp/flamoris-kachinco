@@ -327,6 +327,7 @@ public sealed class InteractivePreviewTests
         source.Hold = false; held.SetResult(Frame(0));
         pump.Until(() => p.State == InteractivePreviewState.Playing && p.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
         Assert.AreEqual(Fixture.T / 10, p.Frame!.Tick); Assert.IsTrue(device.Disposed);
+        Assert.AreEqual(2L, p.DroppedVideoFrames, "Internal quality restart preserves the explicit playback result.");
         p.Dispose(); pump.Until(() => p.Completion.IsCompleted); Assert.IsTrue(p.Presentation is null);
     }
     [TestMethod]
@@ -351,6 +352,51 @@ public sealed class InteractivePreviewTests
     }
 
     private static Result<RenderedVideoFrame> Frame(long tick) => Result<RenderedVideoFrame>.Ok(new(0, tick, 1, 1, [1, 2, 3, 255]));
+
+    [TestMethod]
+    public void ExplicitPlayClearsSkipsImmediatelyWhilePauseStopAndQualityRetainTheResult()
+    {
+        using var pump = new Pump(); var fixture = new Fixture(); var source = new Source();
+        var devices = new List<Device>();
+        using var preview = new InteractivePreview(source, () => { var device = new Device(); devices.Add(device); return device; });
+        preview.SetContext(Context(fixture)); pump.Until(() => preview.Completion.IsCompleted);
+        preview.Play(); pump.Until(() => preview.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        source.Hold = true; devices[0].Advance(4800);
+        pump.Until(() => preview.DroppedVideoFrames > 0 && source.Pending is not null);
+        long result = preview.DroppedVideoFrames;
+        var old = source.Pending!;
+        preview.Pause(); Assert.AreEqual(result, preview.DroppedVideoFrames);
+        source.Hold = false; old.SetResult(Frame(0)); pump.Until(() => preview.Completion.IsCompleted);
+        preview.SetQuality(PreviewQuality.Quarter); pump.Until(() => preview.Completion.IsCompleted);
+        Assert.AreEqual(result, preview.DroppedVideoFrames);
+        preview.Stop(); pump.Until(() => preview.Completion.IsCompleted);
+        Assert.AreEqual(result, preview.DroppedVideoFrames);
+        source.Hold = true; preview.Play();
+        Assert.AreEqual(0L, preview.DroppedVideoFrames, "Clear happens at the Play intent, before buffering completes.");
+        var first = source.Pending!; source.Hold = false; first.SetResult(Frame(0));
+        pump.Until(() => preview.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        preview.Dispose(); pump.Until(() => preview.Completion.IsCompleted);
+    }
+
+    [TestMethod]
+    public void RapidReplayCancelsOldProducersBeforeClearingAndRejectsTheirLateFrames()
+    {
+        using var pump = new Pump(); var fixture = new Fixture(); var source = new Source();
+        var devices = new List<Device>();
+        using var preview = new InteractivePreview(source, () => { var device = new Device(); devices.Add(device); return device; });
+        preview.SetContext(Context(fixture)); pump.Until(() => preview.Completion.IsCompleted);
+        preview.Play(); pump.Until(() => preview.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        source.Hold = true; devices[0].Advance(4800);
+        pump.Until(() => preview.DroppedVideoFrames > 0 && source.Pending is not null);
+        var late = source.Pending!;
+        preview.Play(); Assert.AreEqual(0L, preview.DroppedVideoFrames);
+        Assert.IsTrue(source.Token.IsCancellationRequested);
+        source.Hold = false; late.SetResult(Frame(0));
+        pump.Until(() => devices.Count == 2 && preview.ReadyVideoFrames == InteractivePreview.ForwardVideoFrames);
+        Assert.AreEqual(0L, preview.DroppedVideoFrames, "Joined stale work cannot add skips to the new playback.");
+        Assert.IsTrue(devices[0].Disposed);
+        preview.Dispose(); pump.Until(() => preview.Completion.IsCompleted);
+    }
     private sealed class Source : IInteractivePreviewSource
     {
         public readonly List<long> Video = [], Audio = [];
