@@ -65,7 +65,7 @@ jobs:
           }
           # Persist the resolved executable directory even when PowerShell already
           # finds CMake; MSBuild launches it through cmd.exe in the next step.
-          $cmakeExe = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
+          $cmakeExe = (Get-Command cmake -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
           $cmakeBin = Split-Path -Parent $cmakeExe
           $env:PATH = "$cmakeBin;" + $env:PATH
           $cmakeBin | Out-File -FilePath $env:GITHUB_PATH -Append
