@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -73,6 +74,24 @@ struct kn_process {
     int32_t exit_code = 0;
 #ifdef _WIN32
     owned_handle child, job;
+    static constexpr size_t maximum_job_processes = 256;
+    std::array<owned_handle, maximum_job_processes> cancelled_members{};
+    size_t cancelled_member_count = 0;
+    void retain_job_members() noexcept {
+        if (!job.value) return;
+        struct process_ids { DWORD assigned, count; ULONG_PTR ids[maximum_job_processes]; } list{};
+        static_assert(offsetof(process_ids, ids) == offsetof(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList));
+        if (!QueryInformationJobObject(job.value, JobObjectBasicProcessIdList, &list, sizeof(list), nullptr)) return;
+        for (DWORD i = 0; i < list.count && cancelled_member_count < maximum_job_processes; ++i) {
+            bool retained = false;
+            for (size_t j = 0; j < cancelled_member_count; ++j)
+                if (GetProcessId(cancelled_members[j].value) == list.ids[i]) { retained = true; break; }
+            if (!retained) {
+                HANDLE member = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(list.ids[i]));
+                if (member) cancelled_members[cancelled_member_count++].value = member;
+            }
+        }
+    }
     std::array<owned_handle, 2> pipes;
 #else
     pid_t pid = -1;
@@ -82,16 +101,13 @@ struct kn_process {
         kn_process_cancel(this);
 #ifdef _WIN32
         if (child.value) WaitForSingleObject(child.value, INFINITE);
-        // A launcher/shim may exit before its codec descendants. TerminateJobObject
-        // initiates termination; the root handle alone does not join the job.
-        if (job.value) {
-            const auto deadline = clock_type::now() + std::chrono::seconds(5);
-            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
-            while (QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation,
-                    &accounting, sizeof(accounting), nullptr) && accounting.ActiveProcesses != 0) {
-                if (expired(deadline)) break;
-                Sleep(1);
-            }
+        // Job accounting can reach zero before process objects become signaled.
+        // Wait on handles retained before termination, not just on the launcher.
+        const auto deadline = clock_type::now() + std::chrono::seconds(5);
+        for (size_t i = 0; i < cancelled_member_count; ++i) {
+            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - clock_type::now()).count();
+            if (remaining <= 0) break;
+            WaitForSingleObject(cancelled_members[i].value, static_cast<DWORD>(remaining));
         }
 #else
         if (pid > 0) { int status; while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { } }
@@ -127,7 +143,8 @@ int32_t KN_CALL kn_process_start(const char* executable, const char* const* argu
         input.value = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &security, OPEN_EXISTING, 0, nullptr);
         if (input.value == INVALID_HANDLE_VALUE) { *os_error = static_cast<int32_t>(GetLastError()); return KN_IO_ERROR; }
         process->job.value = CreateJobObjectW(nullptr, nullptr);
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{}; limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{}; limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+        limits.BasicLimitInformation.ActiveProcessLimit = static_cast<DWORD>(kn_process::maximum_job_processes);
         if (!process->job.value || !SetInformationJobObject(process->job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
             *os_error = static_cast<int32_t>(GetLastError()); return KN_IO_ERROR;
         }
@@ -197,7 +214,9 @@ void KN_CALL kn_process_cancel(kn_process* process) noexcept {
         std::lock_guard<std::mutex> lock(process->state);
         if (process->cancelled.exchange(true)) return;
 #ifdef _WIN32
+        process->retain_job_members();
         if (process->job.value) TerminateJobObject(process->job.value, 1);
+        process->retain_job_members(); // Include any member admitted during the first snapshot.
 #else
         if (process->pid > 0) kill(-process->pid, SIGKILL);
 #endif

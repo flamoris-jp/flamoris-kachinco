@@ -50,9 +50,13 @@ bundle and matching Hub catalog; keep that acceptance explicitly pending until r
 
 Windows process-lifetime prerequisite (#74): repeated codec teardown CI exposed
 that cancelling a job and waiting only for its launcher/root is insufficient when
-that launcher owns codec descendants. Native process destruction now also waits
-for the terminated job's ActiveProcesses to reach zero, with a five-second bound
-and no new public ABI/state. The existing root wait and reader joins remain.
+that launcher owns codec descendants. Native process destruction now also retains bounded job-member process handles before cancellation and waits
+for their process objects to become signaled, with a shared five-second bound
+and no new public ABI. Native Windows jobs are limited to 256 processes, bounding
+the retained handle array. Accounting reaching zero alone is not an exit signal. The existing root wait and reader joins remain.
 This applies to capture cancellation and the ordinary preview decoder. A controlled
 launcher/descendant holding an exclusive temporary file protects the lifetime
 contract; immediate codec-source deletion assertions remain unchanged.
+
+Win32 references: [job member IDs](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list),
+[process termination and signaling](https://learn.microsoft.com/en-us/windows/win32/procthread/terminating-a-process).

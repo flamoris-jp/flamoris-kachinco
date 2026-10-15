@@ -36,3 +36,10 @@ process exit and immediate file release across eight cycles. Keep the existing
 real-codec immediate-delete assertions. This shared owner is also used by capture
 cancellation; no sleeps/retries are added to the codec deletion test. Final CI must
 verify this prerequisite before merge.
+
+The controlled Windows fixture rejected an accounting-only drain: job accounting
+was zero while the descendant process object remained unsignaled. Replaced that
+approximation with bounded job-member handles retained before cancellation and a
+shared five-second wait for actual process signals. A 256-process job limit bounds
+retained handles; snapshot again immediately after termination to include a member
+admitted during the first enumeration. Keep the same strong descendant/file tests.
