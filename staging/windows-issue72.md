@@ -1,5 +1,21 @@
 # Issue #72 — desktop update and external visual acceptance
 
+## Hub通信修正後の更新（MCP Core 1.3.1）
+
+Core 1.3.0のHub送信処理には、未設定の`resultType`を`null`として送る問題があり、
+Python MCP側が通常の読み取り応答も拒否した。Core 1.3.1はSDK標準のJSON設定で
+未設定フィールドを省略する。この版以降のKachinco一式を利用すること。
+
+1. プロジェクトを保存し、Kachincoを終了する。
+2. 最新mainを取得し、通常のWindowsビルド・発行手順で依存パッケージも復元する。
+   または、修正PRの成功したCIからWindows配布ZIPを取得する。
+3. `mcp/`を含む新しい一式で起動し、プロジェクトを開いてMCPを接続する。
+4. 既に8ツール版カタログを適用済みなら、Hubの設定変更やトークン再発行は不要。
+5. ChatGPTのHubツール一覧を更新し、必要ならチャットを分岐する。
+   `mcp.context`・`get_project`の成功後、`preview_frame`の実画像受信を確認する。
+
+CI成功やHub接続表示だけで画像転送の実機受入完了とは扱わない。
+
 Automated Windows smoke covers a 1080×1920/30 fps still-image sequence with overlap,
 screen blend, opacity, X/scale keyframes and captions at 0/2.5/4.9/5 seconds. It compares
 full viewer/capture RGBA before encoding and decodes PNG/JPEG dimensions. Packaged
