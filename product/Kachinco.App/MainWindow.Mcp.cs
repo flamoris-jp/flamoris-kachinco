@@ -14,6 +14,7 @@ public partial class MainWindow
     private McpDesktopUi? mcpUi;
     private int humanOperationDepth;
     private PreviewFrameCapture previewCapture = null!;
+    private readonly SemaphoreSlim downloadAdmission = new(1, 1);
     private void InitializeMcp()
     {
         previewCapture = new(new WindowsPreviewImageEncoder(), new WindowsCaptionRasterizer(Dispatcher));
@@ -33,17 +34,20 @@ public partial class MainWindow
     {
         var uploads = new MediaUploadStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "FLAMORIS", "Kachinco", "imported-media"), mediaProbe);
+        var downloads = new ClipDownloadStore(downloadAdmission);
         var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
             () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
                 playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
             () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Append(previewCapture.CreateTool(session, () => filename, () => mcpHost!.Snapshot)).Concat(allowAiEffectLibrary && effectLibrary is not null
                 ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : [])
-            .Concat(MediaUploadMcpTools.Create(session, uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported.")))),
+            .Concat(MediaUploadMcpTools.Create(session, uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported."))))
+            .Concat(ClipDownloadMcpTools.Create(session, downloads, () => filename)),
             new McpOptions(), new McpDiagnostics(logger));
         try
         {
             var grant = await boundary.EnableAsync(permission);
             grant.Revoked.Register(uploads.Dispose);
+            grant.Revoked.Register(downloads.Dispose);
             return new(boundary, grant);
         }
         catch (Exception exception)
@@ -51,7 +55,7 @@ public partial class MainWindow
             logger.Error("mcp.attach", "MCP attachment failed", exception,
                 new Dictionary<string, object?> { ["revision"] = session.GetProject().Revision,
                     ["hasProject"] = session.GetProject().Project is not null });
-            boundary.Dispose(); uploads.Dispose(); throw;
+            boundary.Dispose(); uploads.Dispose(); downloads.Dispose(); throw;
         }
     }
     private void UpdateMcpStatus() { mcpUi?.Refresh(); mcpUi?.NotifyHostReady(); }

@@ -51,6 +51,25 @@ static bool text_ok(const json& v,size_t max,bool allow_blank=false) { auto t=te
 static bool has_id(const json& values,const json& id) { for(const auto& v:items(values)) if(!v.is_null()&&field(v,"id")==id) return true; return false; }
 static bool has_clip(const json& tracks,const json& id) { for(const auto& t:items(tracks)) if(has_id(field(t,"clips"),id)) return true; return false; }
 static bool hash(const json& v) { if(!v.is_string()) return false; const auto& s=v.get_ref<const std::string&>(); return s.size()==64&&std::all_of(s.begin(),s.end(),[](char c){return(c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F');}); }
+int rate(const json& c) {
+    const auto n=c.contains("playbackRate")?integer(c.at("playbackRate")):1;
+    if(n!=1&&n!=2&&n!=4&&n!=8) throw rejected{error("INVALID_PLAYBACK_RATE","Playback rate must be 1, 2, 4 or 8.")};
+    return static_cast<int>(n);
+}
+int64_t retime(int64_t tick,int old_rate,int new_rate) {
+    // All accepted rates are powers of two; division truncates toward zero.
+    if(old_rate<new_rate) return tick/(new_rate/old_rate);
+    const auto factor=old_rate/new_rate;
+    if(tick<INT64_MIN/factor||tick>INT64_MAX/factor) throw std::overflow_error("retime");
+    return tick*factor;
+}
+int64_t source_duration(const json& c) {
+    return c.contains("sourceDurationTicks")&&!c.at("sourceDurationTicks").is_null()?integer(c.at("sourceDurationTicks")):retime(integer(c.at("durationTicks")),rate(c),1);
+}
+static void retime_curves(json& clip,int old_rate,int new_rate) {
+    if(clip["audio"].contains("volumePoints")) for(auto& point:clip["audio"]["volumePoints"]) point["tick"]=retime(integer(point.at("tick")),old_rate,new_rate);
+    if(clip["appearance"].contains("automation")) for(auto& curve:clip["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=retime(integer(point.at("tick")),old_rate,new_rate);
+}
 json validate(const json& p) {
     json errors=json::array(); std::set<std::string> ids;
     auto e=[&](const char* code,const char* message,const json& id=null_value,const json& path=null_value){errors.push_back(error(code,message,id,path));};
@@ -130,10 +149,12 @@ json validate(const json& p) {
             for(const auto& c:clips) {
                 if(c.is_null()) { e("INVALID_CLIP","Null clip."); continue; }
                 const auto& cid=c.at("id"); identity(cid,"clip","clips"); auto cd=integer(c.at("durationTicks"));
+                auto speed=rate(c);auto span=source_duration(c);
+                if(span<=0||cd!=span/speed+(span%speed!=0)) e("INVALID_SOURCE_DURATION","Timeline duration must be the ceiling of source duration / rate.",cid);
                 if(!valid_range(integer(c.at("startTicks")),cd,duration)) e("INVALID_TIMELINE_RANGE","Clip must fit inside the sequence.",cid);
                 auto it=assets.find(guid(c.at("mediaAssetId")));
                 if(it==assets.end()) e("MEDIA_NOT_FOUND","Clip references missing media.",cid,"mediaAssetId");
-                else { const auto& a=*it->second; if(!valid_range(integer(c.at("sourceInTicks")),cd,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_SOURCE_RANGE","Source range must fit inside the registered media.",cid);
+                else { const auto& a=*it->second; if(!valid_range(integer(c.at("sourceInTicks")),span,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_SOURCE_RANGE","Source range must fit inside the registered media.",cid);
                     if((kind==0&&integer(a.at("kind"))!=0&&integer(a.at("kind"))!=2)||(kind==1&&integer(a.at("kind"))!=1)) e("TRACK_MEDIA_MISMATCH","Video tracks accept video assets; audio tracks accept audio assets.",cid); }
                 const auto& a=field(c,"appearance"); const auto& tr=field(a,"transform");
                 bool good=a.is_object()&&tr.is_object()&&integer(a.at("blend"))>=0&&integer(a.at("blend"))<=1&&finite(field(a,"opacity"));
@@ -216,7 +237,7 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SetClipSpeed","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
     if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
@@ -278,17 +299,35 @@ json apply(json p,const json& request) {
             }
         }
         else if(type=="MoveClip") {json value=values[ci]; values.erase(values.begin()+static_cast<json::difference_type>(ci)); value["startTicks"]=c.at("startTicks"); auto target=find(s.at("tracks"),c.at("targetTrackId"),"TRACK_NOT_FOUND","Track not found."); s["tracks"][target]["clips"].push_back(value);}
-        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; json right=clip; clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),left); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); if(right["appearance"].contains("automation")) for(auto& curve:right["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
+        else if(type=="SplitClip") { auto& clip=values[ci]; auto split=integer(c.at("splitTicks")),start=integer(clip.at("startTicks")),duration=integer(clip.at("durationTicks")); if(split<=start||split>=add(start,duration)) reject("INVALID_SPLIT","Split must be strictly inside the clip.",id); auto left=split-start; auto sourceLeft=retime(left,rate(clip),1);auto span=source_duration(clip); json right=clip; if(rate(clip)!=1||(clip.contains("sourceDurationTicks")&&!clip.at("sourceDurationTicks").is_null())) {clip["sourceDurationTicks"]=sourceLeft;right["sourceDurationTicks"]=span-sourceLeft;} clip["durationTicks"]=left; right["id"]=c.at("rightClipId"); right["startTicks"]=split; right["sourceInTicks"]=add(integer(clip.at("sourceInTicks")),sourceLeft); right["durationTicks"]=duration-left; if(right["audio"].contains("volumePoints")) for(auto& point:right["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),-left); if(right["appearance"].contains("automation")) for(auto& curve:right["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=add(integer(point.at("tick")),-left); values.push_back(right);}
+        else if(type=="SetClipSpeed") {
+            auto& clip=values[ci];auto span=source_duration(clip);const auto old_rate=rate(clip);
+            json requested={{"playbackRate",c.at("playbackRate")}};const auto next_rate=rate(requested);
+            const auto old_duration=integer(clip.at("durationTicks"));
+            retime_curves(clip,old_rate,next_rate);clip["playbackRate"]=next_rate;clip["sourceDurationTicks"]=span;
+            clip["durationTicks"]=span/next_rate+(span%next_rate!=0);
+            const auto next_duration=integer(clip.at("durationTicks")),start=integer(clip.at("startTicks"));
+            if(next_duration>old_duration) {
+                const auto end=add(start,next_duration);
+                for(size_t other=0;other<values.size();++other) if(other!=ci&&integer(values[other].at("startTicks"))<end&&
+                    add(integer(values[other].at("startTicks")),integer(values[other].at("durationTicks")))>start)
+                    reject("CLIP_OVERLAP","Speed extension overlaps another clip; move it explicitly first.",id);
+            }
+        }
         else if(type=="TrimClip") {
+            auto& target=values[ci];
+            if((rate(target)!=1||(target.contains("sourceDurationTicks")&&!target.at("sourceDurationTicks").is_null()))&&(c.at("durationTicks")!=target.at("durationTicks")||c.at("sourceInTicks")!=target.at("sourceInTicks")))
+                target["sourceDurationTicks"]=add(source_duration(target),retime(add(integer(c.at("durationTicks")),-integer(target.at("durationTicks"))),rate(target),1));
+
             if(values[ci]["audio"].contains("volumePoints")&&!values[ci]["audio"]["volumePoints"].empty()) {
                 auto source=integer(c.at("sourceInTicks"));
                 if(source<0) reject("INVALID_SOURCE_RANGE","Source in must be nonnegative.",id);
-                const auto delta=integer(values[ci].at("sourceInTicks"))-source;
+                const auto delta=retime(integer(values[ci].at("sourceInTicks"))-source,1,rate(values[ci]));
                 for(auto& point:values[ci]["audio"]["volumePoints"]) point["tick"]=add(integer(point.at("tick")),delta);
             }
             if(values[ci]["appearance"].contains("automation")) {
                 const auto source=integer(c.at("sourceInTicks"));if(source<0) reject("INVALID_SOURCE_RANGE","Source in must be nonnegative.",id);
-                const auto delta=integer(values[ci].at("sourceInTicks"))-source;
+                const auto delta=retime(integer(values[ci].at("sourceInTicks"))-source,1,rate(values[ci]));
                 for(auto& curve:values[ci]["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=add(integer(point.at("tick")),delta);
             }
             for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) values[ci][k]=c.at(k);

@@ -172,13 +172,17 @@ public sealed class SharedAudioRenderer(IMediaDecoder decoder, string? projectPa
                 long until = FirstSampleAtOrAfter(layer.TimelineStartTicks + layer.DurationTicks, sampleRate);
                 from = Math.Max(firstSample, from); until = Math.Min(firstSample + sampleCount, until);
                 if (until <= from) continue;
-                long sourceTicks = layer.SourceStartTicks + TimelineTime.SampleToTicks(from, sampleRate) - layer.TimelineStartTicks;
                 var path = paths[layer.MediaAssetId];
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedAudioBlock>.Fail(Diagnostic.Error("MEDIA_MISSING", "Audio source is missing.", layer.MediaAssetId));
-                var samples = await decoder.AudioAsync(path.ResolvedPath, sourceTicks, (int)(until - from), sampleRate, channels, cancellationToken);
-                int offset = checked((int)(from - firstSample) * channels);
-                if (samples.Length != checked((int)(until - from) * channels)) throw new InvalidDataException("Decoder returned an incomplete PCM block.");
-                evaluator.MixAudio(layer.ClipId, mix, samples.AsSpan(), offset, from, sampleRate, channels);
+                for (long cursor = from; cursor < until;)
+                {
+                    int frames = (int)Math.Min(48000 / layer.PlaybackRate, until - cursor);
+                    long sourceTicks = evaluator.AudioSourceTick(layer.ClipId, TimelineTime.SampleToTicks(cursor, sampleRate));
+                    var samples = await decoder.AudioAsync(path.ResolvedPath, sourceTicks, frames * layer.PlaybackRate, sampleRate, channels, cancellationToken);
+                    if (samples.Length != frames * layer.PlaybackRate * channels) throw new InvalidDataException("Decoder returned an incomplete PCM block.");
+                    evaluator.MixAudioSpeed(layer.ClipId, mix, samples.AsSpan(), checked((int)(cursor - firstSample) * channels), cursor, frames);
+                    cursor += frames;
+                }
             }
             return Result<RenderedAudioBlock>.Ok(new(firstSample, sampleRate, channels,
                 System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(Kachinco.Native.NativeComposition.Finish(mix))));

@@ -59,6 +59,25 @@ int main() {
     REQUIRE(kn_timeline_set_gain_curve(timeline,0,curve,2)==KN_OK);
     REQUIRE(kn_timeline_evaluate(timeline,0,0,values,2,&count)==KN_OK && values[0].gain==1);
     kn_timeline_destroy(timeline);
+    // Additive speed ABI retains layouts, exact source span and native PCM choice.
+    kn_eval_item speed_item{0,KN_TICKS_PER_SECOND,7,0,1,0,0,1,1,a,.5,0,1};
+    REQUIRE(kn_timeline_create(KN_TICKS_PER_SECOND,&speed_item,1,&timeline)==KN_OK);
+    REQUIRE(kn_timeline_set_speed(timeline,0,8,8*KN_TICKS_PER_SECOND-3)==KN_OK);
+    int64_t source_tick=0;
+    REQUIRE(kn_timeline_source_tick(timeline,0,KN_TICKS_PER_SECOND-1,&source_tick)==KN_OK && source_tick==7+8*(KN_TICKS_PER_SECOND-1));
+    REQUIRE(kn_timeline_set_speed(timeline,0,0,8*KN_TICKS_PER_SECOND)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_set_speed(timeline,0,8,INT64_MAX)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_source_tick(timeline,0,KN_TICKS_PER_SECOND,&source_tick)==KN_INVALID_ARGUMENT);
+    float speed_source[32]={};for(int i=0;i<32;++i) speed_source[i]=static_cast<float>(i)/32;
+    double speed_mix[4]={};
+    REQUIRE(kn_timeline_mix_audio_speed(timeline,0,speed_mix,4,speed_source,32,0,0,2)==KN_OK);
+    REQUIRE(speed_mix[0]==0 && speed_mix[1]==1.0/64 && speed_mix[2]==.25 && speed_mix[3]==17.0/64);
+    REQUIRE(kn_timeline_mix_audio_speed(timeline,0,speed_mix,4,speed_source,31,0,0,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio_speed(timeline,0,speed_mix,4,speed_source,32,1,0,2)==KN_INVALID_ARGUMENT);
+    REQUIRE(kn_timeline_mix_audio_speed(timeline,0,speed_mix,4,speed_source,32,0,INT64_MAX,2)==KN_INVALID_ARGUMENT);
+    speed_source[1]=std::numeric_limits<float>::quiet_NaN();
+    REQUIRE(kn_timeline_mix_audio_speed(timeline,0,speed_mix,4,speed_source,32,0,0,2)==KN_INVALID_MEDIA);
+    kn_timeline_destroy(timeline);
     kn_playback* playback=nullptr;REQUIRE(kn_playback_create(&playback)==KN_OK);
     kn_playback_ticket ticket;REQUIRE(kn_playback_request(playback,KN_TICKS_PER_SECOND,30,1,0,1,&ticket)==KN_OK);
     kn_audio_step audio; int64_t queued=0;

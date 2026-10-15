@@ -91,6 +91,18 @@ public partial class MainWindow
         else { Invalid(); Status.Text = string.Join(" / ", result.Diagnostics.Select(d => d.Message)); }
         void Invalid() { box.BorderBrush = Brushes.OrangeRed; Status.Text = EditorText.Choose("有効な範囲の数値を入力してください。", "Enter a finite value within the valid range."); }
     }
+    private void ClipSpeed_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (inspectorRefreshing || refreshing || busy || inspectorBaseline is not { } baseline ||
+            inspectorClipId is not { } id || selectedClipId != id || selectedSequenceId is not { } sequence ||
+            ClipSpeedBox.SelectedItem is not int rate) return;
+        var clip = baseline.Project!.Sequences.First(s => s.Id == sequence).Tracks.SelectMany(t => t.Clips).First(c => c.Id == id);
+        if (clip.PlaybackRate == rate) return;
+        CancelInspectorGesture(); playback.Pause();
+        Show(session.Execute(new([new SetClipSpeed(sequence, id, rate)], baseline.Revision)),
+            EditorText.Choose("クリップの再生速度を変更しました。", "Clip playback speed updated."));
+        RefreshInspector();
+    }
     private void InspectorBlend_Changed(object sender, SelectionChangedEventArgs e) => CommitInspectorChoices();
     private void InspectorChoice_Click(object sender, RoutedEventArgs e) => CommitInspectorChoices();
     private void CommitInspectorChoices()

@@ -14,5 +14,8 @@ json parse(const std::string& text, bool reject_duplicates = true);
 int64_t integer(const json& value);
 int64_t add(int64_t a, int64_t b);
 std::string guid(const json& value);
+int rate(const json& clip);
+int64_t source_duration(const json& clip);
+int64_t retime(int64_t tick, int old_rate, int new_rate);
 bool valid_range(int64_t start, int64_t duration, int64_t limit = INT64_MAX);
 }

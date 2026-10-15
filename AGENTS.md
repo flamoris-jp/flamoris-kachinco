@@ -360,3 +360,18 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
 - Run native WARP parity/lifetime and managed adapter/codec/selection tests on
   Windows. Physical performance and 6 GB acceptance are measured separately using
   staging/windows-issue67.md; never substitute WARP speed for GPU speed.
+
+## Clip speed and download authority (Issues #78–#79)
+
+- ADR 0019 adds native SetClipSpeed at 1/2/4/8 with exact source duration,
+  conditional v5, shared evaluator/source mapping and PCM sample decimation.
+  Legacy v1–v4 retain 1x semantics and conditional v2/v3/v4 encoding.
+- Never implement speed as a managed/FFmpeg timeline or change unrelated tracks.
+  Timeline duration rounds upward; signed key scaling truncates toward zero;
+  overflow/collisions and overlapping speed extensions fail atomically.
+- Clip downloads isolate a derived snapshot and use shared rendering/encoding.
+  Only generated opaque IDs address temporary bytes. ReadOnly/Edit, document,
+  revision and source checks apply to every result; revocation cancels/cleans.
+  Hub forwards bounded chunks and pins the actual producer descriptor.
+- Required native capabilities are now 32767. Run speed, download, persistence,
+  native and real-codec tests; Windows/Hub physical acceptance remains separate.

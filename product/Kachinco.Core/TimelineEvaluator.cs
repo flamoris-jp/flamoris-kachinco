@@ -10,7 +10,8 @@ public sealed record EvaluatedFrame(Guid SequenceId, long Tick, SequenceSettings
     ImmutableArray<EvaluatedVideoLayer> VideoLayers, ImmutableArray<EvaluatedAudio> Audio,
     ImmutableArray<EvaluatedCaption> Captions);
 public sealed record AudioRangeContribution(Guid TrackId, Guid ClipId, Guid MediaAssetId,
-    long TimelineStartTicks, long SourceStartTicks, long DurationTicks, double Gain);
+    long TimelineStartTicks, long SourceStartTicks, long DurationTicks, double Gain)
+{ public int PlaybackRate { get; init; } = 1; }
 
 // Immutable domain projection; native owns ordering, activity and source/parameter evaluation.
 public sealed class TimelineEvaluator : IDisposable
@@ -26,6 +27,7 @@ public sealed class TimelineEvaluator : IDisposable
         var items = new List<Kachinco.Native.NativeEvaluationItem>();
         var ids = new List<(Guid, Clip?, Caption?)>();
         var curves = new List<Kachinco.Native.NativeGainCurve>();
+        var speeds = new List<Kachinco.Native.NativeClipSpeed>();
         var visual = new List<Kachinco.Native.NativePropertyCurve>();
         for (int trackIndex = 0; trackIndex < sequence.Tracks.Length; ++trackIndex)
         {
@@ -39,6 +41,8 @@ public sealed class TimelineEvaluator : IDisposable
                     new(t.X,t.Y,t.ScaleX,t.ScaleY,t.RotationDegrees,clip.Appearance.Opacity,(int)clip.Appearance.Blend),
                     clip.Audio.Gain, clip.Audio.Muted ? 1 : 0, track.Enabled ? 1 : 0));
                 ids.Add((track.Id, clip, null));
+                if (clip.PlaybackRate != 1 || clip.SourceDurationTicks is not null)
+                    speeds.Add(new(ids.Count - 1, clip.PlaybackRate, clip.SourceDurationTicks ?? checked(clip.DurationTicks * clip.PlaybackRate)));
                 foreach (var curve in clip.Appearance.Automation)
                     visual.Add(new(ids.Count - 1, (int)curve.Property, curve.Points.Select(p => new Kachinco.Native.NativeParameterPoint(p.Tick, p.Value)).ToArray()));
                 if (track.Kind == TrackKind.Audio)
@@ -57,7 +61,7 @@ public sealed class TimelineEvaluator : IDisposable
                 ids.Add((track.Id, null, caption));
             }
         }
-        identities = ids.ToArray(); native = new(sequence.DurationTicks, items.ToArray(), curves.ToArray(), visual.ToArray());
+        identities = ids.ToArray(); native = new(sequence.DurationTicks, items.ToArray(), curves.ToArray(), visual.ToArray(), speeds.ToArray());
     }
     public static Result<TimelineEvaluator> Create(Project project, Guid sequenceId)
     {
@@ -95,9 +99,12 @@ public sealed class TimelineEvaluator : IDisposable
         return Result<ImmutableArray<AudioRangeContribution>>.Ok([.. native.Evaluate(startTicks,durationTicks).Select(value =>
         {
             var id = identities[value.Index];
-            return new AudioRangeContribution(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,value.TimelineStart,value.SourceStart,value.Duration,value.Gain);
+            return new AudioRangeContribution(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,value.TimelineStart,value.SourceStart,value.Duration,value.Gain) { PlaybackRate = id.Clip.PlaybackRate };
         })]);
     }
+    public long AudioSourceTick(Guid clipId, long tick) => native.SourceTick(audioIndices[clipId], tick);
+    public void MixAudioSpeed(Guid clipId, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int frames) =>
+        native.MixAudioSpeed(audioIndices[clipId], mix, source, offset, firstSample, frames);
     public void Dispose() => native.Dispose();
     public void MixAudio(Guid clipId, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int rate, int channels) =>
         native.MixAudio(audioIndices[clipId], mix, source, offset, firstSample, rate, channels);
