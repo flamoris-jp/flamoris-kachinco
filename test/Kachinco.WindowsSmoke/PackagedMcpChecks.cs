@@ -101,6 +101,7 @@ internal static partial class PackagedMcpChecks
                     Check(bitmap.PixelWidth == 640 && bitmap.PixelHeight == 360, "External PNG dimensions");
                 }
                 Check((await Query(client)).GetRawText() == captureBefore.GetRawText(), "Capture moved editor state/history");
+                Console.WriteLine("Published preview_frame -> external official MCP client: actual PNG content, decoded dimensions, unchanged editor context/revision/history: PASS");
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(processId, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);
@@ -150,7 +151,7 @@ internal static partial class PackagedMcpChecks
             string eofPipe = await Connection(process.Id);
             await BridgeInputEof(bridge, eofPipe);
             await BridgeEof(bridge, eofPipe, process);
-            Console.WriteLine("Published MCP: Core 1.2.0 / official C# SDK 2.2.0 / 2026-07-28; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
+            Console.WriteLine($"Published MCP: Core {typeof(McpBoundary).Assembly.GetName().Version} / official C# SDK 2.2.0 / 2026-07-28; typed discovery; external track+caption transaction; automatic WPF projection; UI Undo/Redo; UI edit -> MCP query; MCP history; rollback/stale revisions; downgrade/New/Stop revocation; editor EOF: PASS. Editor+bridge PATH contains Windows System32 only.");
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }

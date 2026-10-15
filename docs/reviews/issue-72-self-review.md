@@ -19,3 +19,11 @@ smoke but cannot run WPF; named-pipe external-client tests are blocked by sandbo
 AF_UNIX permission. Windows CI must pass full Product/build/codec/packaged-bridge
 checks. Actual deployed tunnel/Hub and physical viewer checks remain explicitly
 pending in staging/windows-issue72.md. Do not close the Issue from merge alone.
+
+CI #145 (750bc2c) passes all gates: Linux 285, regular/sanitized native contracts,
+Windows ABI 48, portrait pixel parity, actual bounded PNG/JPEG, published external
+MCP image response, archive and startup. Core 1.3.0 release is verified after NuGet
+indexing; Hub #50 CI and actual external HTTP/WebSocket fixture pass. Windows
+CMake availability is now checked explicitly after a runner lacked it. Final review
+corrects a pre-existing fixed Core 1.2 console label to report the loaded assembly
+version and adds a dedicated external-image PASS line; no Product behavior changes.
