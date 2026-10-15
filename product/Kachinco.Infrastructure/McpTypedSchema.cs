@@ -43,6 +43,8 @@ public static class McpTypedSchema
     {
         var schema = Describe(type);
         schema["properties"]!.AsObject()["type"] = new JsonObject { ["type"] = "string", ["const"] = type.Name };
+        if (type == typeof(Kachinco.Core.SetClipSpeed))
+            schema["properties"]!["playbackRate"]!["enum"] = new JsonArray(1, 2, 4, 8);
         schema["required"]!.AsArray().Insert(0, JsonValue.Create("type"));
         return schema;
     }

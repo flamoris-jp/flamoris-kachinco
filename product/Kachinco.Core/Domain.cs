@@ -32,7 +32,9 @@ public sealed record Clip(Guid Id, Guid MediaAssetId, long StartTicks, long Sour
     long DurationTicks, bool Enabled, ClipAppearance Appearance, AudioProperties Audio)
 {
     public long EndTicks => checked(StartTicks + DurationTicks);
-    public long SourceOutTicks => checked(SourceInTicks + DurationTicks);
+    public int PlaybackRate { get; init; } = 1;
+    public long? SourceDurationTicks { get; init; }
+    public long SourceOutTicks => checked(SourceInTicks + (SourceDurationTicks ?? checked(DurationTicks * PlaybackRate)));
 }
 public sealed record Caption(Guid Id, long StartTicks, long DurationTicks, string Text, bool Enabled = true);
 public sealed record Transform2D(double X, double Y, double ScaleX, double ScaleY, double RotationDegrees)

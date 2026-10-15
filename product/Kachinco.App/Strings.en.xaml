@@ -108,5 +108,6 @@
   <system:String x:Key="Shell.DeletePoint">Delete point</system:String>
   <system:String x:Key="Shell.PreviewBackend">Preview rendering backend. Select CPU to recover from GPU failures. Export uses CPU rendering.</system:String>
   <system:String x:Key="Shell.PreviewBackendAuto">Auto</system:String>
+  <system:String x:Key="Shell.PlaybackRate">Playback speed (×)</system:String>
 </ResourceDictionary>
 

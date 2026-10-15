@@ -33,6 +33,7 @@ extern "C" {
 #define KN_CAP_PREVIEW_PRESENTATION UINT64_C(2048)
 #define KN_CAP_VOLUME_AUTOMATION UINT64_C(4096)
 #define KN_CAP_VISUAL_AUTOMATION UINT64_C(8192)
+#define KN_CAP_CLIP_SPEED UINT64_C(16384)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -169,6 +170,9 @@ KN_API int32_t KN_CALL kn_parameter_at_signed(const kn_parameter_point*, uint32_
 KN_API int32_t KN_CALL kn_parameter_at(const kn_parameter_point* points, uint32_t count, int64_t tick, double fallback, double* output) KN_NOEXCEPT;
 /* Immutable snapshot setup: bounded signed clip-relative volume multiplier curve. */
 KN_API int32_t KN_CALL kn_timeline_set_property_curve(kn_timeline*, int32_t index, int32_t property, const kn_parameter_point*, uint32_t count) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_timeline_set_speed(kn_timeline* timeline,int32_t index,int32_t rate,int64_t source_duration) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_timeline_source_tick(const kn_timeline* timeline,int32_t index,int64_t tick,int64_t* output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_timeline_mix_audio_speed(const kn_timeline* timeline,int32_t index,double* mix,uint32_t mix_count,const float* source,uint32_t source_count,uint32_t offset,int64_t first_sample,uint32_t frames) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_timeline_set_gain_curve(kn_timeline* timeline, int32_t index, const kn_parameter_point* points, uint32_t count) KN_NOEXCEPT;
 /* Shared preview/export PCM: envelope sampled at the canonical timeline sample tick. */
 KN_API int32_t KN_CALL kn_timeline_mix_audio(const kn_timeline* timeline, int32_t index, double* mix, uint32_t mix_count,

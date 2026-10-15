@@ -11,18 +11,20 @@ public readonly record struct NativeEvaluationResult(int Index, int Kind, long T
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct NativeParameterPoint(long Tick, double Value);
 public sealed record NativePropertyCurve(int Index, int Property, NativeParameterPoint[] Points);
+public sealed record NativeClipSpeed(int Index, int Rate, long SourceDuration);
 public sealed record NativeGainCurve(int Index, NativeParameterPoint[] Points);
 
 public sealed class NativeTimeline : IDisposable
 {
     private readonly TimelineHandle handle;
     private readonly int capacity;
-    public NativeTimeline(long duration, NativeEvaluationItem[] items, NativeGainCurve[]? curves = null, NativePropertyCurve[]? visual = null)
+    public NativeTimeline(long duration, NativeEvaluationItem[] items, NativeGainCurve[]? curves = null, NativePropertyCurve[]? visual = null, NativeClipSpeed[]? speeds = null)
     {
         NativeMediaProcess.Check(Methods.Create(duration, items, (uint)items.Length, out handle));
         capacity = items.Length;
         try
         {
+            foreach (var speed in speeds ?? []) NativeMediaProcess.Check(Methods.SetSpeed(handle, speed.Index, speed.Rate, speed.SourceDuration));
             foreach (var curve in curves ?? []) NativeMediaProcess.Check(Methods.SetGainCurve(handle, curve.Index, curve.Points, checked((uint)curve.Points.Length)));
             foreach (var curve in visual ?? []) NativeMediaProcess.Check(Methods.SetPropertyCurve(handle, curve.Index, curve.Property, curve.Points, checked((uint)curve.Points.Length)));
             handle.Account(checked(items.LongLength * Marshal.SizeOf<NativeEvaluationItem>() + (curves?.Sum(c => c.Points.LongLength * 16) ?? 0) + (visual?.Sum(c => c.Points.LongLength * 16) ?? 0) + 32));
@@ -50,6 +52,14 @@ public sealed class NativeTimeline : IDisposable
             NativeMediaProcess.Check(Methods.MixAudio(handle, index, (IntPtr)dst, checked((uint)mix.Length), (IntPtr)src,
                 checked((uint)source.Length), checked((uint)offset), firstSample, rate, channels));
     }
+    public long SourceTick(int index, long tick)
+    { NativeMediaProcess.Check(Methods.SourceTick(handle, index, tick, out long value)); return value; }
+    public unsafe void MixAudioSpeed(int index, Span<double> mix, ReadOnlySpan<float> source, int offset, long firstSample, int frames)
+    {
+        fixed (double* dst = mix) fixed (float* src = source)
+            NativeMediaProcess.Check(Methods.MixAudioSpeed(handle, index, (IntPtr)dst, checked((uint)mix.Length),
+                (IntPtr)src, checked((uint)source.Length), checked((uint)offset), firstSample, checked((uint)frames)));
+    }
     public void Dispose() => handle.Dispose();
     private sealed class TimelineHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
@@ -66,6 +76,12 @@ public sealed class NativeTimeline : IDisposable
     private static class Methods
     {
         private const string Library = "Kachinco.Native.Runtime";
+        [DllImport(Library, EntryPoint = "kn_timeline_set_speed", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SetSpeed(TimelineHandle handle, int index, int rate, long span);
+        [DllImport(Library, EntryPoint = "kn_timeline_source_tick", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus SourceTick(TimelineHandle handle, int index, long tick, out long value);
+        [DllImport(Library, EntryPoint = "kn_timeline_mix_audio_speed", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern NativeStatus MixAudioSpeed(TimelineHandle handle, int index, IntPtr mix, uint mixCount, IntPtr source, uint sourceCount, uint offset, long firstSample, uint frames);
         [DllImport(Library, EntryPoint = "kn_timeline_create", CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeStatus Create(long duration, [In] NativeEvaluationItem[] items, uint count, out TimelineHandle handle);
         [DllImport(Library, EntryPoint = "kn_timeline_destroy", CallingConvention = CallingConvention.Cdecl)]

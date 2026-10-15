@@ -3,7 +3,7 @@ using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
 
-public enum ExportPreset { YoutubeH264AacMp4 }
+public enum ExportPreset { YoutubeH264AacMp4, ClipPreviewH264Mp4 }
 public enum ExportStage { Planning, Rendering, Encoding, Completed, Cancelled, Failed }
 public sealed record ExportRequest(Guid JobId, Guid SequenceId, string OutputPath, ExportPreset Preset, long? ExpectedRevision = null);
 public sealed record ExportProgress(Guid JobId, ExportStage Stage, long FramesCompleted, long TotalFrames, long AudioSamplesCompleted);

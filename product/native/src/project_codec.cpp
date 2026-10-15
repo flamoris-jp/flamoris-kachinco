@@ -53,7 +53,9 @@ static json sorted(json values,bool timed=false) {
     std::stable_sort(values.begin(),values.end(),[&](const json& a,const json& b){if(timed&&integer(a.at("startTicks"))!=integer(b.at("startTicks"))) return integer(a.at("startTicks"))<integer(b.at("startTicks")); return a.at("id").get<std::string>()<b.at("id").get<std::string>();}); return values;
 }
 static const std::vector<std::string> properties={"X","Y","ScaleX","ScaleY","RotationDegrees","Opacity"};
-static json encode_clip(json c,bool curves,bool visual) {
+static json encode_clip(json c,bool curves,bool visual,bool speed) {
+    if(speed) {c["playbackRate"]=rate(c);c["sourceDurationTicks"]=std::to_string(source_duration(c));}
+    else {c.erase("playbackRate");c.erase("sourceDurationTicks");}
     auto& appearance=c["appearance"];
     if(visual) {
         if(!appearance.contains("automation")) appearance["automation"]=json::array();
@@ -70,13 +72,15 @@ static json encode_clip(json c,bool curves,bool visual) {
     c["startTicks"]=std::to_string(integer(c.at("startTicks"))); c["sourceInTicks"]=std::to_string(integer(c.at("sourceInTicks"))); c["durationTicks"]=std::to_string(integer(c.at("durationTicks"))); c["appearance"]["blend"]=blend.at(static_cast<size_t>(integer(c.at("appearance").at("blend")))); return c;
 }
 json encode_file(const json& p) {
-    bool curves=false,visual=false;
+    bool curves=false,visual=false,speed=false;
+    for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("clips"))
+        if(rate(c)!=1||source_duration(c)!=integer(c.at("durationTicks"))) speed=true;
     for(const auto& a:p.at("assets")) if(integer(a.at("kind"))==2) visual=true;
     for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("clips"))
         if(c.at("appearance").contains("automation")&&!c.at("appearance").at("automation").empty()) visual=true;
     for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("clips"))
         if(c.at("audio").contains("volumePoints")&&!c.at("audio").at("volumePoints").empty()) curves=true;
-    json result={{"format","flamoris-kachinco"},{"schemaVersion",visual?4:curves?3:2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
+    json result={{"format","flamoris-kachinco"},{"schemaVersion",speed?5:visual?4:curves?3:2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
     for(auto a:sorted(p.at("assets"))) {
         const auto pr=a.value("provenance",json(nullptr)); a.erase("provenance"); a["kind"]=media.at(static_cast<size_t>(integer(a.at("kind")))); a["durationTicks"]=std::to_string(integer(a.at("durationTicks"))); result["project"]["assets"].push_back(a);
         if(!pr.is_null()) result["generatedAssets"].push_back({{"mediaAssetId",a.at("id")},{"recipeId",pr.at("recipeId")},{"recipeRevision",pr.at("recipeRevision")},{"sourceSha256",pr.at("sourceSha256")},{"outputSha256",pr.at("outputSha256")}});
@@ -86,7 +90,7 @@ json encode_file(const json& p) {
         for(auto& c:clappers) {c["startTicks"]=std::to_string(integer(c.at("startTicks"))); c["durationTicks"]=std::to_string(integer(c.at("durationTicks"))); if(!c.at("geometry").is_null()) c["geometry"]["kind"]=geometry.at(static_cast<size_t>(integer(c.at("geometry").at("kind"))));}
         result["authoring"].push_back({{"sequenceId",s.at("id")},{"clappers",clappers},{"recipes",recipes}}); s.erase("clappers"); s.erase("recipes");
         auto fps=s.at("settings").at("frameRate"); s["settings"].erase("frameRate"); s["settings"]["fpsNumerator"]=fps.at("numerator"); s["settings"]["fpsDenominator"]=fps.at("denominator"); s["durationTicks"]=std::to_string(integer(s.at("durationTicks")));
-        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c,curves||visual,visual); for(auto& c:captions) {c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
+        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c,curves||visual||speed,visual||speed,speed); for(auto& c:captions) {c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
         result["project"]["sequences"].push_back(s);
     }
     return result;
@@ -97,13 +101,13 @@ json decode_file(const std::string& raw) {
     int32_t schema;
     try { schema=i32(first.at("schemaVersion")); }
     catch(...) { throw rejected{error("INVALID_ENVELOPE","An integer schemaVersion is required.")}; }
-    if(schema!=1&&schema!=2&&schema!=3&&schema!=4) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
+    if(schema!=1&&schema!=2&&schema!=3&&schema!=4&&schema!=5) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
     auto root=parse(raw);
     if(schema==1) fields(root,{"format","schemaVersion","timebase","project"}); else fields(root,{"format","schemaVersion","timebase","project","authoring","generatedAssets"});
     if(text(root.at("format"))!="flamoris-kachinco"||ticks(root.at("timebase"))!=KN_TICKS_PER_SECOND) throw std::invalid_argument("envelope");
     auto p=root.at("project"); fields(p,{"id","name","assets","sequences"}); p["id"]=guid(p.at("id")); p["name"]=text(p.at("name")); array(p.at("assets"));array(p.at("sequences"));
     for(auto& a:p["assets"]) {
-        fields(a,{"id","name","sourcePath","kind","durationTicks","sampleRate","channels"}); a["id"]=guid(a.at("id"));a["name"]=text(a.at("name"));a["sourcePath"]=text(a.at("sourcePath")); a["kind"]=(schema==4?strict_enum(a.at("kind"),media):enum_value(a.at("kind"),std::vector<std::string>{"Mov","Wav"})); a["durationTicks"]=ticks(a.at("durationTicks")); a["sampleRate"]=optional_i32(a.at("sampleRate"));a["channels"]=optional_i32(a.at("channels"));a["provenance"]=nullptr;
+        fields(a,{"id","name","sourcePath","kind","durationTicks","sampleRate","channels"}); a["id"]=guid(a.at("id"));a["name"]=text(a.at("name"));a["sourcePath"]=text(a.at("sourcePath")); a["kind"]=(schema>=4?strict_enum(a.at("kind"),media):enum_value(a.at("kind"),std::vector<std::string>{"Mov","Wav"})); a["durationTicks"]=ticks(a.at("durationTicks")); a["sampleRate"]=optional_i32(a.at("sampleRate"));a["channels"]=optional_i32(a.at("channels"));a["provenance"]=nullptr;
     }
     for(auto& s:p["sequences"]) {
         fields(s,{"id","name","settings","durationTicks","tracks"});s["id"]=guid(s.at("id"));s["name"]=text(s.at("name"));s["durationTicks"]=ticks(s.at("durationTicks"));
@@ -111,8 +115,9 @@ json decode_file(const std::string& raw) {
         for(auto& t:s["tracks"]) {
             fields(t,{"id","name","kind","enabled","clips","captions"});t["id"]=guid(t.at("id"));t["name"]=text(t.at("name"));t["kind"]=enum_value(t.at("kind"),track);t["enabled"]=boolean(t.at("enabled"));array(t.at("clips"));array(t.at("captions"));
             for(auto& c:t["clips"]) {
-                fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio"});c["id"]=guid(c.at("id"));c["mediaAssetId"]=guid(c.at("mediaAssetId"));for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) c[k]=ticks(c.at(k));c["enabled"]=boolean(c.at("enabled"));
-                auto& a=c["appearance"];if(schema==4) fields(a,{"transform","opacity","blend","automation"});else fields(a,{"transform","opacity","blend"});a["opacity"]=number(a.at("opacity"));a["blend"]=enum_value(a.at("blend"),blend);auto& tr=a["transform"];fields(tr,{"x","y","scaleX","scaleY","rotationDegrees"});for(const char* k:{"x","y","scaleX","scaleY","rotationDegrees"}) tr[k]=number(tr.at(k));
+                if(schema==5) fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio","playbackRate","sourceDurationTicks"}); else fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio"});
+                if(schema==5) {c["playbackRate"]=i32(c.at("playbackRate"));c["sourceDurationTicks"]=ticks(c.at("sourceDurationTicks"));}c["id"]=guid(c.at("id"));c["mediaAssetId"]=guid(c.at("mediaAssetId"));for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) c[k]=ticks(c.at(k));c["enabled"]=boolean(c.at("enabled"));
+                auto& a=c["appearance"];if(schema>=4) fields(a,{"transform","opacity","blend","automation"});else fields(a,{"transform","opacity","blend"});a["opacity"]=number(a.at("opacity"));a["blend"]=enum_value(a.at("blend"),blend);auto& tr=a["transform"];fields(tr,{"x","y","scaleX","scaleY","rotationDegrees"});for(const char* k:{"x","y","scaleX","scaleY","rotationDegrees"}) tr[k]=number(tr.at(k));
                 if(schema<4) a["automation"]=json::array();
                 else {array(a.at("automation"));for(auto& curve:a["automation"]) {
                     fields(curve,{"property","points"});curve["property"]=strict_enum(curve.at("property"),properties);array(curve.at("points"));

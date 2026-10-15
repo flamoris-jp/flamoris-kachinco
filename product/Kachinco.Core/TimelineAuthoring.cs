@@ -272,10 +272,10 @@ public static class TimelineEditPlanner
             {
                 TrimEdge.Start when edgeTicks > clip.StartTicks && edgeTicks < clip.EndTicks =>
                     new(sequenceId, clipId, edgeTicks,
-                        checked(clip.SourceInTicks + edgeTicks - clip.StartTicks), clip.EndTicks - edgeTicks),
+                        checked(clip.SourceInTicks + checked((edgeTicks - clip.StartTicks) * clip.PlaybackRate)), clip.EndTicks - edgeTicks),
                 TrimEdge.Start when edgeTicks < clip.StartTicks =>
                     new(sequenceId, clipId, edgeTicks,
-                        checked(clip.SourceInTicks - (clip.StartTicks - edgeTicks)), clip.EndTicks - edgeTicks),
+                        checked(clip.SourceInTicks - checked((clip.StartTicks - edgeTicks) * clip.PlaybackRate)), clip.EndTicks - edgeTicks),
                 TrimEdge.End when edgeTicks > clip.StartTicks =>
                     new(sequenceId, clipId, clip.StartTicks, clip.SourceInTicks, edgeTicks - clip.StartTicks),
                 _ => throw new ArgumentOutOfRangeException(nameof(edgeTicks))
@@ -286,9 +286,8 @@ public static class TimelineEditPlanner
             return Result<TrimClip>.Fail(Diagnostic.Error("INVALID_TRIM", "Trim edge is outside the available timeline/source range.", clipId));
         }
 
-        var asset = project.Assets.First(x => x.Id == clip.MediaAssetId);
-        if (!TimelineTime.ValidRange(command.StartTicks, command.DurationTicks, sequence.DurationTicks) ||
-            !TimelineTime.ValidRange(command.SourceInTicks, command.DurationTicks, (asset.Kind == MediaKind.Image ? long.MaxValue : asset.DurationTicks)))
+        var projected = NativeProjectCodec.ProjectCommands(project, command);
+        if (!projected.Success)
             return Result<TrimClip>.Fail(Diagnostic.Error("INVALID_TRIM", "Trim edge is outside the available timeline/source range.", clipId));
         if (Overlaps(track, command.StartTicks, command.DurationTicks, clipId)) return Result<TrimClip>.Fail(Overlap(track.Id));
         return Result<TrimClip>.Ok(command);

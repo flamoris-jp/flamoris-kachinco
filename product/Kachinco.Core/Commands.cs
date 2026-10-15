@@ -15,6 +15,7 @@ public sealed record InsertClip(Guid SequenceId, Guid TrackId, Clip Clip) : Edit
 public sealed record MoveClip(Guid SequenceId, Guid ClipId, Guid TargetTrackId, long StartTicks) : EditCommand;
 public sealed record RippleReorderClip(Guid SequenceId, Guid ClipId, Guid? BeforeClipId) : EditCommand;
 public sealed record TrimClip(Guid SequenceId, Guid ClipId, long StartTicks, long SourceInTicks, long DurationTicks) : EditCommand;
+public sealed record SetClipSpeed(Guid SequenceId, Guid ClipId, int PlaybackRate) : EditCommand;
 public sealed record SplitClip(Guid SequenceId, Guid ClipId, long SplitTicks, Guid RightClipId) : EditCommand;
 public sealed record DeleteClip(Guid SequenceId, Guid ClipId) : EditCommand;
 public sealed record SetClipProperties(Guid SequenceId, Guid ClipId, bool Enabled, ClipAppearance Appearance, AudioProperties Audio) : EditCommand;

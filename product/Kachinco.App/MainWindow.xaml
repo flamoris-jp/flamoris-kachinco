@@ -193,6 +193,8 @@
                 <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.Sourceinseconds}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="ClipSourceInBox" Tag="Source" Style="{StaticResource InspectorNumber}"/></Grid>
                 <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{DynamicResource Shell.Durationseconds}" VerticalAlignment="Center"/><TextBox Grid.Column="1" x:Name="ClipDurationBox" Tag="Duration" Style="{StaticResource InspectorNumber}"/></Grid>
               </StackPanel></Expander>
+              <TextBlock Text="{DynamicResource Shell.PlaybackRate}" Margin="0,5"/>
+              <ComboBox x:Name="ClipSpeedBox" SelectionChanged="ClipSpeed_Changed" Margin="0,0,0,6"/>
               <Expander x:Name="AppearanceSection" Header="{DynamicResource Shell.Appearance}" Style="{StaticResource InspectorSection}"><StackPanel>
                 <ComboBox x:Name="BlendBox" SelectionChanged="InspectorBlend_Changed" Margin="0,3,0,6"/>
                 <TextBlock Text="{DynamicResource Shell.Opacity}"/>

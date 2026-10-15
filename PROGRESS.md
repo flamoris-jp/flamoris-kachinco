@@ -1,5 +1,23 @@
 # Delivery progress
 
+## Clip speed and single-clip downloads — Issues #78–#79
+
+- ADR 0019 and the client guide define native constant speed, exact retained source
+  span, conditional v5 persistence, key retiming and explicit no-ripple behavior.
+- UI/MCP use SetClipSpeed at 1/2/4/8. Shared native evaluation and PCM decimation
+  feed preview, capture, export and the attachment-scoped read-only download jobs.
+- Four bounded download tools return edited WAV/silent MP4 bytes with metadata,
+  file/chunk SHA256 and cancellation/expiry/revision/document/source checks.
+- Producer wire fixture pins the changed edit_batch and new tools. Hub companion
+  catalog is additive; existing uploads, previews and connection settings survive.
+- Local Release native 5/5 and managed regression 299/299 passed, including
+  schema rejection, BGM isolation, real-media frame parity and cancellation.
+  WPF cross-target compilation passed with zero warnings/errors. Unix pipe-only tests cannot run under this workspace's socket
+  restrictions; the unchanged full suite and Windows package gates run in CI.
+- Final branch CI and live Mango/tunnel verification remain pending. This does not
+  claim prior upload #76 was physically verified or deploy either repository.
+
+
 ## Read-only MCP frame capture — Issue #72
 
 - PR #73 merged after final Product CI #148 passed, including the controlled

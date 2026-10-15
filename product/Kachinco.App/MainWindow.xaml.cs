@@ -43,6 +43,7 @@ public partial class MainWindow : Window
         InitializeMcp();
         InitializeProduction();
         BlendBox.ItemsSource = Enum.GetValues<BlendMode>();
+        ClipSpeedBox.ItemsSource = new[] { 1, 2, 4, 8 };
         Refresh(EditorText.ImportGuidance);
     }
 
@@ -485,6 +486,7 @@ public partial class MainWindow : Window
             ClipStartBox.Text = Seconds(value.Clip.StartTicks);
             ClipSourceInBox.Text = Seconds(value.Clip.SourceInTicks);
             ClipDurationBox.Text = Seconds(value.Clip.DurationTicks);
+            ClipSpeedBox.SelectedItem = value.Clip.PlaybackRate;
             ClipEnabledBox.IsChecked = value.Clip.Enabled;
             BlendBox.SelectedItem = value.Clip.Appearance.Blend; OpacityControl.Value = value.Clip.Appearance.Opacity;
             AppearanceSection.Visibility = TransformSection.Visibility = value.Track.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;

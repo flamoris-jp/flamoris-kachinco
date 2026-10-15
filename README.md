@@ -337,6 +337,23 @@ Current documentation:
 - [Production Windows acceptance](staging/windows-production.md)
 - [Original product vision](docs/project-plan.md)
 
+## Clip speed and MCP clip download
+
+Inspector **Playback speed** and `SetClipSpeed` in `edit_batch` use the same native
+command: 1× / 2× / 4× / 8×, exact source interval retained, no automatic ripple.
+Audio speed also changes pitch. A slower return that overlaps another clip or
+exceeds the sequence is rejected; move/extend explicitly in the same batch.
+Undo/Redo and save/reopen retain speed (conditional schema v5).
+
+`clip_download_begin/status/read/cancel` retrieve an edited single clip without
+mixing other tracks. WAV: PCM16 stereo 48 kHz; MP4: silent H.264 on the sequence's
+opaque black canvas, Full/Half/Quarter. Maximum 30 seconds / 64 MiB, 128 KiB chunks.
+The ReadOnly grant is sufficient. Disabled/muted clips yield black/silence unless
+`inspectDisabled` explicitly requests inspection. The project is never changed.
+See [usage and Hub rollout](docs/clip-speed-and-download.md) and
+[ADR 0019](docs/decisions/0019-clip-speed-and-download.md). Source implementation
+and automated tests do not establish live desktop/Hub acceptance.
+
 ## About the name
 
 **FLAMORIS Kachinco** 🎬

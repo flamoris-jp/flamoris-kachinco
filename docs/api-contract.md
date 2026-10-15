@@ -299,3 +299,13 @@ document replacement revokes the grant. Missing media returns MEDIA_MISSING;
 ordinary renderer diagnostics, authorization, cancellation and timeout stay intact.
 See [ADR 0017](decisions/0017-mcp-preview-frame.md) and
 [Windows/Hub acceptance](../staging/windows-issue72.md).
+
+## Clip speed and bounded single-clip transfer (#78–#79)
+
+`SetClipSpeed(sequenceId, clipId, playbackRate)` accepts 1, 2, 4 or 8 in the shared
+`edit_batch`. Queries/project files expose rate and exact source span in schema v5.
+`clip_download_begin/status/read/cancel` are read-only derived-output tools, with
+ordinary host/grant guards and immutable render revision. See
+[ADR 0019](decisions/0019-clip-speed-and-download.md) and
+[client usage](clip-speed-and-download.md) for format, range, disabled-state,
+resource/cancellation, byte metadata and pinned Hub catalog contracts.

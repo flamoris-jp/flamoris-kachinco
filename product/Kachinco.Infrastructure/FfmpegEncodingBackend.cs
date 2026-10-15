@@ -15,7 +15,7 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
             cancellationToken.ThrowIfCancellationRequested();
             if (request.FrameCount <= 0 || request.AudioSampleCount <= 0 || request.AudioSampleRate != 48000 || request.AudioChannels != 2 ||
                 !request.VideoSettings.FrameRate.IsValid || !Enum.IsDefined(request.Preset) ||
-                (request.VideoSettings.Width, request.VideoSettings.Height) is not ((1920, 1080) or (1080, 1920)) ||
+                !ValidSize(request) ||
                 !Path.GetExtension(request.OutputPath).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
                 return Fail(request, "INVALID_ENCODING_REQUEST", "Expected landscape/portrait H.264 MP4 with 48 kHz stereo audio.");
             string output = Path.GetFullPath(request.OutputPath);
@@ -43,6 +43,8 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
                             throw new InvalidDataException("Renderer video sequence does not match encoding plan.");
                         await process.StandardInput.BaseStream.WriteAsync(frame.Rgba8.ToArray(), cancellationToken);
                         count++;
+                        if (request.Preset == ExportPreset.ClipPreviewH264Mp4 && File.Exists(videoPath) && new FileInfo(videoPath).Length > ClipDownloadStore.MaximumFileBytes)
+                            throw new InvalidDataException("download_size_limit");
                         progress?.Report(new(request.JobId, ExportStage.Rendering, count, request.FrameCount, 0));
                     }
                     if (count != request.FrameCount) throw new InvalidDataException("Renderer returned too few frames.");
@@ -55,6 +57,13 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
                     MediaProcess.Kill(process);
                     try { await error; } catch (OperationCanceledException) { }
                 }
+            }
+            if (request.Preset == ExportPreset.ClipPreviewH264Mp4)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (new FileInfo(videoPath).Length > ClipDownloadStore.MaximumFileBytes) throw new InvalidDataException("download_size_limit");
+                File.Move(videoPath, output, true);
+                return new(request.JobId, ExportStage.Completed, output, []);
             }
             long samples = 0;
             await using (var stream = new FileStream(audioPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
@@ -103,5 +112,9 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
         { return cancellationToken.IsCancellationRequested ? new(request.JobId, ExportStage.Cancelled, null, []) : Fail(request, "ENCODING_FAILED", e.Message); }
         finally { if (work is not null) try { Directory.Delete(work, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
+    private static bool ValidSize(EncodingRequest request) =>
+        request.Preset == ExportPreset.ClipPreviewH264Mp4
+            ? new[] { (1920,1080), (1080,1920), (960,540), (540,960), (480,270), (270,480) }.Contains((request.VideoSettings.Width, request.VideoSettings.Height))
+            : (request.VideoSettings.Width, request.VideoSettings.Height) is (1920,1080) or (1080,1920);
     private static ExportResult Fail(EncodingRequest request, string code, string message) => new(request.JobId, ExportStage.Failed, null, [Diagnostic.Error(code, message)]);
 }
