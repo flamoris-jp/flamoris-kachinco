@@ -82,6 +82,17 @@ struct kn_process {
         kn_process_cancel(this);
 #ifdef _WIN32
         if (child.value) WaitForSingleObject(child.value, INFINITE);
+        // A launcher/shim may exit before its codec descendants. TerminateJobObject
+        // initiates termination; the root handle alone does not join the job.
+        if (job.value) {
+            const auto deadline = clock_type::now() + std::chrono::seconds(5);
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
+            while (QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation,
+                    &accounting, sizeof(accounting), nullptr) && accounting.ActiveProcesses != 0) {
+                if (expired(deadline)) break;
+                Sleep(1);
+            }
+        }
 #else
         if (pid > 0) { int status; while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { } }
 #endif

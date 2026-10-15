@@ -46,3 +46,13 @@ immutable history, mid-render edits/replacement, cancellation/concurrency, local
 endpoint/packaged bridge images and Hub result forwarding. Physical Windows
 viewer parity and the deployed authenticated tunnel/Hub require the new desktop
 bundle and matching Hub catalog; keep that acceptance explicitly pending until run.
+
+
+Windows process-lifetime prerequisite (#74): repeated codec teardown CI exposed
+that cancelling a job and waiting only for its launcher/root is insufficient when
+that launcher owns codec descendants. Native process destruction now also waits
+for the terminated job's ActiveProcesses to reach zero, with a five-second bound
+and no new public ABI/state. The existing root wait and reader joins remain.
+This applies to capture cancellation and the ordinary preview decoder. A controlled
+launcher/descendant holding an exclusive temporary file protects the lifetime
+contract; immediate codec-source deletion assertions remain unchanged.

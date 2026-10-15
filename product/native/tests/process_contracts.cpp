@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -26,6 +27,32 @@ std::string drain(kn_process* process, uint32_t channel, bool wait=false) {
 int main(int argc, char** argv) {
     if (argc > 1) {
         std::string mode = argv[1];
+#ifdef _WIN32
+        if (mode == "--hold-file") {
+            HANDLE file = CreateFileA(argv[2], GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+            CHECK(file != INVALID_HANDLE_VALUE);
+            // Several live threads make asynchronous descendant termination observable.
+            std::vector<std::thread> threads;
+            for (int i = 0; i < 16; ++i)
+                threads.emplace_back([] { std::this_thread::sleep_for(std::chrono::seconds(60)); });
+            std::cout << GetCurrentProcessId() << '\n' << std::flush;
+            for (auto& thread : threads) thread.join();
+            CloseHandle(file); return 0;
+        }
+        if (mode == "--launch-holder") {
+            std::string command = "\"" + std::string(argv[0]) + "\" --hold-file \"" + argv[2] + "\"";
+            STARTUPINFOA startup{}; startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESTDHANDLES;
+            startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+            startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+            startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+            PROCESS_INFORMATION child{};
+            CHECK(CreateProcessA(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                nullptr, nullptr, &startup, &child));
+            CloseHandle(child.hThread); CloseHandle(child.hProcess);
+            return 0; // Descendant remains in the inherited native job, holding the file.
+        }
+#endif
         if (mode == "--echo") { std::cout << argv[2]; std::cerr << "stderr"; return 37; }
         if (mode == "--fill") { std::cout << std::string(1024 * 1024, 'o'); std::cerr << std::string(1024 * 1024, 'e'); return 0; }
         if (mode == "--wait") { std::this_thread::sleep_for(std::chrono::seconds(60)); return 0; }
@@ -84,6 +111,34 @@ int main(int argc, char** argv) {
     kn_process_destroy(process);
     CHECK(std::chrono::steady_clock::now() - at < std::chrono::seconds(5));
 #ifdef _WIN32
+    // A naturally exited launcher must not let destruction return while its owned
+    // descendant is still alive or retaining its media file (e.g. Chocolatey shims).
+    for (int i = 0; i < 8; ++i) {
+        char directory[MAX_PATH]{}, file[MAX_PATH]{};
+        CHECK(GetTempPathA(MAX_PATH, directory));
+        CHECK(GetTempFileNameA(directory, "knj", 0, file));
+        const char* holder[] = {"--launch-holder", file};
+        CHECK(kn_process_start(argv[0], holder, 2, &process, &os_error) == KN_OK);
+        std::string ready;
+        while (ready.find('\n') == std::string::npos) {
+            uint8_t bytes[32]; uint32_t count = 0;
+            CHECK(kn_process_read_wait(process, 0, bytes, 32, &count) == KN_OK && count > 0);
+            ready.append(reinterpret_cast<char*>(bytes), count);
+        }
+        HANDLE descendant = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(std::stoul(ready)));
+        CHECK(descendant != nullptr && WaitForSingleObject(descendant, 0) == WAIT_TIMEOUT);
+        CHECK(kn_process_wait(process, 10000, &exit) == KN_OK && exit == 0);
+        // The fixture proves the descendant owns the lock before cancellation.
+        HANDLE locked = CreateFileA(file, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        CHECK(locked == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
+        at = std::chrono::steady_clock::now();
+        kn_process_destroy(process);
+        CHECK(WaitForSingleObject(descendant, 0) == WAIT_OBJECT_0);
+        CloseHandle(descendant);
+        CHECK(DeleteFileA(file));
+        CHECK(std::chrono::steady_clock::now() - at < std::chrono::seconds(5));
+    }
+    std::cout << "Native Windows launcher/descendant job drain and immediate file release: PASS\n";
     DWORD final_handles = 0; CHECK(GetProcessHandleCount(GetCurrentProcess(), &final_handles));
     std::cout << "Initial handles: " << initial_handles << ", final handles: " << final_handles << std::endl;
     CHECK(final_handles <= warm_handles);

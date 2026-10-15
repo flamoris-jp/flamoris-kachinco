@@ -27,3 +27,12 @@ indexing; Hub #50 CI and actual external HTTP/WebSocket fixture pass. Windows
 CMake availability is now checked explicitly after a runner lacked it. Final review
 corrects a pre-existing fixed Core 1.2 console label to report the loaded assembly
 version and adds a dedicated external-image PASS line; no Product behavior changes.
+
+A final unchanged-Product rerun reproduced the pre-existing continuous decoder
+file lock twice (#74). Native destruction terminated the Windows job but waited
+only for the launcher. Add a bounded wait for job ActiveProcesses == 0 and a
+controlled exited-launcher/live-descendant fixture proving exclusive file ownership,
+process exit and immediate file release across eight cycles. Keep the existing
+real-codec immediate-delete assertions. This shared owner is also used by capture
+cancellation; no sleeps/retries are added to the codec deletion test. Final CI must
+verify this prerequisite before merge.
