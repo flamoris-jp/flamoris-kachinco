@@ -337,6 +337,12 @@ Current documentation:
 - [Production Windows acceptance](staging/windows-production.md)
 - [Original product vision](docs/project-plan.md)
 
+## グエー記念日 🎬
+
+2026年10月15日  
+グエーを世界に飛ばした。音声付きで。。。  
+だから、今日はグエー記念日。
+
 ## About the name
 
 **FLAMORIS Kachinco** 🎬
