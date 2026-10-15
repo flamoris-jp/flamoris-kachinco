@@ -9,6 +9,18 @@ namespace Kachinco.Tests;
 public sealed class MediaProbeTests
 {
     [TestMethod]
+    public void ProbeCannotOpenPlaylistsOrNetworkProtocols()
+    {
+        var factory = typeof(FfprobeMediaProbe).GetMethod("BuildStartInfo",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var start = (ProcessStartInfo)factory.Invoke(null, [null, Path.GetFullPath("untrusted.mp4")])!;
+        var args = start.ArgumentList.ToArray();
+        Assert.AreEqual("file,pipe", args[Array.IndexOf(args, "-protocol_whitelist") + 1]);
+        CollectionAssert.AreEquivalent(new[] { "mov", "wav", "mp3", "png_pipe", "jpeg_pipe", "webp_pipe", "image2" },
+            args[Array.IndexOf(args, "-format_whitelist") + 1].Split(','));
+    }
+
+    [TestMethod]
     [DataRow("mov")]
     [DataRow("mp4")]
     public void MovMetadataUsesCanonicalTicksAndKeepsTechnicalProbeDataTransient(string extension)
