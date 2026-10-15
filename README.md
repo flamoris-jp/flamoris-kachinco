@@ -229,7 +229,7 @@ It extends the reviewed Phase 0/1 foundation with:
 - shared MOV/MP4 and WAV/MP3/M4A decoding, Normal/Screen RGBA composition and stereo audio mixing;
 - render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
 - SRT round trips, caption editing and shared outlined Japanese text rendering;
-- Flamoris.Mcp.Core 1.2.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
+- Flamoris.Mcp.Core 1.3.0 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
 - named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
 - alpha MOV Recipe clips with source/output hashes and explicit regeneration;
 - self-contained Windows portable publishing and automated Windows raster checks.
@@ -426,3 +426,9 @@ files where they are; copy them explicitly to migrate. Application replacement
 must preserve the user library. v4 projects need a v4-capable Kachinco; keep an
 original project backup when upgrading. See [ADR 0015](docs/decisions/0015-still-images-and-effect-library.md)
 and [PROGRESS.md](PROGRESS.md).
+
+
+指定時刻の合成画像は MCP `preview_frame`（Hub: `kachinco.preview_frame`）で
+JPEG/PNGとして取得できます。再生位置や編集履歴は変更しません。
+[API・制限](docs/api-contract.md#read-only-preview-image-issue-72)／
+[実機更新とHub・トンネル確認](staging/windows-issue72.md)。

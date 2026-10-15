@@ -43,3 +43,6 @@
 - [GPU physical acceptance](../staging/windows-issue67.md): same-workload comparison driver and outstanding Mango 6 GB measurements.
 - [GPU preview review](reviews/issue-67-gpu-preview-review.md): authority, resource/recovery audit and review fixes.
 - [Delivery progress](../PROGRESS.md): Issues #62–#64 and #67, evidence and remaining acceptance.
+
+- [ADR 0017: MCP preview frame](decisions/0017-mcp-preview-frame.md)
+- [Issue 72 Windows/Hub acceptance](../staging/windows-issue72.md)

@@ -143,7 +143,7 @@ for Undo. Paths refer to the machine running Kachinco, not the MCP client's host
 
 ## Scoped live access (Issues #13 / #19)
 
-`Flamoris.Mcp.Core` 1.2.0 supplies official SDK 2.2.0 protocol handling, a
+`Flamoris.Mcp.Core` 1.3.0 supplies official SDK 2.2.0 protocol handling, a
 same-user/local-only named pipe, transient 256-bit capability, Read only / Edit
 permissions, request limits, cancellation, diagnostics and status projection.
 `KachincoMcpHost` marshals onto the WPF dispatcher. There is one EditorSession,
@@ -261,3 +261,33 @@ This does not grant MCP file access: external raw registration/relink remain den
 - Root comes solely from user settings. MCP cannot supply file paths, change root,
   run arbitrary code, or bypass native history. Library file edits are user-asset
   operations outside project Undo/Redo; applying to project shares project history.
+
+
+## Read-only preview image (Issue #72)
+
+`preview_frame` (Hub: `kachinco.preview_frame`) accepts the ordinary envelope:
+
+```json
+{"input":{"sequenceId":"<UUID>","timeTicks":"88200000","output":{"format":"jpeg","width":960,"quality":85}}}
+```
+
+`guard` optionally pins runtimeId/documentToken/expectedRevision. Time uses
+35,280,000 ticks/second; nearest frame, ties forward, bounded to final valid frame.
+The exclusive sequence end is invalid. Output defaults to JPEG/960/85; PNG rejects
+quality. Width 64–1920 is a maximum; output also fits 1920px height and 2,073,600
+pixels, preserves aspect ratio and never upscales. A portrait 1080×1920 request with
+width 540 returns 540×960. Maximum image bytes: 1 MiB; retry smaller/JPEG on
+response_too_large. Source canvas limits: 4096 per axis, 8,294,400 pixels, 64 active
+video layers. One capture per window, 15-second Core deadline, CPU composition.
+
+Success includes an actual `image` content block (base64 in the MCP protocol), plus
+structured/text metadata: runtimeId, documentToken, projectRevision, sequenceId,
+requestedTimeTicks, resolvedFrameIndex, resolvedTimeTicks (all int64 values as
+strings), width/height, mimeType, encodedBytes, JPEG quality or null for PNG. Bytes
+are never embedded in the metadata. It captures fully composed project content;
+no selection/Clapper overlay, UI screenshot, file export or playback movement.
+Concurrent capture returns busy. Mid-render edit or Save As returns stale_revision;
+document replacement revokes the grant. Missing media returns MEDIA_MISSING;
+ordinary renderer diagnostics, authorization, cancellation and timeout stay intact.
+See [ADR 0017](decisions/0017-mcp-preview-frame.md) and
+[Windows/Hub acceptance](../staging/windows-issue72.md).

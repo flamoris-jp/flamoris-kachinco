@@ -52,6 +52,20 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + $env:Path
           $env:Path | Out-File -FilePath $env:GITHUB_PATH -Append
           ffmpeg -version
+      - name: Ensure native CMake build dependency
+        shell: pwsh
+        run: |
+          $cmakeBin = Join-Path $env:ProgramFiles 'CMake/bin'
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            if (-not (Test-Path (Join-Path $cmakeBin 'cmake.exe'))) {
+              choco install cmake --no-progress -y --installargs 'ADD_CMAKE_TO_PATH=System'
+              if ($LASTEXITCODE -ne 0) { throw 'CMake install failed.' }
+            }
+            $env:PATH = "$cmakeBin;" + $env:PATH
+            $cmakeBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { throw 'CMake is unavailable.' }
       - run: dotnet build Kachinco.slnx -c Release
       - name: Windows managed-native ABI parity
         run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests|FullyQualifiedName~GpuDecodeTests|FullyQualifiedName~PreviewBackendTests|FullyQualifiedName~NativeGpuTests"

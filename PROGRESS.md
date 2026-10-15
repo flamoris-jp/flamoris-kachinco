@@ -1,5 +1,25 @@
 # Delivery progress
 
+## Read-only MCP frame capture — Issue #72
+
+- ADR 0017 defines `preview_frame`, canonical tick/frame snapping, snapshot/revision
+  checks and bounded full-canvas JPEG/PNG image results without playback/history edits.
+- PR #73 implements the shared renderer query and Windows encoder, capture contracts,
+  portrait viewer pixel parity and external packaged-bridge PNG acceptance.
+- Core PR #14 supplies actual image blocks on pipe/Hub routes (1.3.0); Hub PR #50
+  adds reverse gateway and real external HTTP MCP/WebSocket image regressions.
+- Local capture contracts 6/6 and native 5/5 pass; prior full run: 282 pass and only
+  two named-pipe tests blocked by local AF_UNIX restrictions. WPF cross-build passes.
+- Product CI #145 (`750bc2cefb6d6ec3bbfec42eb55dde5569542667`) passes Linux
+  285/285, native regular/sanitizer 5/5, Windows ABI 48/48, representative full-viewer
+  parity and bounded PNG/JPEG encoding, packaged external bridge image delivery,
+  shared-history/permission/lifecycle acceptance and portable ZIP/startup checks.
+- Core 1.3.0 is published and its Windows 70-test/package suite passes; Hub #50
+  merged with full CI plus external HTTP MCP/WebSocket PNG transport coverage.
+- Live production desktop/viewer and authenticated OpenAI tunnel/Hub acceptance is
+  pending after bundle/catalog update. Follow staging/windows-issue72.md; leave
+  Issue #72 open until that evidence is recorded.
+
 ## Preview playback lifetime repair — Issue #70
 
 - Baseline: `5cfc7bb`; 2026-10-06 physical log confirms hardware decode, subsequent
