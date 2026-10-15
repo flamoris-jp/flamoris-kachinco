@@ -2,6 +2,17 @@
 
 ## Read-only MCP frame capture — Issue #72
 
+- PR #73 merged after final Product CI #148 passed, including the controlled
+  Windows descendant/process-file lifetime repair (#74).
+- Live rollout applied the exact eight-tool Hub catalog successfully, with desktop
+  connected and no schema mismatch. Calls then exposed a Core 1.3.0 interoperability
+  regression: generic Web JSON emitted `resultType:null`, rejected by Python MCP.
+- Core #15 / PR #16 fixes outbound Hub serialization using SDK default options.
+  This follow-up consumes Core/Wpf 1.3.1. New desktop build/CI, package publication
+  and actual external image/playback/viewer acceptance must be verified separately.
+
+Initial implementation validation follows (before the live transport finding):
+
 - ADR 0017 defines `preview_frame`, canonical tick/frame snapping, snapshot/revision
   checks and bounded full-canvas JPEG/PNG image results without playback/history edits.
 - PR #73 implements the shared renderer query and Windows encoder, capture contracts,

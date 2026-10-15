@@ -43,3 +43,13 @@ approximation with bounded job-member handles retained before cancellation and a
 shared five-second wait for actual process signals. A 256-process job limit bounds
 retained handles; snapshot again immediately after termination to include a member
 admitted during the first enumeration. Keep the same strong descendant/file tests.
+
+Final PR #73 Product CI #148 passed all gates including that controlled fixture.
+Live Hub acceptance then found a separate Core 1.3.0 wire-format defect: context
+and project reads failed after successful registration because generic Web JSON
+serialized the SDK's unset resultType as null. Python MCP rejects that value.
+The earlier separate .NET and Python fixtures did not cover this cross-SDK member.
+Core #15 / PR #16 switches the Hub envelope to official SDK JSON options and tests
+context/error/image omission, with a .NET-output-to-Python-validator reproduction.
+Kachinco consumes the 1.3.1 package fix without changing tools, session or renderer.
+Full bundle CI and actual OpenAI tunnel image receipt remain acceptance gates.

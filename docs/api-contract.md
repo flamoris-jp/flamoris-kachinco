@@ -143,7 +143,7 @@ for Undo. Paths refer to the machine running Kachinco, not the MCP client's host
 
 ## Scoped live access (Issues #13 / #19)
 
-`Flamoris.Mcp.Core` 1.3.0 supplies official SDK 2.2.0 protocol handling, a
+`Flamoris.Mcp.Core` 1.3.1 supplies official SDK 2.2.0 protocol handling, a
 same-user/local-only named pipe, transient 256-bit capability, Read only / Edit
 permissions, request limits, cancellation, diagnostics and status projection.
 `KachincoMcpHost` marshals onto the WPF dispatcher. There is one EditorSession,

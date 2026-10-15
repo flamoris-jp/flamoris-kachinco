@@ -1,6 +1,11 @@
 # Shared desktop MCP connection
 
-This app consumes `Flamoris.Mcp.Core` and `Flamoris.Mcp.Wpf` 1.3.0.
+This app consumes `Flamoris.Mcp.Core` and `Flamoris.Mcp.Wpf` 1.3.1.
+
+Core 1.3.1 uses the official SDK JSON options for outbound Hub results. This omits
+unset result members such as `resultType`; 1.3.0 emitted null, which Python MCP
+rejected even for `mcp.context`. The existing eight-tool catalog and credentials
+are unchanged. Update the full desktop/bridge bundle, then repeat live acceptance.
 The common implementation lives in flamoris-jp/flamoris-mcp-core#13; the server
 counterpart is flamoris-jp/flamoris-mcp-hub#16. Release Core/Wpf first, then merge
 this consumer. The PR's CI explicitly checks out the reviewed Core candidate and
