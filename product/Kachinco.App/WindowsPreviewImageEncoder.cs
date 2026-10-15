@@ -27,6 +27,7 @@ public sealed class WindowsPreviewImageEncoder : IPreviewImageEncoder
             using var stream = new BoundedImageStream();
             try { encoder.Save(stream); }
             catch (Exception) when (stream.Exceeded) { throw new PreviewImageTooLargeException(); }
+            if (stream.Exceeded) throw new PreviewImageTooLargeException();
             token.ThrowIfCancellationRequested();
             return stream.ToArray();
         }, token);

@@ -111,10 +111,10 @@ public sealed class PreviewFrameCapture(IPreviewImageEncoder encoder, ICaptionRa
     public static JsonElement Schema => JsonSerializer.Deserialize<JsonElement>("""
         {"type":"object","additionalProperties":false,"required":["sequenceId","timeTicks"],"properties":{
           "sequenceId":{"type":"string","format":"uuid"},
-          "timeTicks":{"type":"string","pattern":"^(0|[1-9][0-9]*)$","maxLength":19},
+          "timeTicks":{"description":"35280000 ticks/second; nearest frame, ties forward; before sequence duration.","type":"string","pattern":"^(0|[1-9][0-9]*)$","maxLength":19},
           "output":{"type":"object","additionalProperties":false,"properties":{
             "format":{"type":"string","enum":["jpeg","png"]},"width":{"type":"integer","minimum":64,"maximum":1920},
-            "quality":{"type":"integer","minimum":1,"maximum":100}}}}}
+            "quality":{"description":"JPEG only; omit for PNG.","type":"integer","minimum":1,"maximum":100}}}}}
         """);
 }
 public sealed class PreviewImageTooLargeException() : IOException("Encoded preview exceeds 1 MiB.");

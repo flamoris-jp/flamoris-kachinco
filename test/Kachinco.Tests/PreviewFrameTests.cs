@@ -89,6 +89,29 @@ public sealed class PreviewFrameTests
         Assert.AreEqual("MEDIA_MISSING", (await test.Call(grant, 0)).Error);
     }
 
+    [TestMethod]
+    public async Task RationalFrameTimeAndTimeoutRetainAdmissionUntilWorkerJoins()
+    {
+        using (var test = new CaptureHarness())
+        {
+            var id = Guid.NewGuid(); var fps = new FrameRate(30000, 1001);
+            Assert.IsTrue(test.Fixture.Edit(new CreateSequence(id, "Fractional", new(1080, 1920, fps), 5 * Fixture.T)).Success);
+            using var grant = await test.Boundary.EnableAsync(McpPermission.ReadOnly);
+            long frameTick = TimelineTime.FrameToTicks(75, fps);
+            var response = await test.Call(grant, frameTick + 1, sequenceId: id);
+            Assert.AreEqual("75", response.Value!.Value.GetProperty("resolvedFrameIndex").GetString());
+            Assert.AreEqual(frameTick.ToString(), response.Value.Value.GetProperty("resolvedTimeTicks").GetString());
+            Assert.AreEqual("sequence_not_found", (await test.Call(grant, 0, sequenceId: Guid.NewGuid())).Error);
+        }
+        var renderer = new BarrierRenderer(ignoreCancellation: true);
+        using var blocked = new CaptureHarness(renderer, new McpOptions { RequestTimeoutMs = 100 });
+        using var read = await blocked.Boundary.EnableAsync(McpPermission.ReadOnly);
+        var pending = blocked.Call(read, 0); await renderer.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.AreEqual(McpErrors.Timeout, (await pending).Error);
+        Assert.AreEqual(McpErrors.Busy, (await blocked.Call(read, 0)).Error);
+        renderer.Release.TrySetResult();
+    }
+
     private sealed class CaptureHarness : IDisposable
     {
         public Fixture Fixture { get; } = new();
@@ -97,15 +120,15 @@ public sealed class PreviewFrameTests
         public IFrameRenderer Renderer { get; set; }
         public Encoder Encoder { get; } = new();
         public string? Path { get; set; }
-        public CaptureHarness(IFrameRenderer? renderer = null)
+        public CaptureHarness(IFrameRenderer? renderer = null, McpOptions? options = null)
         {
             Renderer = renderer ?? new SolidRenderer();
             Host = new(Fixture.Session, () => false, (action, token) => { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; });
             var capture = new PreviewFrameCapture(Encoder, rendererFactory: _ => Renderer);
-            Boundary = new(Host, [capture.CreateTool(Fixture.Session, () => Path, () => Host.Snapshot)], new(), new(KachincoLogging.Create().Logger));
+            Boundary = new(Host, [capture.CreateTool(Fixture.Session, () => Path, () => Host.Snapshot)], options ?? new(), new(KachincoLogging.Create().Logger));
         }
-        public Task<McpResult> Call(CapabilityGrant grant, long tick, CancellationToken token = default) => Boundary.InvokeAsync(grant, "preview_frame",
-            JsonSerializer.SerializeToElement(new { sequenceId = Fixture.SequenceId, timeTicks = tick.ToString() }), null, token);
+        public Task<McpResult> Call(CapabilityGrant grant, long tick, CancellationToken token = default, Guid? sequenceId = null) => Boundary.InvokeAsync(grant, "preview_frame",
+            JsonSerializer.SerializeToElement(new { sequenceId = sequenceId ?? Fixture.SequenceId, timeTicks = tick.ToString() }), null, token);
         public void Dispose() { Boundary.Dispose(); Host.Dispose(); Fixture.Session.Dispose(); }
     }
     private sealed class Encoder : IPreviewImageEncoder
@@ -118,13 +141,13 @@ public sealed class PreviewFrameTests
         public ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long index, CancellationToken token) =>
             ValueTask.FromResult(Result<RenderedVideoFrame>.Ok(new(index, frame.Tick, frame.Settings.Width, frame.Settings.Height, [])));
     }
-    private sealed class BarrierRenderer : IFrameRenderer
+    private sealed class BarrierRenderer(bool ignoreCancellation = false) : IFrameRenderer
     {
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async ValueTask<Result<RenderedVideoFrame>> RenderAsync(Project project, EvaluatedFrame frame, long index, CancellationToken token)
         {
-            Entered.TrySetResult(); await Release.Task.WaitAsync(token);
+            Entered.TrySetResult(); await (ignoreCancellation ? Release.Task : Release.Task.WaitAsync(token));
             return Result<RenderedVideoFrame>.Ok(new(index, frame.Tick, frame.Settings.Width, frame.Settings.Height, []));
         }
     }

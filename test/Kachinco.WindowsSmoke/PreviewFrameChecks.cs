@@ -59,6 +59,12 @@ internal static class PreviewFrameChecks
             var jpeg = await new WindowsPreviewImageEncoder().EncodeAsync(encoder.Expected!, 540, 960, "jpeg", 85, default);
             using var jpg = new MemoryStream(jpeg);
             Check(BitmapDecoder.Create(jpg, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0].PixelHeight == 960, "JPEG codec");
+            byte[] noise = new byte[640 * 640 * 4]; new Random(72).NextBytes(noise);
+            for (int i = 3; i < noise.Length; i += 4) noise[i] = 255;
+            bool bounded = false;
+            try { await new WindowsPreviewImageEncoder().EncodeAsync(new(0, 0, 640, 640, [.. noise]), 640, 640, "png", 85, default); }
+            catch (PreviewImageTooLargeException) { bounded = true; }
+            Check(bounded, "Actual PNG encoder did not enforce 1 MiB stream bound");
             Console.WriteLine("Preview frame: portrait still, overlap/screen/opacity, animated position/scale, caption, boundary, full viewer parity, PNG/JPEG dimensions and read-only history: PASS");
         }
         finally { Directory.Delete(dir, true); }
