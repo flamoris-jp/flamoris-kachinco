@@ -89,6 +89,18 @@ internal static partial class PackagedMcpChecks
                 var redone = await Call(client, "redo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
                 Check(redone.GetProperty("success").GetBoolean() && TrackCount(await Query(client)) == uiTrackCount, "MCP Redo did not restore the UI edit.");
                 await FileDialogsBlockMcpEdit(main, process.Id, client, sequenceId);
+                var captureBefore = await Query(client);
+                var imageReply = await client.CallToolAsync("preview_frame", new Dictionary<string, object?> {
+                    ["input"] = new { sequenceId, timeTicks = "0", output = new { format = "png", width = 640 } }
+                }, cancellationToken: Deadline());
+                Check(imageReply.IsError != true, "Packaged frame capture failed: " + imageReply.StructuredContent);
+                var image = imageReply.Content.OfType<ImageContentBlock>().Single();
+                Check(image.MimeType == "image/png" && image.DecodedData.Length > 0, "External bridge did not deliver PNG content");
+                using (var stream = new MemoryStream(image.DecodedData.ToArray())) {
+                    var bitmap = System.Windows.Media.Imaging.BitmapDecoder.Create(stream, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad).Frames[0];
+                    Check(bitmap.PixelWidth == 640 && bitmap.PixelHeight == 360, "External PNG dimensions");
+                }
+                Check((await Query(client)).GetRawText() == captureBefore.GetRawText(), "Capture moved editor state/history");
                 Console.WriteLine("Packaged MCP edits, automatic projection, shared UI/MCP history, rollback and stale revision: PASS");
                 await Menu(processId, "McpMenu", "McpReadOnlyMenu");
                 await ExpectDisconnected(connection);

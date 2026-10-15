@@ -1,6 +1,6 @@
 # Shared desktop MCP connection
 
-This app consumes `Flamoris.Mcp.Core` and `Flamoris.Mcp.Wpf` 1.2.0.
+This app consumes `Flamoris.Mcp.Core` and `Flamoris.Mcp.Wpf` 1.3.0.
 The common implementation lives in flamoris-jp/flamoris-mcp-core#13; the server
 counterpart is flamoris-jp/flamoris-mcp-hub#16. Release Core/Wpf first, then merge
 this consumer. The PR's CI explicitly checks out the reviewed Core candidate and
@@ -41,3 +41,11 @@ reconnect until a new explicit connection; auto-connect runs when a document is 
 
 The generic provider regression tests now live in MCP Core. Packaged app smoke tests
 still exercise the application-owned tools/history through the shared connection UI.
+
+
+The Issue #72 image query requires matching Core 1.3 desktop **and bridge** binaries.
+After updating, copy Hub registration configuration again and replace the existing
+Kachinco catalog's tools with the reviewed generated catalog (including
+preview_frame). Preserve endpoint, connector token, other upstreams and existing
+permissions; a new tool in desktop discovery alone does not update static Hub YAML.
+See staging/windows-issue72.md for the actual external image acceptance checklist.

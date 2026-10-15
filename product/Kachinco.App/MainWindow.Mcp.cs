@@ -13,8 +13,10 @@ public partial class MainWindow
     private KachincoMcpHost? mcpHost;
     private McpDesktopUi? mcpUi;
     private int humanOperationDepth;
+    private PreviewFrameCapture previewCapture = null!;
     private void InitializeMcp()
     {
+        previewCapture = new(new WindowsPreviewImageEncoder(), new WindowsCaptionRasterizer(Dispatcher));
         mcpHost = new(session, () => busy || Volatile.Read(ref humanOperationDepth) > 0 || Timeline.HasActiveGesture || draggedMediaId is not null,
             (action, token) => {
                 if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; }
@@ -32,7 +34,7 @@ public partial class MainWindow
         var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
             () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
                 playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
-            () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Concat(allowAiEffectLibrary && effectLibrary is not null
+            () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Append(previewCapture.CreateTool(session, () => filename, () => mcpHost!.Snapshot)).Concat(allowAiEffectLibrary && effectLibrary is not null
                 ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : []),
             new McpOptions(), new McpDiagnostics(logger));
         try { return new(boundary, await boundary.EnableAsync(permission)); }
