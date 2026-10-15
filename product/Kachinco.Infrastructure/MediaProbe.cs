@@ -107,7 +107,10 @@ public sealed class FfprobeMediaProbe(string? configuredExecutable = null) : IMe
         };
         foreach (var argument in new[]
         {
-            "-v", "error", "-show_entries",
+            // Imported files are self-contained media, never playlists or network manifests.
+            "-v", "error", "-protocol_whitelist", "file,pipe",
+            "-format_whitelist", "mov,wav,mp3,png_pipe,jpeg_pipe,webp_pipe,image2",
+            "-show_entries",
             "format=format_name,duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,duration",
             "-of", "json", fullPath
         }) info.ArgumentList.Add(argument);

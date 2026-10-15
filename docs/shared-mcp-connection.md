@@ -47,6 +47,12 @@ reconnect until a new explicit connection; auto-connect runs when a document is 
 The generic provider regression tests now live in MCP Core. Packaged app smoke tests
 still exercise the application-owned tools/history through the shared connection UI.
 
+Issue #76 adds four Edit-only media upload tools (ADR 0018). After updating the
+desktop, add those reviewed entries to the existing Hub catalog and preserve
+the other editing tools and credentials. Stop, document replacement and disconnect
+discard unfinished transfers. Successful imports use the shared native history and
+their durable files remain available for Undo/Redo and saved-project reopen.
+
 
 The Issue #72 image query requires matching Core 1.3 desktop **and bridge** binaries.
 After updating, copy Hub registration configuration again and replace the existing

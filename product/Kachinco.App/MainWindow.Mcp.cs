@@ -31,19 +31,27 @@ public partial class MainWindow
     }
     private async Task<McpDesktopAttachment> AttachMcp(McpPermission permission)
     {
+        var uploads = new MediaUploadStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FLAMORIS", "Kachinco", "imported-media"), mediaProbe);
         var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
             () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
                 playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
             () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Append(previewCapture.CreateTool(session, () => filename, () => mcpHost!.Snapshot)).Concat(allowAiEffectLibrary && effectLibrary is not null
-                ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : []),
+                ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : [])
+            .Concat(MediaUploadMcpTools.Create(session, uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported.")))),
             new McpOptions(), new McpDiagnostics(logger));
-        try { return new(boundary, await boundary.EnableAsync(permission)); }
+        try
+        {
+            var grant = await boundary.EnableAsync(permission);
+            grant.Revoked.Register(uploads.Dispose);
+            return new(boundary, grant);
+        }
         catch (Exception exception)
         {
             logger.Error("mcp.attach", "MCP attachment failed", exception,
                 new Dictionary<string, object?> { ["revision"] = session.GetProject().Revision,
                     ["hasProject"] = session.GetProject().Project is not null });
-            boundary.Dispose(); throw;
+            boundary.Dispose(); uploads.Dispose(); throw;
         }
     }
     private void UpdateMcpStatus() { mcpUi?.Refresh(); mcpUi?.NotifyHostReady(); }

@@ -229,7 +229,7 @@ It extends the reviewed Phase 0/1 foundation with:
 - shared MOV/MP4 and WAV/MP3/M4A decoding, Normal/Screen RGBA composition and stereo audio mixing;
 - render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
 - SRT round trips, caption editing and shared outlined Japanese text rendering;
-- Flamoris.Mcp.Core 1.3.1 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; external file jobs fail closed pending a separate grant;
+- Flamoris.Mcp.Core 1.3.1 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; dedicated bounded media upload under Edit, with other external file jobs denied;
 - named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
 - alpha MOV Recipe clips with source/output hashes and explicit regeneration;
 - self-contained Windows portable publishing and automated Windows raster checks.
@@ -241,6 +241,13 @@ up to 10 seconds, not arbitrary Python or a complete effects system. FFmpeg and
 Python are external prerequisites. MOV/MP4 embedded audio is not mixed; use WAV/MP3/M4A audio.
 Media import and cross-container relink use real ffprobe validation; see
 [the media format contract](docs/decisions/0006-media-import-formats.md).
+
+MCP Edit connections also accept bounded uploads through
+`media_upload_begin/write/finish/cancel`: images, video and audio enter the same
+media bin and Undo/Redo history as ordinary import. See the
+[upload contract and recovery sequence](docs/decisions/0018-mcp-media-upload.md).
+Updating a live Hub requires adding the four reviewed schemas to its existing
+Kachinco catalog after updating the desktop; source changes do not activate it.
 Human Windows visual/playback acceptance remains separate from CI.
 
 See [Windows production workflow and limitations](staging/windows-production.md).

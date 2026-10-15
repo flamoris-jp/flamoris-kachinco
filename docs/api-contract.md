@@ -5,6 +5,14 @@ The managed API is a facade over the sole native EditorSession editing authority
 adapter and stdio bridge are described in [ADR 0005](decisions/0005-mcp-core-migration.md).
 Persistent file JSON remains a separate versioned boundary.
 
+Dedicated `media_upload_begin`, `media_upload_write`, `media_upload_finish` and
+`media_upload_cancel` tools transfer bounded bytes into host-owned storage.
+All require Edit and runtime/document/revision guards; only finish registers an
+asset through ordinary `RegisterMedia` and increments shared history. They accept
+no source path, URL or media metadata. See [ADR 0018](decisions/0018-mcp-media-upload.md)
+for limits, lifetime and uncertain-result recovery. Generic `edit_batch` still
+cannot register arbitrary filesystem media.
+
 ## Lifecycle, queries and mutations
 
 | Surface | Contract |
