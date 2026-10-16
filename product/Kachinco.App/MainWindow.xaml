@@ -43,6 +43,18 @@
         <Separator />
         <MenuItem Header="{DynamicResource Shell.ImportmediaI}" Click="Register_Click" />
         <MenuItem Header="{DynamicResource Shell.Exportvideo}" Click="Export_Click" />
+        <MenuItem Header="{DynamicResource Shell.ExportAcceleration}">
+          <MenuItem x:Name="ExportCompositionMenu" Header="{DynamicResource Shell.ExportComposition}">
+            <MenuItem Header="{DynamicResource Shell.PreviewBackendAuto}" Tag="Auto" IsCheckable="True" IsChecked="True" Click="ExportComposition_Click" />
+            <MenuItem Header="CPU" Tag="Cpu" IsCheckable="True" Click="ExportComposition_Click" />
+            <MenuItem Header="D3D11" Tag="D3D11" IsCheckable="True" Click="ExportComposition_Click" />
+          </MenuItem>
+          <MenuItem x:Name="ExportEncoderMenu" Header="{DynamicResource Shell.ExportEncoder}">
+            <MenuItem Header="{DynamicResource Shell.PreviewBackendAuto}" Tag="Auto" IsCheckable="True" IsChecked="True" Click="ExportEncoder_Click" />
+            <MenuItem Header="CPU (libx264)" Tag="Cpu" IsCheckable="True" Click="ExportEncoder_Click" />
+            <MenuItem Header="NVIDIA NVENC (GPU 0)" Tag="Nvenc" IsCheckable="True" Click="ExportEncoder_Click" />
+          </MenuItem>
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="{DynamicResource Shell.CaptionsT}">
         <MenuItem Header="{DynamicResource Shell.Editcaptions}" Click="EditCaptions_Click" />

@@ -46,3 +46,5 @@
 
 - [ADR 0017: MCP preview frame](decisions/0017-mcp-preview-frame.md)
 - [Issue 72 Windows/Hub acceptance](../staging/windows-issue72.md)
+
+- [GPU MP4 export ADR](decisions/0020-gpu-export.md) and [Windows comparison/acceptance](../staging/windows-issue82.md): independent D3D11 composition and NVENC with CPU recovery.

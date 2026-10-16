@@ -158,9 +158,11 @@ public sealed class ClipDownloadStore : IDisposable
             var decoder = decoderFactory();
             long samples = TimelineTime.SampleCount(current.Duration, 48000);
             long frames = TimelineTime.FrameCount(current.Duration, current.Sequence.Settings.FrameRate);
+            ExportMetrics? exportMetrics = null;
+            using var video = new ExportFrameRenderer(decoder, current.ProjectPath);
             try
             {
-                var media = new ClipSource(current, evaluator, new SharedFrameRenderer(decoder, current.ProjectPath), new SharedAudioRenderer(decoder, current.ProjectPath));
+                var media = new ClipSource(current, evaluator, video, new SharedAudioRenderer(decoder, current.ProjectPath));
                 if (audio) await WriteWavAsync(path, media, samples, token);
                 else
                 {
@@ -168,6 +170,7 @@ public sealed class ClipDownloadStore : IDisposable
                         Height = current.Sequence.Settings.Height / (int)current.Input.Quality };
                     var result = await encoder.EncodeAsync(new(current.Id, path, ExportPreset.ClipPreviewH264Mp4,
                         settings, frames, 48000, 2, samples), media, new(null), null, token);
+                    exportMetrics = result.Metrics is { } metrics ? metrics with { Composition = video.Statistics } : null;
                     if (result.Stage != ExportStage.Completed) throw new InvalidDataException(result.Stage == ExportStage.Cancelled ? "download_cancelled" : "download_render_failed");
                 }
             }
@@ -196,7 +199,7 @@ public sealed class ClipDownloadStore : IDisposable
                     width = audio ? null : (int?)(current.Sequence.Settings.Width / (int)current.Input.Quality),
                     height = audio ? null : (int?)(current.Sequence.Settings.Height / (int)current.Input.Quality),
                     fpsNumerator = audio ? null : (int?)fps.Numerator, fpsDenominator = audio ? null : (int?)fps.Denominator,
-                    embeddedAudio = false, background = audio ? null : "opaque-black" };
+                    acceleration = exportMetrics, embeddedAudio = false, background = audio ? null : "opaque-black" };
                 current.State = "ready";
             }
         }
@@ -210,7 +213,7 @@ public sealed class ClipDownloadStore : IDisposable
         }
     }
 
-    private sealed class ClipSource(Job job, TimelineEvaluator evaluator, SharedFrameRenderer video, SharedAudioRenderer audio) : IRenderedMediaSource
+    private sealed class ClipSource(Job job, TimelineEvaluator evaluator, ExportFrameRenderer video, SharedAudioRenderer audio) : IRenderedMediaSource
     {
         public async IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync([EnumeratorCancellation] CancellationToken token)
         {

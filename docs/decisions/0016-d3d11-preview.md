@@ -12,8 +12,8 @@ frame policy remain authoritative. GPU acceleration consumes the same evaluated
 layers as CPU preview/export. It adds no project schema, editing commands,
 persistent effect state or separate renderer timeline.
 
-Interactive preview can select Auto, CPU or D3D11. Export retains the native CPU
-reference. D3D11 failure falls back to that CPU implementation; WARP is an explicit
+Interactive preview can select Auto, CPU or D3D11. Export originally retained
+the native CPU reference; ADR 0020 adds independent export composition selection. D3D11 failure falls back to that CPU implementation; WARP is an explicit
 test device and never an automatic production acceleration fallback.
 
 ## Delivered pipeline and transfers

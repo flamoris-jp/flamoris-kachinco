@@ -164,6 +164,20 @@ public partial class MainWindow
             try { Timeline.SetCursorTicks(playback.PositionTicks); } finally { clockUpdate = false; }
         }
     }
+    private PreviewBackendPreference exportComposition = PreviewBackendPreference.Auto;
+    private VideoEncoderPreference exportEncoder = VideoEncoderPreference.Auto;
+    private void ExportComposition_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem selected) return;
+        exportComposition = Enum.Parse<PreviewBackendPreference>((string)selected.Tag);
+        foreach (MenuItem item in ExportCompositionMenu.Items) item.IsChecked = item == selected;
+    }
+    private void ExportEncoder_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem selected) return;
+        exportEncoder = Enum.Parse<VideoEncoderPreference>((string)selected.Tag);
+        foreach (MenuItem item in ExportEncoderMenu.Items) item.IsChecked = item == selected;
+    }
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
@@ -185,10 +199,11 @@ public partial class MainWindow
         bool done = false;
         cancel.Click += (_, _) => { token.Cancel(); cancel.IsEnabled = false; };
         progressWindow.Closing += (_, e) => { if (!done) { token.Cancel(); e.Cancel = true; } };
-        var progress = new Progress<ExportProgress>(p => status.Text = $"{p.Stage}: {p.FramesCompleted} / {p.TotalFrames} フレーム");
-        var decoder = new FfmpegMediaDecoder();
-        var service = new SnapshotExportService(new SharedFrameRenderer(decoder, filename, new WindowsCaptionRasterizer(Dispatcher)),
-            new SharedAudioRenderer(decoder, filename), new FfmpegEncodingBackend(), new(null), filename);
+        var progress = new Progress<ExportProgress>(p => status.Text = $"{p.Stage}: {p.FramesCompleted} / {p.TotalFrames} フレーム\n{p.Detail}");
+        using var decoder = new FfmpegMediaDecoder();
+        using var video = new ExportFrameRenderer(decoder, filename, new WindowsCaptionRasterizer(Dispatcher), exportComposition, logger);
+        var service = new SnapshotExportService(video,
+            new SharedAudioRenderer(decoder, filename), new FfmpegEncodingBackend(), new(null, exportEncoder), filename);
         busy = true; IsEnabled = false; progressWindow.Show();
         try
         {
@@ -202,8 +217,10 @@ public partial class MainWindow
                 {
                     ["sequenceId"] = sequenceId,
                     ["stage"] = result.Stage.ToString(),
+                    ["acceleration"] = result.Metrics,
+                    ["diagnostics"] = result.Diagnostics,
                 }));
-            Status.Text = result.Stage == ExportStage.Completed ? "書き出しが完了しました。" : result.Stage == ExportStage.Cancelled ? "キャンセルしました。" :
+            Status.Text = result.Stage == ExportStage.Completed ? $"書き出しが完了しました。 {result.Metrics?.VideoEncoder} / D3D11: {result.Metrics?.Composition?.GpuFrames ?? 0} frames" : result.Stage == ExportStage.Cancelled ? "キャンセルしました。" :
                 string.Join(" / ", result.Diagnostics.Select(x => x.Message));
             return result;
         }

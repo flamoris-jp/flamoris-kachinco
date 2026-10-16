@@ -19,8 +19,11 @@ public sealed class SnapshotExportService(IFrameRenderer video, IAudioRenderer a
             var planned = ExportPlanner.Create(snapshot.Project, request.SequenceId);
             if (!planned.Success) return new(request.JobId, ExportStage.Failed, null, planned.Diagnostics);
             var plan = planned.Value!;
-            return await backend.EncodeAsync(new(request.JobId, output, request.Preset, plan.Evaluator.Sequence.Settings,
+            using var evaluator = plan.Evaluator;
+            var result = await backend.EncodeAsync(new(request.JobId, output, request.Preset, plan.Evaluator.Sequence.Settings,
                 plan.FrameCount, plan.AudioSampleRate, plan.AudioChannels, plan.AudioSampleCount), new RenderSource(plan, video, audio), settings, progress, cancellationToken);
+            return video is ExportFrameRenderer gpu && result.Metrics is { } metrics
+                ? result with { Metrics = metrics with { Composition = gpu.Statistics } } : result;
         }
         catch (OperationCanceledException) { return new(request.JobId, ExportStage.Cancelled, null, []); }
         catch (Exception e) when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException)
