@@ -29,6 +29,11 @@ This is author self-review, not independent review or physical GPU acceptance.
   NVENC CQ 19 / p5 is documented as distinct from CPU CRF 18 / fast, not equivalent.
   AMF/QSV and zero-copy are deferred without a new speculative provider framework.
 
-Remaining: CI result, independent PR review, Mango four-way timings, total 6 GB
+Automated result: Product CI #155 at `26763e604d22f22ccc6013f306b211d5ed67ec78`
+passes Linux 321 tests/native sanitizers and Windows native WARP, 67 managed
+ABI/codec/export cases, actual UI portrait export, package, external MCP and
+startup. See https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/38891627059 .
+
+Remaining: independent PR review, Mango four-way timings, total 6 GB
 VRAM/repeated cancellation, quality/file-size and physical A/V assessment. Keep
 #82 open for those measured acceptance items.

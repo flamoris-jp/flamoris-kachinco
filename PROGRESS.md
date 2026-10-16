@@ -229,3 +229,16 @@ Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
   Mango NVENC/driver picture quality, speed, total VRAM and physical A/V acceptance
   are not measured. Do not close #82 or claim acceleration from simulated hardware,
   WARP or requested mode. Independent human PR review and merge remain pending.
+
+### Issue #82 automated acceptance result
+
+Product CI #155 at code commit `26763e604d22f22ccc6013f306b211d5ed67ec78`
+passed: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/38891627059 .
+Linux standard runner passes 321 tests (one Windows WARP case skipped) and native
+ASan/UBSan/leak contracts. Windows passes native/WARP contracts, full solution
+build, 67 managed ABI/codec/export cases (nine POSIX injection cases skipped),
+actual WPF menu and portrait H.264/AAC export, worker/raster, portable archive,
+published editor/bridge external MCP, media import and clean-PATH startup.
+This documentation-only follow-up leaves Product/Test/workflow source unchanged
+from that validated code commit. PR #83 awaits independent human review and merge
+authorization; #82 remains open for measured Mango physical acceptance.
