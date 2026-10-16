@@ -16,6 +16,11 @@ internal static class Program
         {
             try
             {
+                if (args is ["--export-bench", var project, var output, var device])
+                {
+                    await ExportBench.Run(project, output, int.Parse(device, System.Globalization.CultureInfo.InvariantCulture));
+                    exit = 0; return;
+                }
                 if (args is ["--packaged", var bundle])
                 {
                     await PackagedMcpChecks.Run(Path.GetFullPath(bundle));
@@ -34,6 +39,7 @@ internal static class Program
                 await EffectChecks.Run(main);
                 await GpuPreviewChecks.Run(main);
                 await PreviewFrameChecks.Run(main);
+                await GpuExportChecks.Run(main);
                 var compiler = new RecipeCompiler();
                 var compiled = await compiler.CompileAsync("text(text='グエー', x=10, y=20)\nparticles(count=3,x=30,y=100,size=3)");
                 if (!compiled.Success) throw new Exception(string.Join(";",compiled.Diagnostics.Select(d=>d.Message)));

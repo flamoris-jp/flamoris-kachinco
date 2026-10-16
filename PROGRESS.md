@@ -200,3 +200,45 @@ Scope: Issues #62, #63, #64. Baseline: reviewed main `42cb62c`.
 - The Windows `effect-library.png` screenshot was inspected: path/explicit grant, list/details, save/update/delete/apply and parameter controls are readable within the scrollable window. It is layout evidence, not physical DPI/playback acceptance.
 - PR #65 merged to main with the repository-supported squash method: `14fd5a9aa9589d25a92935df6cca15cd7bc16ef5`. All three issues were verified closed as completed after merge.
 - This final documentation-only update records outcomes after the code merge. No Product/test files change. Physical Windows/DPI acceptance remains the existing #42/manual staging work; full parallax and unrestricted Python are outside these issues.
+
+## Issue #82: GPU MP4 export (2026-10-16, PR review pending)
+
+- Added independently selected Auto/CPU/D3D11 export composition and Auto/CPU/NVENC
+  encoding. ExportFrameRenderer owns the existing bounded native compositor through
+  SharedFrameRenderer, isolated from preview. No project schema/evaluation changes.
+- NVENC performs a real three-frame initialization encode at the target size/fps,
+  explicit FFmpeg GPU index 0 by default, with an eight-second deadline. Failed
+  hardware video replays from frame zero once through existing libx264; cancellation,
+  renderer validation and audio/mux failures do not trigger replay. Encoder processes
+  are joined before temporary files are deleted or reused.
+- UI export menus, completion/log metrics and existing MCP clip-download default
+  Auto path are connected. Ready clip metadata adds actual acceleration diagnostics;
+  inputs and producer catalog are unchanged. No full-sequence MCP export existed
+  in current main. Audio contracts and clip bounds remain unchanged.
+- Added POSIX injected-executable tests for init/midstream failure, actual CPU
+  H.264 recovery, explicit CPU, no replay on renderer faults, cancellation at retry,
+  bounded double failure and probe timeout/cancellation. Shared export comparison
+  includes transforms, Screen/alpha, captions and speed; Windows also uses native
+  WARP. Added WPF menu/real portrait export smoke and four-way export benchmark.
+- Local: native Release contracts 5/5; focused managed cases 37 pass, one Windows
+  WARP case skipped on Linux. Full solution Windows-target cross-build succeeds
+  with zero warnings/errors. Standard local runner/parallel MSBuild are blocked by
+  host Unix-socket restrictions; a temporary reflection runner executes the actual
+  test methods. CI must run the standard full managed/Windows/package gates.
+- Design: ADR 0020. Physical procedure and benchmark: staging/windows-issue82.md.
+  Mango NVENC/driver picture quality, speed, total VRAM and physical A/V acceptance
+  are not measured. Do not close #82 or claim acceleration from simulated hardware,
+  WARP or requested mode. Independent human PR review and merge remain pending.
+
+### Issue #82 automated acceptance result
+
+Product CI #155 at code commit `26763e604d22f22ccc6013f306b211d5ed67ec78`
+passed: https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/38891627059 .
+Linux standard runner passes 321 tests (one Windows WARP case skipped) and native
+ASan/UBSan/leak contracts. Windows passes native/WARP contracts, full solution
+build, 67 managed ABI/codec/export cases (nine POSIX injection cases skipped),
+actual WPF menu and portrait H.264/AAC export, worker/raster, portable archive,
+published editor/bridge external MCP, media import and clean-PATH startup.
+This documentation-only follow-up leaves Product/Test/workflow source unchanged
+from that validated code commit. PR #83 awaits independent human review and merge
+authorization; #82 remains open for measured Mango physical acceptance.

@@ -19,3 +19,5 @@ The [design index](../README.md), [production architecture](../production-archit
 [UI ownership boundaries](../ui-ownership.md) and accepted ADRs describe current
 contracts. The issue-numbered editor UX and interactive preview documents remain
 at their existing paths because they contain active coordinate/preview contracts.
+
+- [Issue #82 GPU export author self-review](issue-82-self-review.md): bounded reuse/retry and explicit outstanding physical acceptance.

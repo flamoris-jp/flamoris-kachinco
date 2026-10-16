@@ -375,3 +375,20 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
   Hub forwards bounded chunks and pins the actual producer descriptor.
 - Required native capabilities are now 32767. Run speed, download, persistence,
   native and real-codec tests; Windows/Hub physical acceptance remains separate.
+
+## GPU export authority (Issue #82)
+
+- ADR 0020 supersedes ADR 0016's preview-only restriction: export owns an independent
+  bounded composition backend through ExportFrameRenderer and SharedFrameRenderer.
+  Native evaluation, pixel rules, exact same-frame CPU recovery and canonical time
+  remain unchanged. No project schema, hidden edit path or zero-copy claim.
+- Auto/CPU/NVENC encoding is independent of Auto/CPU/D3D11 composition. NVENC is
+  accepted only after a real bounded initialization encode on the selected FFmpeg
+  GPU index. A failed hardware video retries once from frame zero through libx264;
+  media sources must be replayable. Cancellation/renderer/audio/mux errors do not
+  trigger a video retry. Publish only complete files, join processes before cleanup.
+- UI and MCP clip-download paths use the same default Auto policy; current main
+  has no full-sequence MCP export tool. Preferences remain transient outside project.
+- Use staging/windows-issue82.md for four-way times, quality and physical 6 GB VRAM
+  acceptance; actual backend/fallback diagnostics are authoritative, not requested
+  mode. CQ 19 and CRF 18 are separate policies, not equal-quality guarantees.
