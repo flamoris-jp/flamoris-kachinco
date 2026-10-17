@@ -1,464 +1,151 @@
-# FLAMORIS Kachinco
+# FLAMORIS Kachinco 🎬
 
-**AI-native timeline editor and programmable compositor for reproducible video creation.**
+**An AI-native video editor where AI can actually edit the timeline.**
 
-FLAMORIS Kachinco is being built to combine timeline editing, compositing, subtitles, named scene regions, MCP control, and restricted Python authoring with deterministic rendering in one workflow.
+**AIが動画編集を提案するだけではなく、タイムラインを見て、編集し、完成動画を書き出す。**
 
-The core idea is simple:
+Kachinco is an open-source Windows video editor built around a different premise:
+**AI is a first-class editor, not an add-on button.** A person can edit directly, or an MCP-connected AI assistant can inspect the same project, work with media and clips, request a rendered frame at a specified time, make edits, and help produce a real MP4.
 
-> A human points to **where** and **when** something should happen. AI writes **how** it should happen. Kachinco renders the result as an ordinary editable clip.
+We didn't just build an AI-editable video editor. **We've used it to create and publish videos about making that very editor.** 🪆
 
-Kachinco is not intended to reproduce Premiere Pro or After Effects feature-for-feature. Its design starts from a different assumption: **AI is a first-class editor from day one.**
+**[▶ Watch Kachinco-made videos and behind-the-scenes work on YouTube](https://www.youtube.com/@akino_flamoris)** · [FLAMORIS website](https://www.flamoris.jp/) · [Issues / development](https://github.com/flamoris-jp/flamoris-kachinco/issues)
 
-## Initial product constraints
+> Kachinco is under active development. The GitHub source and verified CI builds are public, but a merged feature is not automatically a verified release on every physical PC.
 
-The first product is deliberately narrow.
+## 🎥 Made with Kachinco, published on YouTube
 
-- Implementation: **C++17 editor/media/evaluation/playback engine**, **C#/.NET 10 WPF shell and desktop/MCP adapters**.
-- Initial desktop target: **Windows**.
-- Project/output formats are initially limited to:
-  - **1920x1080, 16:9** for normal YouTube video.
-  - **1080x1920, 9:16** for YouTube Shorts / vertical video.
-- Initial media import is intentionally limited to:
-  - **MOV / MP4** video.
-  - **WAV / MP3 / M4A** audio.
-- The manual editor only needs the practical **basic NLE feature set** expected from a simple Premiere-like workflow: media import, timeline tracks, playback/scrubbing, clip insert/move/trim/split/delete, basic transforms/opacity, audio placement, captions/subtitles, Undo/Redo, save/reopen, and export.
-- **MCP is a foundational product surface**, not an optional automation layer added later. UI and MCP operate on the same project/domain model and command/history system.
-- The compositor must support at least **Normal, Screen, Add, Multiply, Alpha and opacity** workflows. **Screen blend mode is required from the early product** so black-background light/fire/spark assets can be composited naturally.
-- Python is used for programmable, open-ended effect authoring. Generated results are rendered into ordinary timeline clips and remain reproducible through their Recipe provenance.
-- Future integrations such as **Kinetai** and **AudioAnalyzer** are expected, but they must connect through explicit integration boundaries rather than becoming dependencies of the editor core.
+The project is being tested on actual creative work, not just synthetic demos. Examples from the October 2026 FLAMORIS production sessions include:
 
-The narrow codec/resolution scope is intentional. Kachinco should first prove fast, reliable AI-assisted editing before expanding into a broad compatibility matrix.
+| Production | What Kachinco was used for |
+| --- | --- |
+| **FLAMORIS manga-style promo** | Turned a single illustrated page and a music track into moving shots for a promotional video. |
+| **「グエー」 video (October 15, 2026)** | AI-assisted editing of visual clips, audio and timing, followed by an actual video export. |
+| **Kachinco making-of video** | A behind-the-scenes edit of the editor being used, including narration and selected production moments. |
+| **Making-of short / promo** | A shorter, faster promotional edit assembled from the production material. |
 
-## Core workflow
+**[Watch the published videos on the official FLAMORIS AI Lab YouTube channel →](https://www.youtube.com/@akino_flamoris)**
 
-1. Import PNG/JPEG/WebP images, MOV/MP4 video and WAV/MP3/M4A audio.
-2. Arrange normal clips on a timeline.
-3. Create a named **Clapper** that binds a time range and, optionally, a canvas region/path and target track.
-4. Ask an AI assistant for an edit using that name.
-5. The AI queries the Clapper through MCP.
-6. The AI produces a Python **Recipe** using the Kachinco rendering API.
-7. Kachinco validates and renders the Recipe deterministically.
-8. The rendered result is inserted as a normal timeline **Clip**.
-9. The Recipe remains attached so the clip can be reproduced, adjusted, or regenerated later.
+The channel link is the verified public destination. Individual video links may be added here when their exact URLs are available.
 
-Example:
+**Preview is not the finished video.** Interactive playback can skip or stutter while decoding/previewing. The exported video is generated by the rendering/export pipeline, **not by recording the editor window**. For making-of content, use the finished export for showcase playback rather than presenting a screen recording as final rendering quality.
 
-> `A-1 に火の粉とキャプション「グエー」を左から右へ飛ばして。`
+## What makes it AI-native?
 
-Kachinco resolves `A-1`, renders the requested visual effect, and places the resulting clip at the named time and region.
-
-## The three core objects
-
-### Clapper
-
-A human-authored named reference to editing context.
-
-A Clapper may contain:
-
-- stable ID and human-readable name such as `A-1`, `Chorus-Impact`, or `Akino-Closeup`
-- timeline start/end
-- canvas point, rectangle, polygon, or path
-- preferred target track/layer
-- source clip references
-- notes or intent
-
-Clappers are the bridge between natural language such as “here” and deterministic timeline/canvas coordinates.
-
-### Recipe
-
-A reproducible program describing an effect or generated element.
-
-Recipes are authored as restricted Python against the Kachinco rendering API. They must not depend on unrestricted filesystem, process, or network access.
-
-A Recipe records enough information to reproduce its result, including:
-
-- source code or normalized program representation
-- input asset references
-- Clapper references
-- render settings
-- deterministic random seed where randomness is used
-- renderer/API version metadata
-
-### Clip
-
-The rendered result placed on the timeline.
-
-Generated output remains a normal clip that a human can trim, move, duplicate, stack, mute, delete, or replace. Generated clips additionally retain provenance back to their Recipe so edits can be regenerated instead of becoming one-way baked output.
-
-## Why Python
-
-Kachinco does not need a fixed catalog of hundreds of effects.
-
-Instead, it exposes a small set of powerful rendering primitives such as:
-
-- image/layer composition
-- text and captions
-- transforms and opacity
-- blend modes including Screen
-- masks and mattes
-- blur and filtering
-- color operations
-- noise
-- particles
-- warp/distortion
-- drawing primitives
-- temporal sampling
-- deterministic random generators
-
-AI can compose these primitives into new effects at request time. Successful Recipes can later be saved as reusable presets without limiting the system to predefined effects.
-
-The goal is **open-ended effects with reproducible results**.
-
-## MCP-first editing
-
-MCP is the primary machine-facing control surface, not a hidden automation path.
-
-Initial capability groups are expected to include:
-
-### Timeline queries
-
-- inspect projects, timelines, tracks, clips, playhead, selections, and media
-- inspect clip timing and media properties
-- inspect subtitle/caption tracks
-
-### Clapper queries and commands
-
-- create/update/delete/list Clappers
-- resolve a Clapper by stable ID or name
-- read its time range, canvas geometry, source context, and preferred insertion target
-
-### Recipe/render commands
-
-- validate a Python Recipe
-- render a still or short preview
-- render a full Recipe
-- regenerate a previously generated clip
-
-### Timeline mutation commands
-
-- import/register PNG/JPEG/WebP images, MOV/MP4 video and WAV/MP3/M4A audio
-- insert/replace/move/trim/split clips
-- create subtitle tracks and captions
-- attach generated output to a Recipe and Clapper
-- perform compound edits transactionally with Undo/Redo support
-
-## Example AI-assisted jobs
-
-Kachinco should eventually support requests such as:
-
-- “Put the MOV and WAV on the timeline and align them.”
-- “Create an SRT from these lyrics and place the captions on the vocal timing.”
-- “In A-1, emit sparks and fly the caption ‘グエー’ from left to right.”
-- “Make the caption in B-3 larger only during the chorus.”
-- “Reuse the same effect from A-1 in C-2, but reduce particle density to 40%.”
-- “Regenerate this generated clip with less glow while preserving its timing.”
-
-## Product principles
-
-1. **AI-native, human-visible**  
-   AI edits the same project model the human sees. There is no parallel hidden AI timeline.
-
-2. **Human names intent; machines use stable coordinates**  
-   A Clapper name is convenient UI, while stable IDs and domain coordinates remain authoritative internally.
-
-3. **Generated does not mean ephemeral**  
-   Every generated effect should be reproducible from its Recipe, inputs, settings, and deterministic seed.
-
-4. **Generated output is ordinary media**  
-   Once rendered, the result behaves like a normal clip in the editor.
-
-5. **Small rendering primitives, open-ended composition**  
-   Prefer expressive primitives over a giant hard-coded effect catalog.
-
-6. **Preview and final render share semantics**  
-   Preview must not be a screen-capture approximation of final output.
-
-7. **Deterministic core, explicit nondeterminism**  
-   Randomness must be seeded; external AI-generated assets are explicit inputs rather than invisible runtime dependencies.
-
-8. **Safe programmable rendering**  
-   Python Recipes execute in a restricted environment with explicit APIs, resource limits, and no arbitrary OS access. Prefer a separate worker/process boundary from the C# editor runtime.
-
-9. **Undo/Redo and transactions from the beginning**  
-   MCP and UI mutations share the same command/history model.
-
-10. **Start with useful editing, not framework grandeur**  
-    Build the smallest vertical slice that lets a human point, name, ask, render, and see a clip appear.
-
-## Initial architecture sketch
+An ordinary video editor lets a person click controls. Kachinco also exposes typed editing operations through the **Model Context Protocol (MCP)**, with the human UI and AI editing the **same native project/session**.
 
 ```text
-Human / ChatGPT
-      |
-      | natural-language instruction
-      v
-     MCP
-      |
-      +----------------------+----------------------+
-      |                      |                      |
- Timeline / Clapper      Recipe API            Project Queries
- Commands                   |                      |
-      |                      v                      |
-      |              Restricted Python Worker       |
-      |                      |                      |
-      |                Render Commands / IR         |
-      |                      |                      |
-      +----------------------v----------------------+
-                             |
-                    Deterministic Renderer
-                             |
-                   video / image / alpha
-                             |
-                             v
-                     Timeline Clip
+Human: "Make this 30-second promo."
+              |
+              v
+       ChatGPT / MCP client
+              |
+         FLAMORIS MCP Hub
+              |
+              v
+      Kachinco desktop session
+        |                 |
+  Query / capture     Edit commands
+  time-specific       timeline, tracks,
+  rendered frames     clips, captions
+        |                 |
+        +--------+--------+
+                 |
+         Shared native renderer
+                 |
+       Preview / exported MP4
 ```
 
-C++ owns the shared media, evaluation, composition and playback runtime. C# owns the WPF shell and, until the session migration, persistent editing commands. Python is an authoring language, not the renderer itself. The renderer owns deterministic evaluation, composition, timing, blend behavior, and output.
+**A particularly useful feedback loop:** the AI can ask Kachinco for a composed frame at a precise timeline time using `preview_frame` (JPEG/PNG), inspect the result, and decide what to edit next. It doesn't need to guess from timeline metadata alone. Capturing a frame is read-only: it doesn't move the playhead or modify editing history.
 
-Future systems such as Kinetai or AudioAnalyzer should connect through explicit integration adapters and feed normal project media/metadata/commands into Kachinco rather than bypassing the domain model.
+AI can also upload supported source media through guarded MCP operations, adjust the timeline, and retrieve a bounded individual edited clip for inspection. The AI client and MCP/Hub connection are external integrations; **Kachinco itself remains a usable manual editor**.
 
-## Repository status
+[Read the typed UI/MCP contract](docs/api-contract.md) · [Frame capture details](staging/windows-issue72.md) · [MCP media upload contract](docs/decisions/0018-mcp-media-upload.md) · [Clip speed/download guide](docs/clip-speed-and-download.md)
 
-**The production slice and native engine migration are implemented on reviewed main.**
-See the final migration audit and post-migration Windows acceptance checklist;
-automated coverage does not claim physical A/V signoff.
-It extends the reviewed Phase 0/1 foundation with:
+## What you can do today
 
-- full-length media-bin drops, atomic sequence extension, timeline-local navigation;
-- shared MOV/MP4 and WAV/MP3/M4A decoding, Normal/Screen RGBA composition and stereo audio mixing;
-- render-ahead Windows playback, seek and cancellable H.264/AAC MP4 export;
-- SRT round trips, caption editing and shared outlined Japanese text rendering;
-- Flamoris.Mcp.Core 1.3.1 stdio bridge to the same running editor session, shared history and document-scoped Read only / Edit capabilities; dedicated bounded media upload under Edit, with other external file jobs denied;
-- named Clappers, v1 → v2 project migration, literal-only Python Recipe validation;
-- alpha MOV Recipe clips with source/output hashes and explicit regeneration;
-- self-contained Windows portable publishing and automated Windows raster checks.
+| Area | Implemented on reviewed `main` |
+| --- | --- |
+| **Windows editing** | Media bin, multitrack timeline, playback/scrubbing, move/trim/split/delete, Undo/Redo, save/reopen and overwrite save. |
+| **Video / still images** | MOV/MP4 and PNG/JPEG/WebP import, layer transforms, opacity, Normal/Screen composition, image motion via property automation. |
+| **Audio / captions** | WAV/MP3/M4A audio clips, clip volume points and fades, transport monitoring level, caption editing and SRT import/export. |
+| **AI / MCP** | Same-session project queries and edits, guarded media upload, specified-time rendered frame capture, clip speed commands and bounded single-clip download. |
+| **Creative controls** | Clappers (named timeline/region references), reusable Effect Library, restricted Recipe-generated text/particle clips, editable visual automation. |
+| **Finishing** | Crossfades, navigation by frame, timeline follow during playback, title-image selection/export, MP4 export for 16:9 or 9:16. |
+| **GPU options** | D3D11 preview composition and decoding fallback; independent CPU/D3D11 export composition and CPU/NVENC encoding paths, with CPU fallback. |
 
-Preview preparation uses the same snapshot renderer as export. It is not a claim
-of real-time full-resolution composition: independent per-frame decoding is an
-initial implementation and can be slow. Recipe proof supports text and particles,
-up to 10 seconds, not arbitrary Python or a complete effects system. FFmpeg and
-Python are external prerequisites. MOV/MP4 embedded audio is not mixed; use WAV/MP3/M4A audio.
-Media import and cross-container relink use real ffprobe validation; see
-[the media format contract](docs/decisions/0006-media-import-formats.md).
+The October 17 production-operation changes (media removal, title image, window restoration, timeline follow, crossfade, transport behavior) landed in [PR #92](https://github.com/flamoris-jp/flamoris-kachinco/pull/92). GPU export paths landed in [PR #83](https://github.com/flamoris-jp/flamoris-kachinco/pull/83). **Automated checks passed; physical deployment, performance and A/V acceptance are separate.**
 
-MCP Edit connections also accept bounded uploads through
-`media_upload_begin/write/finish/cancel`: images, video and audio enter the same
-media bin and Undo/Redo history as ordinary import. See the
-[upload contract and recovery sequence](docs/decisions/0018-mcp-media-upload.md).
-Updating a live Hub requires adding the four reviewed schemas to its existing
-Kachinco catalog after updating the desktop; source changes do not activate it.
-Human Windows visual/playback acceptance remains separate from CI.
+Some capabilities have explicit boundaries:
 
-See [Windows production workflow and limitations](staging/windows-production.md).
+- Recipe authoring currently supports a **restricted, literal-only text/particle proof**, up to 10 seconds; this is not arbitrary Python execution or a complete effect/plugin ecosystem.
+- Initial sequence presets are **1920×1080** and **1080×1920**. Media import is deliberately scoped; FFmpeg/ffprobe is required for media operations.
+- Embedded audio from MOV/MP4 is **not automatically mixed**. Put supported audio on an audio track.
+- Available transitions include a native-curve **crossfade**. A full range of spatial wipes and advanced transitions is not claimed.
+- Preview and export share evaluation semantics, but smooth real-time playback, GPU speedups, VRAM use and A/V behavior depend on the hardware and require hands-on testing.
+- MCP Hub schemas and the desktop package must both be updated to activate newly merged MCP commands in a running deployment.
 
-### Build and test
+The full engineering status and outstanding acceptance evidence live in [PROGRESS.md](PROGRESS.md), [the roadmap](docs/roadmap.md), and [Windows creation-workflow acceptance](staging/windows-creation-workflow.md).
 
-Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
-For the native engine, also install CMake supporting your Visual Studio version (minimum 3.20) and Visual Studio 2022 or newer Build
-Tools with **Desktop development with C++** (x64). `dotnet build` builds/tests the
-native runtime and copies it into app/test/publish outputs. Linux headless builds
-require CMake and a C++17 compiler. See [ADR 0007](docs/decisions/0007-native-runtime-boundary.md).
-One native EditorSession owns commands, validation, history and v1/v2/v3/v4 persistence.
-The grouped Inspector pairs compact sliders with precise numeric inputs. Audio clips
-support editable volume points and fade-in/out with shared preview/export evaluation.
-The transport monitoring slider is an editor preference and leaves exported audio
-unchanged. Legacy projects retain v2/v3 output; still images or visual automation select v4.
-C# exposes immutable queries and desktop/MCP adapters; canonical time and shared
-preview/export evaluation/composition are native. See [ADR 0010](docs/decisions/0010-native-editing-authority.md)
-and the [final audit](docs/reviews/issue-36-native-audit.md).
-Build the portable distribution candidate on Windows with PowerShell 7:
+## Getting started (Windows)
 
-```powershell
-git pull --ff-only
-./product/packaging/publish-windows.ps1
-```
+**For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start `Kachinco.App.exe`. The destination machine does **not** need the .NET SDK, but media workflows require `ffmpeg` and `ffprobe` on `PATH`; restricted Recipes additionally require Python 3.
 
-The directory, ZIP and inventory are under `artifacts/windows/`, named
-`FLAMORIS-Kachinco-win-x64`. Extract the complete ZIP and start `Kachinco.App.exe`.
-See [the shared Windows packaging contract](docs/windows-packaging.md). Missing/incompatible native components fail startup with
-an actionable diagnostic. Packages include BUILD-INFO.txt, licenses and acceptance
-checklists. FFmpeg/ffprobe and Recipe Python remain external prerequisites.
+See [Windows portable packaging and prerequisites](docs/windows-packaging.md). CI artifacts are short-lived development candidates, **not a promise of a published stable release**.
 
-Install FFmpeg/ffprobe and place both executables on `PATH`; media import reports a
-structured `FFPROBE_NOT_FOUND` diagnostic when it is unavailable.
-On Windows, confirm CMake is available before building (restart PowerShell after
-installing tools so it picks up the updated PATH):
-
-```powershell
-cmake --version
-```
-
-If the C++ toolchain is unavailable, open Visual Studio Installer, modify Build
-Tools and install **Desktop development with C++**, including the MSVC x64/x86
-build tools and a Windows SDK. You can check `cl` in **Developer PowerShell for
-VS 2022** or the matching version. A Visual Studio CMake generator can detect the
-installed toolchain even when `cl` is not on a regular PowerShell PATH.
-
-Build from the repository root:
+**For developers:** install PowerShell 7, .NET 10 SDK, CMake (3.20+), Visual Studio 2022+ C++ Build Tools with the Windows SDK, plus FFmpeg/ffprobe. From a checked-out repository:
 
 ```powershell
 dotnet build Kachinco.slnx -c Release
 dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release
-dotnet run --project product/Kachinco.App/Kachinco.App.csproj
+./product/packaging/publish-windows.ps1
 ```
 
-If CMake configuration previously failed before the C++ toolchain was installed,
-its cached configuration may still prevent detection (`CMAKE_C_COMPILER not set`
-or `CMAKE_CXX_COMPILER not set`). From the repository root, remove only the
-native Release build directory and retry:
+The portable ZIP and inventory are created under `artifacts/windows/`. Close Kachinco before replacing a running portable build, since Windows may lock loaded DLLs.
 
-```powershell
-if (Test-Path .\product\native\obj\Release) {
-    Remove-Item -Recurse -Force .\product\native\obj\Release
-}
-dotnet build Kachinco.slnx -c Release
-```
+**MCP connection:** an MCP-aware client connects to the active Kachinco desktop session, directly or via the FLAMORIS MCP Hub setup. It is a separate configuration step; publishing a new executable alone does not update a deployed Hub tool catalog.
 
-For Debug builds, use `product/native/obj/Debug` instead. These directories contain
-generated native build files; the source files remain in `product/native/src`.
-MSVC builds explicitly use UTF-8 for source and execution strings, including
-native test targets, so Unicode literals do not depend on the Windows code page.
+[Shared desktop MCP connection](docs/shared-mcp-connection.md) · [Architecture](docs/production-architecture.md) · [Windows production workflow](staging/windows-production.md)
 
-The headless test project runs without WPF or private media; real codec tests
-require FFmpeg/ffprobe and Recipe tests require Python 3.
-The two CI jobs protect distinct risks: headless contracts on Linux and WPF
-build/startup, restricted worker, repeatable rasterization and portable publish on Windows. CI runs on non-main branch pushes touching Product/Test
-or build files; it does not duplicate the same suite on PR creation or main.
+## The original idea: Clapper → Recipe → Clip
 
-Current documentation:
+The original product concept remains part of Kachinco's identity:
 
-- [Production architecture](docs/production-architecture.md)
-- [Active roadmap](docs/roadmap.md)
-- [Typed editing / live MCP contract](docs/api-contract.md)
-- [Project file v1](docs/project-format-v1.md) and [v2 migration](docs/decisions/0004-authoring-v2.md)
-- [Manual Windows acceptance](staging/windows-foundation.md)
-- [Phase 1 Windows acceptance](staging/windows-phase1.md)
-- [Production Windows acceptance](staging/windows-production.md)
-- [Original product vision](docs/project-plan.md)
+- **Clapper:** a named time range and optional canvas region, so a human can point to *where and when* an edit belongs.
+- **Recipe:** a bounded, reproducible description of an effect, with validated inputs and provenance.
+- **Clip:** the result becomes ordinary editable media on the timeline, not an invisible AI-only artifact.
 
-## Clip speed and MCP clip download
+For example, a creator might ask, “A-1 に火の粉と『グエー』の文字を飛ばして。” The point isn't to replace creative control with an opaque prompt. It's to let a human and an AI collaborate over explicit coordinates, editable objects and reproducible results.
 
-Inspector **Playback speed** and `SetClipSpeed` in `edit_batch` use the same native
-command: 1× / 2× / 4× / 8×, exact source interval retained, no automatic ripple.
-Audio speed also changes pitch. A slower return that overlaps another clip or
-exceeds the sequence is rejected; move/extend explicitly in the same batch.
-Undo/Redo and save/reopen retain speed (conditional schema v5).
+Kachinco isn't trying to clone every feature of Premiere Pro or After Effects. Its experiment is more specific: **what changes when an AI can see the rendered result and edit the same project a human sees?**
 
-`clip_download_begin/status/read/cancel` retrieve an edited single clip without
-mixing other tracks. WAV: PCM16 stereo 48 kHz; MP4: silent H.264 on the sequence's
-opaque black canvas, Full/Half/Quarter. Maximum 30 seconds / 64 MiB, 128 KiB chunks.
-The ReadOnly grant is sufficient. Disabled/muted clips yield black/silence unless
-`inspectDisabled` explicitly requests inspection. The project is never changed.
-See [usage and Hub rollout](docs/clip-speed-and-download.md) and
-[ADR 0019](docs/decisions/0019-clip-speed-and-download.md). Source implementation
-and automated tests do not establish live desktop/Hub acceptance.
+[Original project vision](docs/project-plan.md) · [Historical pre-refresh README](history/readme-before-showcase-2026-10-17.md) · [Technical decisions](docs/decisions/)
 
-## グエー記念日 🎬
+## Development and community
 
-2026年10月15日  
+FLAMORIS builds music, animation, video and the creative tools behind them. The development process and issues are public.
+
+- [Issues / feature requests](https://github.com/flamoris-jp/flamoris-kachinco/issues)
+- [Source and pull requests](https://github.com/flamoris-jp/flamoris-kachinco/pulls)
+- [Other FLAMORIS open-source projects](https://github.com/flamoris-jp)
+- [FLAMORIS YouTube: AI Lab](https://www.youtube.com/@akino_flamoris)
+
+### グエー記念日 🎬
+
+**2026年10月15日**
+
 グエーを世界に飛ばした。音声付きで。。。  
 だから、今日はグエー記念日。
 
-## About the name
+## License and support
 
-**FLAMORIS Kachinco** 🎬
+This repository's **software source code** is licensed under the [Apache License 2.0](LICENSE), unless otherwise noted. Commercial use is welcome and requires no special permission.
 
-In Japanese film production, **カチンコ (kachinko)** is the clapperboard used to mark and identify a take. The name comes from the sharp *kachin!* sound made when the board snaps shut.
+FLAMORIS software is provided **as-is**, without guaranteed individual support. If something goes wrong, you can have an AI assistant examine this repository's documentation, issues, source, tests and logs to help you troubleshoot.
 
-FLAMORIS spells the product name **Kachinco**. The name reflects the core idea of the editor: a human marks and names a point in time and space, then AI can act on that clearly identified editing context.
-
-
-## License, support, and philosophy
-
-The software source code in this repository is licensed under the [Apache License 2.0](LICENSE), unless otherwise noted.
-
-Commercial use is welcome and does not require permission. If you'd like, we'd be happy to hear what you used FLAMORIS for. This is completely optional.
-
-FLAMORIS software is provided as-is. We do not provide guaranteed individual support. If you run into trouble, we encourage you to let your AI assistant read the repository, documentation, Issues, tests, logs, and source code and help you solve it.
-
-If FLAMORIS helps you or you find it interesting, your support helps fund development and keeps the project growing. 🌱  
+If FLAMORIS is useful to you, optional support helps pay for development. 🌱  
 <sub>Mostly GPU bills.</sub>
 
-FLAMORIS characters, character designs, artwork, illustrations, PSD source assets, music, audio, logos, trademarks, branding, video, and other creative assets are **not automatically licensed under Apache-2.0**. Their applicable licenses or rights statements must be provided separately.
+FLAMORIS character designs, artwork, logos, trademarks, music, voices and other creative assets are **not automatically licensed under Apache-2.0**; check their own rights statements.
 
-### 方針
-
-このリポジトリのソフトウェアソースコードは、特に明記がない限り [Apache License 2.0](LICENSE) で提供されます。
-
-勝手に使ってください。改造しても、組み込んでも、商用利用してもOKです。
-
-商用作品や製品で使う場合も、許可は不要です。もしよければ「こんなのに使ったよ」と教えてもらえるとうれしいです。もちろん強制ではありません。
-
-FLAMORISのソフトウェアは現状のまま提供されます。個別サポートや動作保証はありません。困ったときは、README、ドキュメント、Issue、テスト、ログ、ソースコードをあなたのAIに読ませて、自己サポートしてもらってください。
-
-もし、あなたのお役に立てたり、面白いと思っていただけたなら、開発費用をご支援いただけるとうれしいです。  
-FLAMORISは元気になって育ちます。🌱  
-<sub>主にGPU代とか。</sub>
-
-FLAMORISのキャラクター、キャラクターデザイン、イラスト、PSD素材、音楽・音声、ロゴ、商標・ブランド、映像その他のクリエイティブ素材は、**Apache-2.0によって自動的にライセンスされるものではありません**。各素材に適用されるライセンスや権利表示を別途確認してください。
-
-## Shared desktop MCP connection
-
-The shared MCP UI migration and package release order are documented in [shared MCP connection](docs/shared-mcp-connection.md).
-
-
-## GPU preview backend
-
-Windows preview offers **Auto / CPU / D3D11**. Auto keeps the native CPU identity
-copy fast path and uses GPU composition for layered/transform work when supported.
-The native D3D11 backend implements the same transform, opacity and Normal/Screen
-primitives; export keeps the native CPU reference. Device, format or allocation
-failure falls back to CPU with a diagnostic.
-
-Windowsのプレビューは **Auto / CPU / D3D11** を選択できます。単純な表示ではCPUの
-コピー処理を活かし、対応GPUでは変形・重ね合わせをGPUで処理します。GPUが使えない
-場合はCPUへ戻ります。書き出しとタイムライン・音声同期の基準は共通です。
-
-FFmpeg D3D11VA supports the initial 8-bit NV12 forward-decode path; unsupported
-formats, including 10-bit surfaces, retain software forward decoding. The current
-FFmpeg process and WPF array boundary requires decode download and one composition
-readback per frame. This implementation does not provide zero-copy preview.
-Compositor texture/constant payload is bounded to 256 MiB; at most two hardware
-decoder processes retain separate codec surfaces. Total VRAM and speedup on Mango
-6 GB remain physical acceptance, not a measured claim.
-
-See [ADR 0016](docs/decisions/0016-d3d11-preview.md),
-[measurement and acceptance steps](staging/windows-issue67.md), and [PROGRESS.md](PROGRESS.md).
-
-## Still-image motion and reusable AI-authored effects
-
-Import PNG/JPEG/WebP into the Media Bin and place it on a video track. The default
-image duration is five seconds; trim changes its display duration. Inspector X/Y
-uses sequence-frame pixels, scale uses the fitted image, and rotation/opacity
-share ordinary preview/export semantics. Property automation points in the
-Transform section use clip-relative seconds and absolute values. AI may compose
-arbitrary sampled motion through `edit_batch`, including `SetClipPropertyCurve`
-and add/update/delete point commands. Motion is native, editable and undoable.
-
-Open **Effect Library** to set **Effect Library Path** (default: `library` beside
-the executable), save a clip's motion or a restricted Recipe, inspect/rename/delete
-saved items, or apply them. Visual effects expose intensity [0,1] and duration
-scale, copying curves into the target project in one shared history entry.
-Recipe effects bind to an existing Clapper; **Generate / Regenerate** creates the
-ordinary rendered clip using the existing bounded worker and explicit MOV output.
-The current Recipe API remains the existing literal-only text/particles primitive
-slice; saving an item does not expand its code execution capabilities.
-
-MCP library access is an explicit per-launch opt-in in that window. Reconnect after
-changing settings; read-only grants can list/get, while save/capture/apply/delete
-require Edit permission and the usual revision guard. No tool accepts a filesystem
-path or changes the configured root. `effect_save` with `expectedVersion` updates
-an item. Applied project state remains usable if a library item changes or is deleted.
-
-Back up the configured directory separately. Changing the path leaves existing
-files where they are; copy them explicitly to migrate. Application replacement
-must preserve the user library. v4 projects need a v4-capable Kachinco; keep an
-original project backup when upgrading. See [ADR 0015](docs/decisions/0015-still-images-and-effect-library.md)
-and [PROGRESS.md](PROGRESS.md).
-
-
-指定時刻の合成画像は MCP `preview_frame`（Hub: `kachinco.preview_frame`）で
-JPEG/PNGとして取得できます。再生位置や編集履歴は変更しません。
-[API・制限](docs/api-contract.md#read-only-preview-image-issue-72)／
-[実機更新とHub・トンネル確認](staging/windows-issue72.md)。
+ソフトウェアのソースコードは原則 Apache-2.0 で公開しています。改造・組み込み・商用利用も可能です。映像・音楽・キャラクターなどの制作物はソフトウェアとは別の権利・ライセンスで扱います。
