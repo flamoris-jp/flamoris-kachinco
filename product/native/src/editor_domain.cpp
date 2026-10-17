@@ -70,6 +70,7 @@ static void retime_curves(json& clip,int old_rate,int new_rate) {
     if(clip["audio"].contains("volumePoints")) for(auto& point:clip["audio"]["volumePoints"]) point["tick"]=retime(integer(point.at("tick")),old_rate,new_rate);
     if(clip["appearance"].contains("automation")) for(auto& curve:clip["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=retime(integer(point.at("tick")),old_rate,new_rate);
 }
+static int64_t title_frame(const json& sequence);
 json validate(const json& p) {
     json errors=json::array(); std::set<std::string> ids;
     auto e=[&](const char* code,const char* message,const json& id=null_value,const json& path=null_value){errors.push_back(error(code,message,id,path));};
@@ -115,6 +116,41 @@ json validate(const json& p) {
         const auto& tracks=field(s,"tracks"); if(!tracks.is_array()) { e("INVALID_COLLECTION","Tracks must be initialized.",id); continue; }
         const auto& clappers=field(s,"clappers"); const auto& recipes=field(s,"recipes");
         if(!clappers.is_array()||!recipes.is_array()) { e("INVALID_AUTHORING","Authoring arrays must be initialized."); continue; }
+
+        const auto& title=field(s,"titleImage");const auto& slot=field(s,"titleSlot");
+        if(!title.is_null()) {
+            if(!title.is_object()||title.size()!=2||!title.contains("mediaAssetId")||!title.contains("sourceFrameTicks"))
+                e("INVALID_TITLE_IMAGE","Title selection requires mediaAssetId and sourceFrameTicks.",id);
+            else {
+                auto found=assets.find(guid(title.at("mediaAssetId")));
+                if(found==assets.end()||integer(found->second->at("kind"))!=2)
+                    e("INVALID_TITLE_IMAGE","Title must reference a registered still image.",id);
+                if(!title.at("sourceFrameTicks").is_null()&&integer(title.at("sourceFrameTicks"))<0)
+                    e("INVALID_TITLE_IMAGE","Captured source tick must be nonnegative.",id);
+            }
+        }
+        if(!slot.is_null()) {
+            if(!slot.is_object()||slot.size()!=2||!slot.contains("trackId")||!slot.contains("clipId"))
+                e("TITLE_SLOT_INVALID","Title slot requires trackId and clipId.",id);
+            else {
+                if(guid(slot.at("trackId"))=="00000000-0000-0000-0000-000000000000"||
+                    guid(slot.at("clipId"))=="00000000-0000-0000-0000-000000000000")
+                    e("TITLE_SLOT_INVALID","Title slot IDs must be nonempty.",id);
+                const json* title_lane=nullptr;
+                for(const auto& lane:tracks) if(lane.at("id")==slot.at("trackId")) title_lane=&lane;
+                if(!title_lane||integer(title_lane->at("kind"))!=0) e("TITLE_SLOT_INVALID","Title video track is missing.",id);
+                else {
+                    const json* title_clip=nullptr;
+                    for(const auto& clip:title_lane->at("clips")) if(clip.at("id")==slot.at("clipId")) title_clip=&clip;
+                    if(title.is_null()&&title_clip) e("TITLE_SLOT_INVALID","Empty title selection must have an empty slot.",id);
+                    if(!title.is_null()&&(!title_clip||title_clip->at("mediaAssetId")!=title.at("mediaAssetId")||
+                        integer(title_clip->at("startTicks"))!=0||integer(title_clip->at("sourceInTicks"))!=0||
+                        integer(title_clip->at("durationTicks"))!=title_frame(s)))
+                        e("TITLE_SLOT_INVALID","Title clip must retain the selected image and exactly one frame at zero.",id);
+                }
+            }
+        }
+
         std::set<std::string> names;
         for(const auto& c:clappers) {
             if(c.is_null()) { e("INVALID_CLAPPER","Clapper is null."); continue; }
@@ -213,6 +249,12 @@ json validate(const json& p) {
             }
         }
     }
+    std::set<std::string> reserved_ids;
+    for(const auto& s:p.at("sequences")) if(!field(s,"titleSlot").is_null()&&field(s,"titleImage").is_null()) {
+        const auto key=guid(s.at("titleSlot").at("clipId"));
+        if(ids.count(key)||!reserved_ids.insert(key).second)
+            e("TITLE_SLOT_INVALID","Reserved clip ID must not belong to another project entity.",s.at("id"));
+    }
     for(const auto& a:p.at("assets")) if(a.is_object()&&!field(a,"provenance").is_null()) {
         const auto& pr=a.at("provenance"); const json* recipe=nullptr;
         for(const auto& s:p.at("sequences")) for(const auto& r:items(field(s,"recipes"))) if(r.is_object()&&r.at("id")==pr.at("recipeId")) {recipe=&r; break;}
@@ -225,10 +267,60 @@ static size_t find(const json& array,const json& id,const char* code,const char*
     for(size_t i=0;i<array.size();++i) if(array[i].is_object()&&array[i].at("id")==id) return i;
     reject(code,message,with_id?id:null_value); return 0;
 }
+
+static int64_t title_frame(const json& sequence) {
+    const auto& fps=sequence.at("settings").at("frameRate"); int64_t result=0;
+    if(kn_time::rounded(1,static_cast<uint64_t>(KN_TICKS_PER_SECOND)*static_cast<uint64_t>(integer(fps.at("denominator"))),
+        static_cast<uint64_t>(integer(fps.at("numerator"))),&result)!=KN_OK) throw std::overflow_error("frame");
+    return result;
+}
+static json* title_track(json& s) {
+    if(field(s,"titleSlot").is_null()) return nullptr;
+    for(auto& t:s["tracks"]) if(t.at("id")==s.at("titleSlot").at("trackId")) return &t;
+    return nullptr;
+}
+static void sync_title(json& s) {
+    auto* t=title_track(s); if(!t) return;
+    const auto id=s.at("titleSlot").at("clipId");
+    auto& clips=(*t)["clips"];
+    auto found=std::find_if(clips.begin(),clips.end(),[&](const json& c){return c.at("id")==id;});
+    if(field(s,"titleImage").is_null()) {
+        if(found!=clips.end()) clips.erase(found);
+        return;
+    }
+    if(found!=clips.end()) {(*found)["mediaAssetId"]=s.at("titleImage").at("mediaAssetId"); return;}
+    clips.push_back({{"id",id},{"mediaAssetId",s.at("titleImage").at("mediaAssetId")},{"startTicks",0},
+        {"sourceInTicks",0},{"durationTicks",title_frame(s)},{"enabled",true},
+        {"appearance",{{"transform",{{"x",0},{"y",0},{"scaleX",1},{"scaleY",1},{"rotationDegrees",0}}},{"opacity",1},{"blend",0},{"automation",json::array()}}},
+        {"audio",{{"gain",1},{"muted",false},{"volumePoints",json::array()}}}});
+}
+static void shift_content(json& s,int64_t delta,const json& excluded_track=null_value) {
+    for(auto& t:s["tracks"]) {
+        if(t.at("id")==excluded_track) continue;
+        for(auto& c:t["clips"]) c["startTicks"]=add(integer(c.at("startTicks")),delta);
+        for(auto& c:t["captions"]) c["startTicks"]=add(integer(c.at("startTicks")),delta);
+    }
+    for(auto& c:s["clappers"]) c["startTicks"]=add(integer(c.at("startTicks")),delta);
+    s["durationTicks"]=add(integer(s.at("durationTicks")),delta);
+}
+
 json apply(json p,const json& request) {
     const auto type=request.at("type").get<std::string>(); const auto& c=request.at("value");
     if(type=="CreateProject") { if(!p.is_null()) reject("PROJECT_EXISTS","Use an explicit new session/project replacement first.",p.at("id")); return {{"id",c.at("projectId")},{"name",c.at("name")},{"assets",json::array()},{"sequences",json::array()}}; }
     if(p.is_null()) reject("PROJECT_REQUIRED","Create or open a project first.");
+    if(type=="UnregisterMedia") {
+        const auto id=c.at("mediaAssetId");
+        auto index=find(p.at("assets"),id,"MEDIA_NOT_FOUND","Media asset not found.");
+        for(const auto& seq:p.at("sequences")) {
+            if(!field(seq,"titleImage").is_null()&&seq.at("titleImage").at("mediaAssetId")==id)
+                reject("MEDIA_IN_USE","Media is selected as a title image.",id);
+            for(const auto& track:seq.at("tracks")) for(const auto& clip:track.at("clips"))
+                if(clip.at("mediaAssetId")==id) reject("MEDIA_IN_USE","Media is referenced by a timeline clip.",clip.at("id"));
+            // Restricted Recipe inputs are Clappers and source clips; their assets are
+            // covered above. Generated provenance points to a Recipe, not another asset.
+        }
+        p["assets"].erase(p["assets"].begin()+static_cast<json::difference_type>(index)); return p;
+    }
     if(type=="RegisterMedia") { p["assets"].push_back(c.at("asset")); return p; }
     if(type=="RelinkMedia"||type=="SetGeneratedProvenance") {
         auto& a=p["assets"][find(p.at("assets"),c.at("mediaAssetId"),"MEDIA_NOT_FOUND",type=="RelinkMedia"?"Media asset not found.":"Media not found.",type=="RelinkMedia")];
@@ -237,10 +329,67 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SetClipSpeed","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"SetTitleImage","ReserveTitleFrame","ReleaseTitleFrame","ApplyCrossfade","AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SetClipSpeed","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
-    if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
+    if(type=="SetTitleImage") {
+        s["titleImage"]=c.at("selection"); sync_title(s);
+    }
+    else if(type=="ReserveTitleFrame") {
+        if(!field(s,"titleSlot").is_null()) return p;
+        const auto delta=title_frame(s);
+        shift_content(s,delta);
+        s["titleSlot"]={{"trackId",c.at("trackId")},{"clipId",c.at("clipId")}};
+        s["tracks"].push_back({{"id",c.at("trackId")},{"name","Title · 1 frame"},{"kind",0},{"enabled",true},{"clips",json::array()},{"captions",json::array()}});
+        sync_title(s);
+    }
+    else if(type=="ReleaseTitleFrame") {
+        if(field(s,"titleSlot").is_null()) return p;
+        const auto track_id=s.at("titleSlot").at("trackId"),clip_id=s.at("titleSlot").at("clipId");
+        auto* t=title_track(s);
+        if(!t) reject("TITLE_SLOT_INVALID","Title track is missing.");
+        for(const auto& clip:(*t)["clips"]) if(clip.at("id")!=clip_id) reject("TITLE_SLOT_IN_USE","Move other clips off the title track before releasing it.");
+        if(!(*t)["captions"].empty()) reject("TITLE_SLOT_IN_USE","Title track contains captions.");
+        shift_content(s,-title_frame(s),track_id);
+        auto index=find(s.at("tracks"),track_id,"TRACK_NOT_FOUND","Title track not found.");
+        s["tracks"].erase(s["tracks"].begin()+static_cast<json::difference_type>(index));
+        s["titleSlot"]=nullptr;
+    }
+    else if(type=="ApplyCrossfade") {
+        json* incoming=nullptr; json* outgoing=nullptr; size_t in_track=0,out_track=0;
+        for(size_t i=0;i<s["tracks"].size();++i) for(auto& clip:s["tracks"][i]["clips"]) {
+            if(clip.at("id")==c.at("incomingClipId")) {incoming=&clip;in_track=i;}
+            if(clip.at("id")==c.at("outgoingClipId")) {outgoing=&clip;out_track=i;}
+        }
+        if(!incoming||!outgoing||incoming==outgoing) reject("CLIP_NOT_FOUND","Choose two different video clips.");
+        auto& in=*incoming;auto& out=*outgoing;
+        const auto duration=integer(c.at("durationTicks")),start=integer(in.at("startTicks"));
+        if(integer(s["tracks"][in_track].at("kind"))!=0||integer(s["tracks"][out_track].at("kind"))!=0||
+            in_track<out_track||integer(out.at("startTicks"))>=start||!in.at("enabled").get<bool>()||!out.at("enabled").get<bool>()||
+            !s["tracks"][in_track].at("enabled").get<bool>()||!s["tracks"][out_track].at("enabled").get<bool>()||
+            integer(in.at("appearance").at("blend"))!=0)
+            reject("CROSSFADE_ORDER","Incoming must be a later, enabled Normal video layer above outgoing.");
+        if(duration<=0||duration>integer(in.at("durationTicks"))) reject("CROSSFADE_DURATION","Fade must fit the incoming clip.");
+        const auto old_end=add(integer(out.at("startTicks")),integer(out.at("durationTicks")));
+        if(old_end<start) reject("CROSSFADE_GAP","Close the gap before applying a crossfade.");
+        auto& appearance=in["appearance"];
+        if(!appearance.contains("automation")) appearance["automation"]=json::array();
+        auto& curves=appearance["automation"];
+        for(const auto& curve:curves) if(integer(curve.at("property"))==5)
+            reject("CROSSFADE_OPACITY_IN_USE","Edit or clear the existing opacity curve before applying a new fade.");
+        const auto end=add(start,duration);
+        if(old_end<end) {
+            const auto extension=end-old_end;
+            out["sourceDurationTicks"]=add(source_duration(out),retime(extension,rate(out),1));
+            out["durationTicks"]=add(integer(out.at("durationTicks")),extension);
+        }
+        curves.push_back({{"property",5},{"points",json::array({
+            {{"id",c.at("startPointId")},{"tick",0},{"value",0}},
+            {{"id",c.at("endPointId")},{"tick",duration},{"value",appearance.at("opacity")}}
+        })}});
+        std::stable_sort(curves.begin(),curves.end(),[](const json& a,const json& b){return integer(a.at("property"))<integer(b.at("property"));});
+    }
+    else if(type=="SetSequenceDuration") s["durationTicks"]=c.at("durationTicks");
     else if(type=="AddTrack") s["tracks"].push_back({{"id",c.at("trackId")},{"name",c.at("name")},{"kind",c.at("kind")},{"enabled",true},{"clips",json::array()},{"captions",json::array()}});
     else if(type=="AddClapper"||type=="AddRecipe") s[type=="AddClapper"?"clappers":"recipes"].push_back(c.at(type=="AddClapper"?"clapper":"recipe"));
     else if(type=="UpdateClapper"||type=="DeleteClapper"||type=="UpdateRecipe") {

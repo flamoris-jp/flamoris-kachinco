@@ -37,7 +37,7 @@
   <system:String x:Key="Shell.Preparepreviewwithoutplaying">現在位置のフレームを表示</system:String>
   <system:String x:Key="Shell.Previousframe">前のフレーム</system:String>
   <system:String x:Key="Shell.PlaypauseSpace">再生 / 一時停止 (Space)</system:String>
-  <system:String x:Key="Shell.Stopcancelpreparation">停止 / 準備をキャンセル</system:String>
+  <system:String x:Key="Shell.Stopcancelpreparation">停止（現在位置を保持）</system:String>
   <system:String x:Key="Shell.Nextframe">次のフレーム</system:String>
   <system:String x:Key="Shell.Splitatplayhead">再生ヘッド位置で分割</system:String>
   <system:String x:Key="Shell.Duplicate">複製</system:String>
@@ -112,5 +112,20 @@
   <system:String x:Key="Shell.ExportAcceleration">書き出しアクセラレーション</system:String>
   <system:String x:Key="Shell.ExportComposition">映像合成</system:String>
   <system:String x:Key="Shell.ExportEncoder">H.264エンコード</system:String>
+  <system:String x:Key="Shell.Save">保存(_S)</system:String>
+  <system:String x:Key="Shell.SaveCtrlS">保存 (Ctrl+S)</system:String>
+  <system:String x:Key="Shell.GoToStart">先頭へ (Home)</system:String>
+  <system:String x:Key="Shell.RemoveMedia">素材を削除</system:String>
+  <system:String x:Key="Shell.RemoveMediaHelp">素材一覧から登録を解除します。元ファイルは残ります。</system:String>
+  <system:String x:Key="Shell.Crossfade">クロスフェード…</system:String>
+  <system:String x:Key="Shell.ClearFade">透明度カーブを解除</system:String>
+  <system:String x:Key="Shell.TitleImage">タイトル画像</system:String>
+  <system:String x:Key="Shell.TitleFromFile">画像ファイルから設定…</system:String>
+  <system:String x:Key="Shell.TitleFromFrame">現在の合成フレームから設定</system:String>
+  <system:String x:Key="Shell.TitlePreview">タイトル画像を確認</system:String>
+  <system:String x:Key="Shell.TitleExport">タイトル画像を書き出し…</system:String>
+  <system:String x:Key="Shell.TitleClear">タイトル画像の選択を解除</system:String>
+  <system:String x:Key="Shell.TitleReserve">先頭1フレームを確保 / 適用</system:String>
+  <system:String x:Key="Shell.TitleRelease">先頭1フレームの確保を解除</system:String>
 </ResourceDictionary>
 

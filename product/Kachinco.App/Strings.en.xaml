@@ -37,7 +37,7 @@
   <system:String x:Key="Shell.Preparepreviewwithoutplaying">Display the frame at the playhead</system:String>
   <system:String x:Key="Shell.Previousframe">Previous frame</system:String>
   <system:String x:Key="Shell.PlaypauseSpace">Play / pause (Space)</system:String>
-  <system:String x:Key="Shell.Stopcancelpreparation">Stop / cancel preparation</system:String>
+  <system:String x:Key="Shell.Stopcancelpreparation">Stop (keep current position)</system:String>
   <system:String x:Key="Shell.Nextframe">Next frame</system:String>
   <system:String x:Key="Shell.Splitatplayhead">Split at playhead</system:String>
   <system:String x:Key="Shell.Duplicate">Duplicate</system:String>
@@ -112,5 +112,20 @@
   <system:String x:Key="Shell.ExportAcceleration">Export acceleration</system:String>
   <system:String x:Key="Shell.ExportComposition">Video composition</system:String>
   <system:String x:Key="Shell.ExportEncoder">H.264 encoding</system:String>
+  <system:String x:Key="Shell.Save">Save (_S)</system:String>
+  <system:String x:Key="Shell.SaveCtrlS">Save (Ctrl+S)</system:String>
+  <system:String x:Key="Shell.GoToStart">Go to start (Home)</system:String>
+  <system:String x:Key="Shell.RemoveMedia">Remove media</system:String>
+  <system:String x:Key="Shell.RemoveMediaHelp">Unregister selected media; keep the source file.</system:String>
+  <system:String x:Key="Shell.Crossfade">Crossfade…</system:String>
+  <system:String x:Key="Shell.ClearFade">Clear opacity curve</system:String>
+  <system:String x:Key="Shell.TitleImage">Title image</system:String>
+  <system:String x:Key="Shell.TitleFromFile">Choose image file…</system:String>
+  <system:String x:Key="Shell.TitleFromFrame">Use current composited frame</system:String>
+  <system:String x:Key="Shell.TitlePreview">Preview title image</system:String>
+  <system:String x:Key="Shell.TitleExport">Export title image…</system:String>
+  <system:String x:Key="Shell.TitleClear">Clear title selection</system:String>
+  <system:String x:Key="Shell.TitleReserve">Reserve / apply first frame</system:String>
+  <system:String x:Key="Shell.TitleRelease">Release first frame</system:String>
 </ResourceDictionary>
 

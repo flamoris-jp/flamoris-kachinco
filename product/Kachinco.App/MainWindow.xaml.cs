@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
+        InitializeWindowPlacement();
         InitializeEffects();
         InitializeMcp();
         InitializeProduction();
@@ -117,25 +118,33 @@ public partial class MainWindow : Window
         finally { SetBusy(false); }
     }
 
-    private async void Save_Click(object sender, RoutedEventArgs e)
+    private async void Save_Click(object sender, RoutedEventArgs e) => await SaveProjectAsync(false);
+    private async void SaveAs_Click(object sender, RoutedEventArgs e) => await SaveProjectAsync(true);
+    private async Task SaveProjectAsync(bool saveAs)
     {
+        if (busy) return;
         using var operation = BeginHumanOperation();
         var snapshot = session.GetProject();
-        if (snapshot.Project is null) { Refresh("先にプロジェクトを作成してください。"); return; }
-        var dialog = new SaveFileDialog
+        if (snapshot.Project is null) { Refresh(EditorText.SequenceGuidance); return; }
+        string? target = filename;
+        if (saveAs || target is null)
         {
-            Filter = "Kachinco project (*.fkproj)|*.fkproj", DefaultExt = ".fkproj", AddExtension = true,
-            FileName = filename is null ? "project.fkproj" : System.IO.Path.GetFileName(filename)
-        };
-        if (dialog.ShowDialog(this) != true) return;
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Kachinco project (*.fkproj)|*.fkproj", DefaultExt = ".fkproj", AddExtension = true,
+                FileName = filename is null ? "project.fkproj" : System.IO.Path.GetFileName(filename)
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            target = dialog.FileName;
+        }
         SetBusy(true);
         try
         {
-            var result = await files.SaveAsync(dialog.FileName, snapshot.Project);
+            var result = await files.SaveAsync(target, snapshot.Project);
             if (!result.Success) { LogFailure("document.save", "Project save failed", result.Diagnostics); ShowErrors(result.Diagnostics); return; }
             filename = result.Value; savedJson = ProjectJson.Serialize(snapshot.Project).Value;
             logger.Info("document.save", "Project saved", ProjectContext());
-            Refresh("プロジェクトを保存しました。");
+            Refresh(EditorText.Choose("プロジェクトを保存しました。", "Project saved."));
         }
         finally { SetBusy(false); }
     }
@@ -364,7 +373,9 @@ public partial class MainWindow : Window
     {
         bool editingText = Keyboard.FocusedElement is TextBoxBase { IsReadOnly: false } or PasswordBox;
         if (!editingText && Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Space) { Play_Click(sender, e); e.Handled = true; }
-        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.S) { Save_Click(sender, e); e.Handled = true; }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.S) { SaveAs_Click(sender, e); e.Handled = true; }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.S) { Save_Click(sender, e); e.Handled = true; }
+        else if (!editingText && Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Home) { GoToStart_Click(sender, e); e.Handled = true; }
         else if (!editingText && e.Key == Key.Delete) { Timeline.DeleteSelected(); e.Handled = true; }
         else if (!editingText && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Z) { Undo_Click(sender, e); e.Handled = true; }
         else if (!editingText && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Y) { Redo_Click(sender, e); e.Handled = true; }
@@ -538,7 +549,8 @@ public partial class MainWindow : Window
     {
         if (busy) { e.Cancel = true; return; }
         using var operation = BeginHumanOperation();
-        if (!ConfirmDiscard()) e.Cancel = true;
+        if (!ConfirmDiscard()) { e.Cancel = true; return; }
+        SaveWindowPlacement();
     }
     private void SetBusy(bool value) { busy = value; IsEnabled = !value; }
     private static string Seconds(long ticks) => ((decimal)ticks / TimelineTime.TicksPerSecond).ToString("0.###", CultureInfo.CurrentCulture);

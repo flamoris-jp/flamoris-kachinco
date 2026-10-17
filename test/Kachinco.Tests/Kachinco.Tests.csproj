@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/clip-download-tools.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/title-image-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/media-upload-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../product/Kachinco.Core/Kachinco.Core.csproj" />
     <ProjectReference Include="../../product/Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />

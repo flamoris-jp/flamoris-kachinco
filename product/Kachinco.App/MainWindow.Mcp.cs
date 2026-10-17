@@ -41,7 +41,9 @@ public partial class MainWindow
             () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Append(previewCapture.CreateTool(session, () => filename, () => mcpHost!.Snapshot)).Concat(allowAiEffectLibrary && effectLibrary is not null
                 ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : [])
             .Concat(MediaUploadMcpTools.Create(session, uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported."))))
-            .Concat(ClipDownloadMcpTools.Create(session, downloads, () => filename)),
+            .Concat(ClipDownloadMcpTools.Create(session, downloads, () => filename))
+            .Concat(TitleImageMcpTools.Create(session, CreateTitleImageService(), new WindowsPreviewImageEncoder(), () => filename,
+                () => Refresh(EditorText.Choose("タイトル画像を設定しました。", "Title image selected.")))),
             new McpOptions(), new McpDiagnostics(logger));
         try
         {

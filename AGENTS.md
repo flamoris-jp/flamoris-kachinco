@@ -392,3 +392,20 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
 - Use staging/windows-issue82.md for four-way times, quality and physical 6 GB VRAM
   acceptance; actual backend/fallback diagnostics are authoritative, not requested
   mode. CQ 19 and CRF 18 are separate policies, not equal-quality guarantees.
+
+## Creation workflow authority (Issues #84–#91)
+
+- ADR 0021 defines native media unregistration, title image/slot commands,
+  opacity-curve crossfades and conditional v6. Keep v1–v5 input migration and
+  conditional v2–v5 output unchanged when no title metadata is present.
+- UI/MCP use the same native commands/history. Captured title PNGs are immutable
+  assets retained after commit for Undo/Redo; failed capture cleanup owns only
+  its own unpublished file. Never delete original media when unregistering.
+- Title slots shift clips/captions/Clappers once in canonical ticks and reject
+  destructive release; preview/export retain the existing native renderer.
+- Stop retains the consumed-device position; explicit start/step intents update
+  playback even when the cursor already equals the requested tick. Paged follow
+  is transient presentation state and respects manual gestures.
+- Required native capabilities are now 65535. Run CreationWorkflowTests,
+  TitleImageTests, sanitizer contracts and Windows CreationWorkflowChecks.
+  Physical acceptance remains staging/windows-creation-workflow.md.

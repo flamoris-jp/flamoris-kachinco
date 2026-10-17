@@ -119,6 +119,26 @@ static int ripple_contracts() {
     before=snapshot(s);REQUIRE(request(s,invalid.dump()).at("success")==false);REQUIRE(snapshot(s)==before);
     auto forward=edit(json::array({command("RippleReorderClip",{{"sequenceId",id(2)},{"clipId",id(5)},{"beforeClipId",nullptr}})}));
     commit(s,forward);REQUIRE(snapshot(s).at("project")["sequences"][0]["tracks"][0]["clips"][0]["startTicks"]==7);
+    // Title and source-unregistration contracts execute under ASan/UBSan too.
+    auto before_title=snapshot(s).at("project");
+    auto reserve=edit(json::array({command("ReserveTitleFrame",{{"sequenceId",id(2)},{"trackId",id(20)},{"clipId",id(21)}})}));
+    commit(s,reserve);
+    REQUIRE(snapshot(s).at("project")["sequences"][0]["durationTicks"]==1176020);
+    auto once=snapshot(s).at("project");commit(s,reserve);REQUIRE(snapshot(s).at("project")==once);
+    commit(s,edit(json::array({command("RegisterMedia",{{"asset",{{"id",id(22)},{"name","title"},{"sourcePath","title.png"},{"kind",2},{"durationTicks",1},{"sampleRate",nullptr},{"channels",nullptr},{"provenance",nullptr}}}}),
+        command("SetTitleImage",{{"sequenceId",id(2)},{"selection",{{"mediaAssetId",id(22)},{"sourceFrameTicks",0}}}})})));
+    auto selected=snapshot(s).at("project");
+    REQUIRE(selected["sequences"][0]["tracks"].back()["clips"][0]["durationTicks"]==1176000);
+    auto encoded=request(nullptr,json({{"action","serialize"},{"project",selected}}).dump());
+    REQUIRE(encoded.at("diagnostics").empty());REQUIRE(json::parse(encoded.at("value").get<std::string>())["schemaVersion"]==6);
+    REQUIRE(request(nullptr,json({{"action","deserialize"},{"text",encoded.at("value")}}).dump()).at("diagnostics").empty());
+    auto in_use=edit(json::array({command("UnregisterMedia",{{"mediaAssetId",id(22)}})}));
+    REQUIRE(request(s,in_use.dump()).at("success")==false);
+    REQUIRE(snapshot(s).at("project")==selected);
+    commit(s,edit(json::array({command("ReleaseTitleFrame",{{"sequenceId",id(2)}}),
+        command("SetTitleImage",{{"sequenceId",id(2)},{"selection",nullptr}}),command("UnregisterMedia",{{"mediaAssetId",id(22)}})})));
+    REQUIRE(request(nullptr,json({{"action","serialize"},{"project",snapshot(s).at("project")}}).dump()).at("value")==
+        request(nullptr,json({{"action","serialize"},{"project",before_title}}).dump()).at("value"));
     kn_editor_destroy(s);return 0;
 }
 int main() {

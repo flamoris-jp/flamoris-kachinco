@@ -39,7 +39,8 @@
         <MenuItem Header="{DynamicResource Shell.NewportraitP}" Click="NewPortrait_Click" />
         <Separator />
         <MenuItem x:Name="OpenProjectMenu" Header="{DynamicResource Shell.OpenO}" Click="Open_Click" InputGestureText="Ctrl+O" />
-        <MenuItem x:Name="SaveProjectMenu" Header="{DynamicResource Shell.SaveasA}" Click="Save_Click" InputGestureText="Ctrl+Shift+S" />
+        <MenuItem x:Name="SaveProjectMenu" Header="{DynamicResource Shell.Save}" Click="Save_Click" InputGestureText="Ctrl+S" />
+        <MenuItem Header="{DynamicResource Shell.SaveasA}" Click="SaveAs_Click" InputGestureText="Ctrl+Shift+S" />
         <Separator />
         <MenuItem Header="{DynamicResource Shell.ImportmediaI}" Click="Register_Click" />
         <MenuItem Header="{DynamicResource Shell.Exportvideo}" Click="Export_Click" />
@@ -69,9 +70,21 @@
       <MenuItem Header="{DynamicResource Shell.ClipC}">
         <MenuItem Header="{DynamicResource Shell.SplitatplayheadS}" Click="Split_Click" />
         <MenuItem Header="{DynamicResource Shell.Duplicateselectedclip}" Click="Duplicate_Click" />
+        <MenuItem Header="{DynamicResource Shell.Crossfade}" Click="Crossfade_Click"/>
+        <MenuItem Header="{DynamicResource Shell.ClearFade}" Click="ClearFade_Click"/>
         <MenuItem Header="{DynamicResource Shell.DeleteselectedclipD}" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
       <MenuItem x:Name="SequenceMenu" Header="{DynamicResource Shell.SequenceS}"><MenuItem x:Name="AddVideoTrackMenu" Header="{DynamicResource Shell.Addvideotrack}" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Addaudiotrack}" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Changeduration}" Click="SequenceDuration_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.TitleImage}">
+        <MenuItem Header="{DynamicResource Shell.TitleFromFile}" Click="TitleFromFile_Click"/>
+        <MenuItem Header="{DynamicResource Shell.TitleFromFrame}" Click="TitleFromFrame_Click"/>
+        <MenuItem Header="{DynamicResource Shell.TitlePreview}" Click="TitlePreview_Click"/>
+        <MenuItem Header="{DynamicResource Shell.TitleExport}" Click="TitleExport_Click"/>
+        <MenuItem Header="{DynamicResource Shell.TitleClear}" Click="TitleClear_Click"/>
+        <Separator/>
+        <MenuItem Header="{DynamicResource Shell.TitleReserve}" Click="TitleReserve_Click"/>
+        <MenuItem Header="{DynamicResource Shell.TitleRelease}" Click="TitleRelease_Click"/>
+      </MenuItem>
       <MenuItem Header="{DynamicResource Shell.ViewV}">
         <MenuItem x:Name="SnappingMenuItem" Header="{DynamicResource Shell.SnappingN}" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />
         <MenuItem Header="{DynamicResource Shell.ZoominI}" Click="ZoomIn_Click" />
@@ -88,7 +101,7 @@
     <ToolBarTray DockPanel.Dock="Top" IsLocked="True" Background="#F6F3F1">
       <ToolBar Background="#F6F3F1" BorderBrush="#D8D3D0" BorderThickness="0,0,0,1">
         <Button Content="📂" Click="Open_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.OpenprojectCtrlO}" />
-        <Button x:Name="SaveButton" Content="▣" Click="Save_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.SaveasCtrlShiftS}" />
+        <Button x:Name="SaveButton" Content="▣" Click="Save_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.SaveCtrlS}" />
         <Separator />
         <Button x:Name="UndoButton" Content="↶" Click="Undo_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.UndoCtrlZ}" />
         <Button x:Name="RedoButton" Content="↷" Click="Redo_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.RedoCtrlY}" />
@@ -100,10 +113,17 @@
         <ComboBox x:Name="PreviewBackendBox" Width="88" SelectedIndex="0" SelectionChanged="PreviewBackend_Changed" ToolTip="{DynamicResource Shell.PreviewBackend}">
           <ComboBoxItem Content="{DynamicResource Shell.PreviewBackendAuto}"/><ComboBoxItem Content="CPU"/><ComboBoxItem Content="D3D11"/>
         </ComboBox>
-        <Button Content="|◀" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}" />
+        <Button x:Name="GoToStartButton" Click="GoToStart_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.GoToStart}">
+          <Path Fill="#202124" Data="M0,0 L2,0 2,12 0,12 Z M13,0 L3,6 13,12 Z" Width="14" Height="12" Stretch="Fill"/>
+        </Button>
+        <Button x:Name="PreviousFrameButton" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}">
+          <Path Fill="#202124" Data="M8,0 L0,6 8,12 Z M17,0 L9,6 17,12 Z" Width="17" Height="12" Stretch="Fill"/>
+        </Button>
         <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.PlaypauseSpace}" />
         <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Stopcancelpreparation}" />
-        <Button Content="▶|" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}" />
+        <Button x:Name="NextFrameButton" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}">
+          <Path Fill="#202124" Data="M0,0 L8,6 0,12 Z M9,0 L17,6 9,12 Z" Width="17" Height="12" Stretch="Fill"/>
+        </Button>
         <TextBlock Text="{DynamicResource Shell.MonitoringVolume}" VerticalAlignment="Center" Margin="8,0,4,0"/>
         <local:PropertySlider x:Name="MonitoringControl" Width="158" SliderMinimum="0" SliderMaximum="1" NumberMinimum="0" NumberMaximum="1" DisplayFactor="100" Suffix="%" Value="1" EditStarted="Monitoring_Started" EditPreview="Monitoring_Preview" EditCommitted="Monitoring_Committed" EditCancelled="Monitoring_Cancelled" AutomationProperties.Name="{DynamicResource Shell.MonitoringVolume}" ToolTip="{DynamicResource Shell.MonitoringHelp}"/>
         <Separator />
@@ -138,6 +158,7 @@
             <WrapPanel>
               <Button x:Name="ImportButton" Foreground="#202124" Content="{DynamicResource Shell.ImportMOVWAV}" Click="Register_Click" />
               <Button Foreground="#202124" Content="{DynamicResource Shell.Place}" Click="Insert_Click" ToolTip="{DynamicResource Shell.Placeonacompatibletrackattheplayhead}" />
+              <Button Content="{DynamicResource Shell.RemoveMedia}" Click="RemoveMedia_Click" ToolTip="{DynamicResource Shell.RemoveMediaHelp}"/>
             </WrapPanel>
             <TextBlock x:Name="MediaGuidance" Foreground="#B5BAC2" TextWrapping="Wrap" Margin="0,6,0,0"/>
           </StackPanel>
