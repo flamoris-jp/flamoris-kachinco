@@ -21,7 +21,7 @@ internal static partial class PackagedMcpChecks
             "licenses/Kachinco-LICENSE", "licenses/nlohmann-json-LICENSE.MIT", "NATIVE-ACCEPTANCE.md" })
             Check(File.Exists(Path.Combine(bundle, required)), "Required portable component missing: " + required);
         var identity = File.ReadAllLines(Path.Combine(bundle, "BUILD-INFO.txt"));
-        Check(identity.Contains("native-abi=1") && identity.Contains("required-capabilities=2047") &&
+        Check(identity.Contains("native-abi=1") && identity.Contains("required-capabilities=65535") &&
             identity.Contains("ticks-per-second=35280000") && identity.Contains("platform=win-x64") &&
             identity.Any(v => v.StartsWith("commit=", StringComparison.Ordinal) && v.Length == 47 &&
                 v[7..].All(Uri.IsHexDigit)), "Portable build identity is incomplete.");

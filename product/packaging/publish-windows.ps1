@@ -41,7 +41,7 @@ foreach ($notice in @('LICENSE.txt', 'ThirdPartyNotices.txt')) {
 }
 $revision = & git -C $repositoryRoot rev-parse HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Unable to record package source revision.' }
-@("commit=$revision", 'platform=win-x64', 'native-abi=1', 'required-capabilities=2047', 'ticks-per-second=35280000') |
+@("commit=$revision", 'platform=win-x64', 'native-abi=1', 'required-capabilities=65535', 'ticks-per-second=35280000') |
     Set-Content (Join-Path $bundle 'BUILD-INFO.txt') -Encoding utf8
 
 Copy-Item (Join-Path $repositoryRoot 'staging/windows-production.md') (Join-Path $bundle 'START-HERE.md')
