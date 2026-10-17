@@ -270,7 +270,7 @@ static size_t find(const json& array,const json& id,const char* code,const char*
 
 static int64_t title_frame(const json& sequence) {
     const auto& fps=sequence.at("settings").at("frameRate"); int64_t result=0;
-    if(kn_time::rounded(1,UINT64_C(35280000)*static_cast<uint64_t>(integer(fps.at("denominator"))),
+    if(kn_time::rounded(1,static_cast<uint64_t>(KN_TICKS_PER_SECOND)*static_cast<uint64_t>(integer(fps.at("denominator"))),
         static_cast<uint64_t>(integer(fps.at("numerator"))),&result)!=KN_OK) throw std::overflow_error("frame");
     return result;
 }

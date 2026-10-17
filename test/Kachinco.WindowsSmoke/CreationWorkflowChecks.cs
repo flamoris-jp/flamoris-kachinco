@@ -80,7 +80,7 @@ internal static class CreationWorkflowChecks
             var original = File.ReadAllText(project);
             if (!session.Execute(new([new SetTrackEnabled(sequence, track, false)])).Success) throw new Exception("Save edit failed.");
             await (Task)Invoke(main, "SaveProjectAsync", false)!;
-            if (File.ReadAllText(project) == original || !new ProjectFileStore().LoadAsync(project).Result.Success)
+            if (File.ReadAllText(project) == original || !(await new ProjectFileStore().LoadAsync(project)).Success)
                 throw new Exception("Second save must overwrite without a picker.");
             var saved = Field<string?>(main, "savedJson");
             string invalid = Path.Combine(directory, "missing", "project.fkproj");
