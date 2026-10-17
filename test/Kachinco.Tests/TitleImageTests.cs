@@ -10,6 +10,23 @@ namespace Kachinco.Tests;
 public sealed class TitleImageTests
 {
     [TestMethod]
+    public void TitleCatalogMatchesActualProducerDescriptor()
+    {
+        using var h = new Harness();
+        var service = new TitleImageService(h.Directory, new Encoder(), rendererFactory: _ => h.Renderer);
+        var describe = typeof(McpBoundary).Assembly.GetType("Flamoris.Mcp.Core.McpProtocol")!
+            .GetMethod("Describe", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var tools = TitleImageMcpTools.Create(h.Fixture.Session, service, new Encoder(), () => null, () => {})
+            .Select(t => (ModelContextProtocol.Protocol.Tool)describe.Invoke(null, [t])!).ToArray();
+        var actual = JsonSerializer.SerializeToElement(tools.Select(t => new { name = t.Name, description = t.Description, inputSchema = t.InputSchema }));
+        if (Environment.GetEnvironmentVariable("KACHINCO_EXPORT_TITLE_CATALOG") is { } export)
+            File.WriteAllText(export, JsonSerializer.Serialize(actual, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        string expected = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "title-image-tools.json"));
+        Assert.IsTrue(System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(expected),
+            System.Text.Json.Nodes.JsonNode.Parse(actual.GetRawText())));
+    }
+
+    [TestMethod]
     public async Task CaptureAndIndependentExportUseCompositedSnapshotAndRetainCommittedFilesForUndo()
     {
         using var h = new Harness(); using var grant = await h.Boundary.EnableAsync(McpPermission.Edit);
