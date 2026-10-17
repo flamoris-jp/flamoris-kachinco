@@ -133,7 +133,9 @@ json validate(const json& p) {
             if(!slot.is_object()||slot.size()!=2||!slot.contains("trackId")||!slot.contains("clipId"))
                 e("TITLE_SLOT_INVALID","Title slot requires trackId and clipId.",id);
             else {
-                (void)guid(slot.at("trackId"));(void)guid(slot.at("clipId"));
+                if(guid(slot.at("trackId"))=="00000000-0000-0000-0000-000000000000"||
+                    guid(slot.at("clipId"))=="00000000-0000-0000-0000-000000000000")
+                    e("TITLE_SLOT_INVALID","Title slot IDs must be nonempty.",id);
                 const json* title_lane=nullptr;
                 for(const auto& lane:tracks) if(lane.at("id")==slot.at("trackId")) title_lane=&lane;
                 if(!title_lane||integer(title_lane->at("kind"))!=0) e("TITLE_SLOT_INVALID","Title video track is missing.",id);
@@ -246,6 +248,12 @@ json validate(const json& p) {
                 if(!text_ok(field(c,"text"),65536)) e("INVALID_CAPTION_TEXT","Caption text must contain 1–65536 characters.",cid);
             }
         }
+    }
+    std::set<std::string> reserved_ids;
+    for(const auto& s:p.at("sequences")) if(!field(s,"titleSlot").is_null()&&field(s,"titleImage").is_null()) {
+        const auto key=guid(s.at("titleSlot").at("clipId"));
+        if(ids.count(key)||!reserved_ids.insert(key).second)
+            e("TITLE_SLOT_INVALID","Reserved clip ID must not belong to another project entity.",s.at("id"));
     }
     for(const auto& a:p.at("assets")) if(a.is_object()&&!field(a,"provenance").is_null()) {
         const auto& pr=a.at("provenance"); const json* recipe=nullptr;

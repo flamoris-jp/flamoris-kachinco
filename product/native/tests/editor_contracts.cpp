@@ -129,14 +129,16 @@ static int ripple_contracts() {
         command("SetTitleImage",{{"sequenceId",id(2)},{"selection",{{"mediaAssetId",id(22)},{"sourceFrameTicks",0}}}})})));
     auto selected=snapshot(s).at("project");
     REQUIRE(selected["sequences"][0]["tracks"].back()["clips"][0]["durationTicks"]==1176000);
-    auto encoded=kn_editor::encode_file(selected);REQUIRE(encoded["schemaVersion"]==6);
-    REQUIRE(kn_editor::validate(kn_editor::decode_file(encoded.dump())).empty());
+    auto encoded=request(nullptr,json({{"action","serialize"},{"project",selected}}).dump());
+    REQUIRE(encoded.at("diagnostics").empty());REQUIRE(json::parse(encoded.at("value").get<std::string>())["schemaVersion"]==6);
+    REQUIRE(request(nullptr,json({{"action","deserialize"},{"text",encoded.at("value")}}).dump()).at("diagnostics").empty());
     auto in_use=edit(json::array({command("UnregisterMedia",{{"mediaAssetId",id(22)}})}));
     REQUIRE(request(s,in_use.dump()).at("success")==false);
     REQUIRE(snapshot(s).at("project")==selected);
     commit(s,edit(json::array({command("ReleaseTitleFrame",{{"sequenceId",id(2)}}),
         command("SetTitleImage",{{"sequenceId",id(2)},{"selection",nullptr}}),command("UnregisterMedia",{{"mediaAssetId",id(22)}})})));
-    REQUIRE(kn_editor::encode_file(snapshot(s).at("project"))==kn_editor::encode_file(before_title));
+    REQUIRE(request(nullptr,json({{"action","serialize"},{"project",snapshot(s).at("project")}}).dump()).at("value")==
+        request(nullptr,json({{"action","serialize"},{"project",before_title}}).dump()).at("value"));
     kn_editor_destroy(s);return 0;
 }
 int main() {
