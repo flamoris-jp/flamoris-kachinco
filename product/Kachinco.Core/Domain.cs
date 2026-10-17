@@ -14,6 +14,8 @@ public sealed record MediaAsset(Guid Id, string Name, string SourcePath, MediaKi
 {
     public GeneratedProvenance? Provenance { get; init; }
 }
+public sealed record TitleImageSelection(Guid MediaAssetId, long? SourceFrameTicks = null);
+public sealed record TitleFrameSlot(Guid TrackId, Guid ClipId);
 public sealed record SequenceSettings(int Width, int Height, FrameRate FrameRate)
 {
     public static SequenceSettings Landscape => new(1920, 1080, new(30, 1));
@@ -22,6 +24,8 @@ public sealed record SequenceSettings(int Width, int Height, FrameRate FrameRate
 public sealed record Sequence(Guid Id, string Name, SequenceSettings Settings,
     long DurationTicks, ImmutableArray<Track> Tracks)
 {
+    public TitleImageSelection? TitleImage { get; init; }
+    public TitleFrameSlot? TitleSlot { get; init; }
     public ImmutableArray<Clapper> Clappers { get; init; } = [];
     public ImmutableArray<Recipe> Recipes { get; init; } = [];
 }

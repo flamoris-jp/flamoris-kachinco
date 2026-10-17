@@ -58,7 +58,7 @@ public partial class MainWindow
     {
         if (playback.State is not (InteractivePreviewState.Playing or InteractivePreviewState.Buffering)) return;
         clockUpdate = true;
-        try { Timeline.SetCursorTicks(playback.ReadPositionTicks()); }
+        try { Timeline.SetPlaybackCursorTicks(playback.ReadPositionTicks()); }
         finally { clockUpdate = false; }
     }
     private void SeekPreview()
@@ -69,12 +69,24 @@ public partial class MainWindow
     {
         if (selectedSequenceId is null) { Status.Text = EditorText.SequenceGuidance; return; }
         if (playback.State is InteractivePreviewState.Playing or InteractivePreviewState.Buffering) playback.Pause();
-        else playback.Play();
+        else { Timeline.BeginPlaybackFollow(); playback.Play(); }
     }
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
-        playback.Stop(); clockUpdate = true;
-        try { Timeline.SetCursorTicks(0); } finally { clockUpdate = false; }
+        playback.Stop();
+        clockUpdate = true;
+        try { Timeline.SetCursorTicks(playback.PositionTicks); } finally { clockUpdate = false; }
+    }
+    private void GoToStart_Click(object sender, RoutedEventArgs e)
+    {
+        SeekTo(0);
+        Timeline.ShowStart();
+    }
+    private void SeekTo(long tick)
+    {
+        clockUpdate = true;
+        try { Timeline.SetCursorTicks(tick); } finally { clockUpdate = false; }
+        playback.Scrub(tick);
     }
     private void PreviousFrame_Click(object sender, RoutedEventArgs e) => StepFrame(-1);
     private void NextFrame_Click(object sender, RoutedEventArgs e) => StepFrame(1);
@@ -84,9 +96,9 @@ public partial class MainWindow
         if (sequence is null) return;
         playback.Pause();
         var fps = sequence.Settings.FrameRate;
-        long frame = TimelineTime.TicksToFrame(Timeline.PlayheadTicks, fps);
+        long frame = TimelineTime.TicksToFrame(playback.ReadPositionTicks(), fps);
         frame = Math.Clamp(frame + direction, 0, Math.Max(0, TimelineTime.FrameCount(sequence.DurationTicks, fps) - 1));
-        Timeline.SetCursorTicks(TimelineTime.FrameToTicks(frame, fps));
+        SeekTo(TimelineTime.FrameToTicks(frame, fps));
     }
     private void PreparePreview_Click(object sender, RoutedEventArgs e) => playback.Scrub(Timeline.PlayheadTicks);
     private void Quality_Changed(object sender, SelectionChangedEventArgs e)

@@ -66,7 +66,8 @@ public sealed class InteractivePreviewTests
             p.Play(); pump.Until(() => p.State == InteractivePreviewState.Playing);
             p.Scrub(6 * Fixture.T); Assert.AreEqual(6 * Fixture.T, p.ReadPositionTicks(), "Old device cannot overwrite a new seek.");
             pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(6 * Fixture.T, p.Frame!.Tick); Assert.IsTrue(device.Disposed);
-            p.Stop(); pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(InteractivePreviewState.Stopped, p.State); Assert.AreEqual(0L, p.Frame!.Tick);
+            p.Stop(); pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(InteractivePreviewState.Stopped, p.State); Assert.AreEqual(6 * Fixture.T, p.Frame!.Tick);
+            p.Scrub(0); pump.Until(() => p.Completion.IsCompleted); Assert.AreEqual(0L, p.Frame!.Tick);
         }
     }
     [TestMethod]

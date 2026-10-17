@@ -8,6 +8,13 @@ public sealed record CreateProject(Guid ProjectId, string Name) : EditCommand;
 public sealed record CreateSequence(Guid SequenceId, string Name, SequenceSettings Settings, long DurationTicks) : EditCommand;
 public sealed record SetSequenceDuration(Guid SequenceId, long DurationTicks) : EditCommand;
 public sealed record RegisterMedia(MediaAsset Asset) : EditCommand;
+public sealed record UnregisterMedia(Guid MediaAssetId) : EditCommand;
+public sealed record SetTitleImage(Guid SequenceId, TitleImageSelection? Selection) : EditCommand;
+public sealed record ReserveTitleFrame(Guid SequenceId, Guid TrackId, Guid ClipId) : EditCommand;
+public sealed record ReleaseTitleFrame(Guid SequenceId) : EditCommand;
+// Incoming opacity is an ordinary editable curve; no second transition renderer.
+public sealed record ApplyCrossfade(Guid SequenceId, Guid OutgoingClipId, Guid IncomingClipId,
+    long DurationTicks, Guid StartPointId, Guid EndPointId) : EditCommand;
 public sealed record RelinkMedia(Guid MediaAssetId, string SourcePath, long DurationTicks,
     int? SampleRate = null, int? Channels = null) : EditCommand;
 public sealed record AddTrack(Guid SequenceId, Guid TrackId, string Name, TrackKind Kind) : EditCommand;

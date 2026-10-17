@@ -6,7 +6,7 @@ using Kachinco.Infrastructure;
 
 namespace Kachinco.App;
 
-public sealed class WindowsPreviewImageEncoder : IPreviewImageEncoder
+public sealed class WindowsPreviewImageEncoder(int maximumBytes = McpImage.MaximumBytes) : IPreviewImageEncoder
 {
     public async Task<byte[]> EncodeAsync(RenderedVideoFrame frame, int width, int height, string format, int quality, CancellationToken token)
     {
@@ -24,7 +24,7 @@ public sealed class WindowsPreviewImageEncoder : IPreviewImageEncoder
             }
             BitmapEncoder encoder = format == "png" ? new PngBitmapEncoder() : new JpegBitmapEncoder { QualityLevel = quality };
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new BoundedImageStream();
+            using var stream = new BoundedImageStream(maximumBytes);
             try { encoder.Save(stream); }
             catch (Exception) when (stream.Exceeded) { throw new PreviewImageTooLargeException(); }
             if (stream.Exceeded) throw new PreviewImageTooLargeException();
@@ -32,10 +32,10 @@ public sealed class WindowsPreviewImageEncoder : IPreviewImageEncoder
             return stream.ToArray();
         }, token);
     }
-    private sealed class BoundedImageStream : MemoryStream
+    private sealed class BoundedImageStream(int limit) : MemoryStream
     {
         public bool Exceeded { get; private set; }
-        private void Check(long end) { if (end > McpImage.MaximumBytes) { Exceeded = true; throw new PreviewImageTooLargeException(); } }
+        private void Check(long end) { if (end > limit) { Exceeded = true; throw new PreviewImageTooLargeException(); } }
         public override long Position { get => base.Position; set { Check(value); base.Position = value; } }
         public override void SetLength(long value) { Check(value); base.SetLength(value); }
         public override long Seek(long offset, SeekOrigin origin)

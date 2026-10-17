@@ -53,7 +53,22 @@ public partial class TimelineSurface : UserControl
     private Guid? selectedClipId;
     private long playheadTicks;
     private DragState? drag;
-    public bool HasActiveGesture => drag is not null;
+    public bool HasActiveGesture => drag is not null || RulerViewportHost.IsMouseCaptured || playheadHandle?.IsMouseCaptured == true;
+    private bool followSuspended;
+    private bool automaticScroll;
+    public void BeginPlaybackFollow() => followSuspended = false;
+    public void ShowStart() => ScrollTo(0);
+    public void SetPlaybackCursorTicks(long ticks)
+    {
+        SetCursorTicks(ticks);
+        if (sequence is null || followSuspended || HasActiveGesture || Mouse.LeftButton == MouseButtonState.Pressed || dropGhost is not null) return;
+        double x = ToDouble(viewport.TicksToPixels(playheadTicks));
+        double width = TimelineViewportHost.ActualWidth;
+        double offset = TimelineFollow.NextOffset(x, width, HorizontalScroll.Value, HorizontalScroll.Maximum);
+        if (offset == HorizontalScroll.Value) return;
+        automaticScroll = true;
+        try { ScrollTo(offset); } finally { automaticScroll = false; }
+    }
     private Line? rulerPlayhead;
     private Line? canvasPlayhead;
     private Thumb? playheadHandle;
@@ -69,6 +84,8 @@ public partial class TimelineSurface : UserControl
         TimelineCanvas.DragLeave += (_, _) => ClearDropGhost();
         TimelineScroll.ScrollChanged += (_, e) => { if (e.VerticalChange != 0 || e.ViewportHeightChange != 0) Rebuild(); };
         SizeChanged += (_, _) => Rebuild();
+        HorizontalScroll.PreviewMouseDown += (_, _) => followSuspended = true;
+        HorizontalScroll.PreviewKeyDown += (_, _) => followSuspended = true;
     }
 
     public event EventHandler<TimelineCommandEventArgs>? CommandRequested;
@@ -404,6 +421,7 @@ public partial class TimelineSurface : UserControl
     {
         var thumb = (Thumb)sender;
         var state = (ClipVisual)thumb.Tag;
+        followSuspended = true;
         Select(state.Clip.Id, rebuild: false);
         drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null, Mouse.GetPosition(TimelineViewportHost));
         Panel.SetZIndex(drag.Element, 2);
@@ -552,6 +570,7 @@ public partial class TimelineSurface : UserControl
     private void SetPlayhead(double pixel)
     {
         if (sequence is null) return;
+        followSuspended = true;
         long value = Coordinates.ViewXToTicks((decimal)pixel);
         value = Math.Min(sequence.DurationTicks, TimelineSnapping.QuantizeToFrame(value, sequence.Settings.FrameRate));
         SetCursorTicks(value);
@@ -576,6 +595,7 @@ public partial class TimelineSurface : UserControl
     private void HorizontalScroll_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (RulerTranslation is null || TimelineTranslation is null) return;
+        if (!automaticScroll && (Mouse.LeftButton == MouseButtonState.Pressed || HorizontalScroll.IsKeyboardFocusWithin)) followSuspended = true;
         RulerTranslation.X = TimelineTranslation.X = -e.NewValue;
         Rebuild();
     }

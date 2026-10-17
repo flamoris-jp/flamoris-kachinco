@@ -126,7 +126,15 @@ public sealed class InteractivePreview(IInteractivePreviewSource source, Func<IP
             catch (Exception e) { Fail(e); }
         }
     }
-    public void Stop() => RequestFrame(0, false, InteractivePreviewState.Stopped);
+    public void Stop()
+    {
+        lock (gate)
+        {
+            if (disposed) return;
+            output?.Pause();
+            RequestFrame(ReadPositionTicks(), false, InteractivePreviewState.Stopped);
+        }
+    }
     public void SetQuality(PreviewQuality value)
     {
         lock (gate)
