@@ -14,6 +14,12 @@ public partial class MainWindow
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FLAMORIS", "Kachinco", "title-images"),
         new WindowsPreviewImageEncoder(64 * 1024 * 1024), new WindowsCaptionRasterizer(Dispatcher));
     private Sequence? CurrentSequence() => session.GetProject().Project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId);
+    private bool HasTitleImage(Sequence sequence)
+    {
+        if (sequence.TitleImage is not null) return true;
+        Status.Text = EditorText.Choose("先にタイトル画像を選択してください。", "Choose a title image first.");
+        return false;
+    }
     private void RemoveMedia_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
@@ -38,7 +44,7 @@ public partial class MainWindow
             Show(session.Execute(new([new RegisterMedia(asset), new SetTitleImage(sequence.Id, new(asset.Id))], snapshot.Revision)),
                 EditorText.Choose("タイトル画像を設定しました。", "Title image selected."));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         { Status.Text = ex.Message; }
         finally { SetBusy(false); }
     }
@@ -57,7 +63,7 @@ public partial class MainWindow
             if (result.Success) prepared.Keep();
             Show(result, EditorText.Choose("合成フレームをタイトル画像に設定しました。", "Composited frame selected as title image."));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         { Status.Text = ex.Message; }
         finally { SetBusy(false); }
     }
@@ -84,6 +90,7 @@ public partial class MainWindow
     private async void TitlePreview_Click(object sender, RoutedEventArgs e)
     {
         if (busy || CurrentSequence() is not { } sequence) return;
+        if (!HasTitleImage(sequence)) return;
         using var operation = BeginHumanOperation();
         SetBusy(true);
         try
@@ -98,13 +105,14 @@ public partial class MainWindow
                 Content = new Image { Source = bitmap, Stretch = System.Windows.Media.Stretch.Uniform } };
             SetBusy(false); window.ShowDialog();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         { Status.Text = ex.Message; }
         finally { SetBusy(false); }
     }
     private async void TitleExport_Click(object sender, RoutedEventArgs e)
     {
         if (busy || CurrentSequence() is not { } sequence) return;
+        if (!HasTitleImage(sequence)) return;
         using var operation = BeginHumanOperation();
         var picker = new SaveFileDialog { Filter = "PNG (*.png)|*.png|JPEG (*.jpg)|*.jpg", DefaultExt = ".png", AddExtension = true, FileName = "title.png" };
         if (picker.ShowDialog(this) != true) return;
@@ -125,7 +133,7 @@ public partial class MainWindow
             File.Move(temporary, target, true); temporary = null;
             Status.Text = EditorText.Choose("タイトル画像を書き出しました。", "Title image exported.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         { Status.Text = ex.Message; }
         finally
         {

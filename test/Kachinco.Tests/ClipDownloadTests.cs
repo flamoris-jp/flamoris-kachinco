@@ -65,6 +65,50 @@ public sealed class ClipDownloadTests
     }
 
     [TestMethod]
+    [DataRow(true, false, false)]
+    [DataRow(false, true, false)]
+    [DataRow(true, true, false)]
+    [DataRow(true, false, true)]
+    [DataRow(false, true, true)]
+    [DataRow(true, true, true)]
+    public async Task TitleSelectionAndReservedSlotDoNotAffectBodyClipDownloads(bool selected, bool reserved, bool video)
+    {
+        using var h = new Harness();
+        using var grant = await h.Boundary.EnableAsync(McpPermission.ReadOnly);
+        if (selected)
+        {
+            Guid image = Guid.NewGuid();
+            // An unrelated missing title source must not block a body clip download.
+            Assert.IsTrue(h.Fixture.Edit(new RegisterMedia(new(image, "Title", "missing-title.png", MediaKind.Image, Fixture.T)),
+                new SetTitleImage(h.Fixture.SequenceId, new(image))).Success);
+        }
+        if (reserved) Assert.IsTrue(h.Fixture.Edit(new ReserveTitleFrame(h.Fixture.SequenceId, Guid.NewGuid(), Guid.NewGuid())).Success);
+        if (video)
+        {
+            // The injected decoder supplies pixels; only the source availability check uses this file.
+            File.WriteAllBytes(Path.Combine(h.Root, "input.mov"), [1]);
+            long start = h.Fixture.Project.Sequences[0].Tracks.Single(t => t.Id == h.Fixture.VideoTrackId).Clips.Single().StartTicks;
+            Assert.IsTrue(h.Fixture.Edit(new TrimClip(h.Fixture.SequenceId, h.Fixture.ClipId, start, Fixture.T, Fixture.T / 4)).Success);
+        }
+        var before = h.Fixture.Session.GetProject();
+        string saved = ProjectJson.Serialize(before.Project!).Value!;
+        Guid clip = video ? h.Fixture.ClipId : h.Fixture.AudioClipId;
+        var result = await h.Call(grant, "clip_download_begin", new { sequenceId = h.Fixture.SequenceId, clipId = clip, quality = "Quarter" });
+        Assert.IsFalse(result.IsError, result.Error);
+        Guid id = result.Value!.Value.GetProperty("downloadId").GetGuid();
+        var ready = await h.Ready(grant, id);
+        Assert.AreEqual(video ? "video/mp4" : "audio/wav", ready.GetProperty("metadata").GetProperty("mimeType").GetString());
+        var chunk = await h.Call(grant, "clip_download_read", new { downloadId = id, offset = "0" });
+        Assert.IsFalse(chunk.IsError, chunk.Error);
+        Assert.IsGreaterThan(44, Convert.FromBase64String(chunk.Value!.Value.GetProperty("dataBase64").GetString()!).Length);
+        var after = h.Fixture.Session.GetProject();
+        Assert.AreEqual(saved, ProjectJson.Serialize(after.Project!).Value);
+        Assert.AreEqual(before.Revision, after.Revision);
+        Assert.AreEqual(before.CanUndo, after.CanUndo);
+        Assert.AreEqual(before.CanRedo, after.CanRedo);
+    }
+
+    [TestMethod]
     public async Task DisabledInspectionStaleRevisionDocumentExpiryAndRevocationAreBounded()
     {
         var clock = new Clock();

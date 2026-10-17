@@ -84,7 +84,10 @@ public sealed class ClipDownloadStore : IDisposable
         var source = MediaReferenceResolver.Inspect(project, projectPath).Single(p => p.MediaAssetId == asset.Id);
         if (!source.IsAvailable || source.ResolvedPath is null) throw new McpFault("MEDIA_MISSING");
         if (input.InspectDisabled) clip = clip with { Enabled = true, Audio = clip.Audio with { Muted = false } };
-        var isolated = sequence with { Tracks = [track with { Enabled = track.Enabled || input.InspectDisabled, Clips = [clip], Captions = [] }], Clappers = [], Recipes = [] };
+        // This derived snapshot contains only the requested clip, not the title
+        // assets/track. Title metadata remains on the original authoring sequence.
+        var isolated = sequence with { Tracks = [track with { Enabled = track.Enabled || input.InspectDisabled, Clips = [clip], Captions = [] }],
+            TitleImage = null, TitleSlot = null, Clappers = [], Recipes = [] };
         var isolatedProject = project with { Assets = [asset with { Provenance = null }], Sequences = [isolated] };
         var errors = ProjectValidator.Validate(isolatedProject);
         if (!errors.IsEmpty) throw new McpFault(errors[0].Code);

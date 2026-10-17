@@ -88,7 +88,21 @@ internal static class CreationWorkflowChecks
             await (Task)Invoke(main, "SaveProjectAsync", false)!;
             if (Field<string?>(main, "filename") != invalid || Field<string?>(main, "savedJson") != saved)
                 throw new Exception("Failed save changed filename or dirty baseline.");
+            playback.SetContext(null); await playback.Completion;
+            await CheckTitleFailure(main, session, "TitlePreview_Click");
+            await CheckTitleFailure(main, session, "TitleExport_Click");
+            Set(main, "filename", project);
+            if (!session.Execute(new([new SetTrackEnabled(sequence, track, true), new SetTitleImage(sequence, new(asset))])).Success)
+                throw new Exception("Title error fixture invalid.");
+            File.Move(image, image + ".offline");
+            try
+            {
+                await CheckTitleFailure(main, session, "TitlePreview_Click", "Video source is missing.");
+                await CheckTitleFailure(main, session, "TitleFromFrame_Click", "Video source is missing.");
+            }
+            finally { File.Move(image + ".offline", image); }
             Console.WriteLine("Creation workflow: WPF transport, page follow and atomic known-path save: PASS");
+            Console.WriteLine("Title UI: no selection and missing source report errors without unhandled exceptions, edits or a stuck busy state: PASS");
         }
         finally
         {
@@ -99,6 +113,31 @@ internal static class CreationWorkflowChecks
             await main.Dispatcher.InvokeAsync(() => {}, DispatcherPriority.ApplicationIdle);
             Directory.Delete(directory, true);
         }
+    }
+    private static async Task CheckTitleFailure(MainWindow main, EditorSession session, string handler, string? expected = null)
+    {
+        var errors = new List<Exception>();
+        void Unhandled(object sender, DispatcherUnhandledExceptionEventArgs e) { errors.Add(e.Exception); e.Handled = true; }
+        main.Dispatcher.UnhandledException += Unhandled;
+        try
+        {
+            var before = session.GetProject();
+            string saved = ProjectJson.Serialize(before.Project!).Value!;
+            var status = (TextBlock)main.FindName("Status"); status.Text = "";
+            Invoke(main, handler, main, new RoutedEventArgs());
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (Field<bool>(main, "busy") && DateTime.UtcNow < deadline) await Task.Delay(10);
+            await main.Dispatcher.InvokeAsync(() => {}, DispatcherPriority.ApplicationIdle);
+            if (errors.Count != 0) throw new Exception(handler + " leaked an exception.", errors[0]);
+            if (Field<bool>(main, "busy") || !main.IsEnabled) throw new Exception(handler + " left the window busy.");
+            if (string.IsNullOrWhiteSpace(status.Text) || expected is not null && status.Text != expected)
+                throw new Exception(handler + " did not report the title error: " + status.Text);
+            var after = session.GetProject();
+            if (before.Revision != after.Revision || before.CanUndo != after.CanUndo || before.CanRedo != after.CanRedo ||
+                saved != ProjectJson.Serialize(after.Project!).Value)
+                throw new Exception(handler + " changed the project/history on failure.");
+        }
+        finally { main.Dispatcher.UnhandledException -= Unhandled; }
     }
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Private)!.GetValue(target)!;
