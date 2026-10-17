@@ -113,15 +113,15 @@
         <ComboBox x:Name="PreviewBackendBox" Width="88" SelectedIndex="0" SelectionChanged="PreviewBackend_Changed" ToolTip="{DynamicResource Shell.PreviewBackend}">
           <ComboBoxItem Content="{DynamicResource Shell.PreviewBackendAuto}"/><ComboBoxItem Content="CPU"/><ComboBoxItem Content="D3D11"/>
         </ComboBox>
-        <Button Click="GoToStart_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.GoToStart}">
+        <Button x:Name="GoToStartButton" Click="GoToStart_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.GoToStart}">
           <Path Fill="#202124" Data="M0,0 L2,0 2,12 0,12 Z M13,0 L3,6 13,12 Z" Width="14" Height="12" Stretch="Fill"/>
         </Button>
-        <Button Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}">
+        <Button x:Name="PreviousFrameButton" Click="PreviousFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Previousframe}">
           <Path Fill="#202124" Data="M8,0 L0,6 8,12 Z M17,0 L9,6 17,12 Z" Width="17" Height="12" Stretch="Fill"/>
         </Button>
         <Button x:Name="PlayButton" Content="▶" Click="Play_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.PlaypauseSpace}" />
         <Button x:Name="StopButton" Content="■" Click="Stop_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Stopcancelpreparation}" />
-        <Button Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}">
+        <Button x:Name="NextFrameButton" Click="NextFrame_Click" Style="{StaticResource CommandIconButton}" ToolTip="{DynamicResource Shell.Nextframe}">
           <Path Fill="#202124" Data="M0,0 L8,6 0,12 Z M9,0 L17,6 9,12 Z" Width="17" Height="12" Stretch="Fill"/>
         </Button>
         <TextBlock Text="{DynamicResource Shell.MonitoringVolume}" VerticalAlignment="Center" Margin="8,0,4,0"/>

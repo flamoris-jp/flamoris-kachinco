@@ -34,6 +34,7 @@ internal static class Program
                 var main = new MainWindow(); main.Show();
                 await TimelineLayoutChecks.Run(main);
                 await TimelineRippleChecks.Run();
+                await CreationWorkflowChecks.Run();
                 await InspectorChecks.Run(main);
                 await VolumeChecks.Run(main);
                 await EffectChecks.Run(main);
