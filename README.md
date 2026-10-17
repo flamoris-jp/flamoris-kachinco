@@ -34,7 +34,7 @@ The channel link is the verified public destination. Individual video links may 
 
 An ordinary video editor lets a person click controls. Kachinco also exposes typed editing operations through the **Model Context Protocol (MCP)**, with the human UI and AI editing the **same native project/session**.
 
-\`\`\`text
+```text
 Human: "Make this 30-second promo."
               |
               v
@@ -54,9 +54,9 @@ Human: "Make this 30-second promo."
          Shared native renderer
                  |
        Preview / exported MP4
-\`\`\`
+```
 
-**A particularly useful feedback loop:** the AI can ask Kachinco for a composed frame at a precise timeline time using \`preview_frame\` (JPEG/PNG), inspect the result, and decide what to edit next. It doesn't need to guess from timeline metadata alone. Capturing a frame is read-only: it doesn't move the playhead or modify editing history.
+**A particularly useful feedback loop:** the AI can ask Kachinco for a composed frame at a precise timeline time using `preview_frame` (JPEG/PNG), inspect the result, and decide what to edit next. It doesn't need to guess from timeline metadata alone. Capturing a frame is read-only: it doesn't move the playhead or modify editing history.
 
 AI can also upload supported source media through guarded MCP operations, adjust the timeline, and retrieve a bounded individual edited clip for inspection. The AI client and MCP/Hub connection are external integrations; **Kachinco itself remains a usable manual editor**.
 
@@ -64,7 +64,7 @@ AI can also upload supported source media through guarded MCP operations, adjust
 
 ## What you can do today
 
-| Area | Implemented on reviewed \`main\` |
+| Area | Implemented on reviewed `main` |
 | --- | --- |
 | **Windows editing** | Media bin, multitrack timeline, playback/scrubbing, move/trim/split/delete, Undo/Redo, save/reopen and overwrite save. |
 | **Video / still images** | MOV/MP4 and PNG/JPEG/WebP import, layer transforms, opacity, Normal/Screen composition, image motion via property automation. |
@@ -89,19 +89,19 @@ The full engineering status and outstanding acceptance evidence live in [PROGRES
 
 ## Getting started (Windows)
 
-**For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start \`Kachinco.App.exe\`. The destination machine does **not** need the .NET SDK, but media workflows require \`ffmpeg\` and \`ffprobe\` on \`PATH\`; restricted Recipes additionally require Python 3.
+**For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start `Kachinco.App.exe`. The destination machine does **not** need the .NET SDK, but media workflows require `ffmpeg` and `ffprobe` on `PATH`; restricted Recipes additionally require Python 3.
 
 See [Windows portable packaging and prerequisites](docs/windows-packaging.md). CI artifacts are short-lived development candidates, **not a promise of a published stable release**.
 
 **For developers:** install PowerShell 7, .NET 10 SDK, CMake (3.20+), Visual Studio 2022+ C++ Build Tools with the Windows SDK, plus FFmpeg/ffprobe. From a checked-out repository:
 
-\`\`\`powershell
+```powershell
 dotnet build Kachinco.slnx -c Release
 dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release
 ./product/packaging/publish-windows.ps1
-\`\`\`
+```
 
-The portable ZIP and inventory are created under \`artifacts/windows/\`. Close Kachinco before replacing a running portable build, since Windows may lock loaded DLLs.
+The portable ZIP and inventory are created under `artifacts/windows/`. Close Kachinco before replacing a running portable build, since Windows may lock loaded DLLs.
 
 **MCP connection:** an MCP-aware client connects to the active Kachinco desktop session, directly or via the FLAMORIS MCP Hub setup. It is a separate configuration step; publishing a new executable alone does not update a deployed Hub tool catalog.
 
