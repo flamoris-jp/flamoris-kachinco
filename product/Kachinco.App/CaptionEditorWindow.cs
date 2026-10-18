@@ -30,16 +30,17 @@ public sealed class CaptionEditorWindow : Window
         panel.Children.Add(status); panel.Children.Add(styles);
         list.SelectionChanged += (_, _) =>
         {
-            styles.Configure(session,sequenceId,list.SelectedItems.Cast<Caption>().Select(c=>c.Id),result=>
-            {
-                if(result.Success) { var ids=list.SelectedItems.Cast<Caption>().Select(c=>c.Id).ToHashSet(); Refresh(); foreach(var c in list.Items.Cast<Caption>().Where(c=>ids.Contains(c.Id)).ToArray()) list.SelectedItems.Add(c); onChanged?.Invoke(); }
-                else status.Text=string.Join(" / ",result.Diagnostics.Select(d=>d.Message));
-            });
+            RefreshStyles();
             if (list.SelectedItem is not Caption caption) return;
             start.Text = Seconds(caption.StartTicks); duration.Text = Seconds(caption.DurationTicks); text.Text = caption.Text;
         };
         Refresh(); New(this, new());
     }
+    private void RefreshStyles() => styles.Configure(session,sequenceId,list.SelectedItems.Cast<Caption>().Select(c=>c.Id),result=>
+    {
+        if(result.Success) { RefreshStyles(); onChanged?.Invoke(); }
+        else status.Text=string.Join(" / ",result.Diagnostics.Select(d=>d.Message));
+    });
     private Sequence Sequence => session.GetProject().Project!.Sequences.First(s => s.Id == sequenceId);
     private void Refresh() => list.ItemsSource = Sequence.Tracks.SelectMany(t => t.Captions).OrderBy(c => c.StartTicks).ToArray();
     private void New(object sender, RoutedEventArgs e) { list.SelectedItem = null; start.Text = "0"; duration.Text = "3"; text.Text = ""; }

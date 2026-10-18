@@ -64,6 +64,17 @@ internal static class CaptionStyleChecks
         size.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,size,null) {RoutedEvent=Keyboard.LostKeyboardFocusEvent});
         if(session.GetProject().Project!.Sequences[0].Tracks.SelectMany(t=>t.Captions).Any(c=>c.Style!.FontSize!=80)) throw new Exception("UI sequence scope missed captions.");
         Configure([second]);
+        var dialog=new CaptionEditorWindow(session,sequence);
+        var dialogList=(ListBox)typeof(CaptionEditorWindow).GetField("list",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(dialog)!;
+        dialogList.SelectedItems.Add(dialogList.Items.Cast<Caption>().First(c=>c.Id==id));
+        dialogList.SelectedItems.Add(dialogList.Items.Cast<Caption>().First(c=>c.Id==second));
+        var dialogStyle=(CaptionStyleEditor)typeof(CaptionEditorWindow).GetField("styles",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(dialog)!;
+        var dialogScope=(ComboBox)dialogStyle.Children[1];dialogScope.SelectedIndex=1;
+        var dialogFields=(Dictionary<string,Control>)typeof(CaptionStyleEditor).GetField("fields",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(dialogStyle)!;
+        var dialogSize=(TextBox)dialogFields["fontSize"];dialogSize.Text="90";
+        dialogSize.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,dialogSize,null) {RoutedEvent=Keyboard.LostKeyboardFocusEvent});
+        if(dialogList.SelectedItems.Count!=2 || dialogScope.SelectedIndex!=1) throw new Exception("Caption list styling lost selection or bulk scope.");
+        dialog.Close();
         if(screenshot is not null)
         {
             var host=new Border {Background=new SolidColorBrush(Color.FromRgb(43,45,49)),Padding=new(12),Child=editor,Width=360};
