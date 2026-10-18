@@ -85,6 +85,19 @@ public sealed class Mp4TitleReplacement(string ffmpeg = "ffmpeg", string ffprobe
                 "-frames:v", m.OpeningFrames.ToString(Invariant), "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-pix_fmt", "yuv420p", "-bf", (m.Reorder == 0 ? "0" : m.Reorder == 1 ? "1" : "3"),
                 "-x264-params", "open-gop=0", "-video_track_timescale", m.Timescale.ToString(Invariant), head], 4096, token);
+            // Encoders can report the same reorder depth but use different DTS lead-in
+            // (reported NVENC input: three frames; x264 opening: two). Match the actual clock
+            // before concatenating; retain every presentation timestamp explicitly.
+            var opening = await InspectAsync(head, token);
+            long dtsOffset = checked(m.Video[0].Dts - opening.Video[0].Dts);
+            if (dtsOffset != 0)
+            {
+                string aligned = Path.Combine(work, "head-aligned.mp4");
+                await RunAsync(ffmpeg, ["-v", "error", "-nostdin", "-y", .. InputOptions, "-i", head,
+                    "-map", "0:v:0", "-c:v", "copy", "-bsf:v", $"setts=pts=PTS:dts=DTS+({dtsOffset.ToString(Invariant)})",
+                    "-avoid_negative_ts", "disabled", "-video_track_timescale", m.Timescale.ToString(Invariant), aligned], 4096, token);
+                head = aligned; video = aligned;
+            }
             if (prepared.CopiedFrames > 0)
             {
                 progress?.Report($"copy:{prepared.CopiedFrames}");
@@ -92,7 +105,7 @@ public sealed class Mp4TitleReplacement(string ffmpeg = "ffmpeg", string ffprobe
                 await RunAsync(ffmpeg, ["-v", "error", "-nostdin", "-y", .. InputOptions, "-ss", boundary, "-i", prepared.SourcePath,
                     "-map", "0:v:0", "-an", "-c:v", "copy", "-avoid_negative_ts", "disabled", tail], 4096, token);
                 string list = Path.Combine(work, "join.ffconcat");
-                await File.WriteAllTextAsync(list, $"ffconcat version 1.0\nfile 'head.mp4'\nduration {boundary}\nfile 'tail.mp4'\n", Encoding.ASCII, token);
+                await File.WriteAllTextAsync(list, $"ffconcat version 1.0\nfile '{Path.GetFileName(head)}'\nduration {boundary}\nfile 'tail.mp4'\n", Encoding.ASCII, token);
                 video = Path.Combine(work, "joined.mp4");
                 await RunAsync(ffmpeg, ["-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1",
                     "-i", list, "-map", "0:v:0", "-c:v", "copy", "-video_track_timescale", m.Timescale.ToString(Invariant), video], 4096, token);
@@ -133,7 +146,7 @@ public sealed class Mp4TitleReplacement(string ffmpeg = "ffmpeg", string ffprobe
         var v = video[0];
         int w = checked((int)Number(v, "width")), h = checked((int)Number(v, "height"));
         if (Text(v, "codec_name") != "h264" || Text(v, "codec_tag_string") != "avc1" || Text(v, "pix_fmt") != "yuv420p" ||
-            Text(v, "field_order") is not ("progressive" or "unknown") || Text(v, "sample_aspect_ratio") is not ("1:1" or "N/A") ||
+            Text(v, "field_order") is not ("progressive" or "unknown") || Text(v, "sample_aspect_ratio") is not ("1:1" or "N/A" or "") ||
             Text(v, "nal_length_size") != "4" || Number(v, "start_pts") != 0 || w < 2 || h < 2 || w % 2 != 0 || h % 2 != 0 || w > 4096 || h > 4096 ||
             v.TryGetProperty("side_data_list", out var side) && side.EnumerateArray().Any(x => x.TryGetProperty("rotation", out _)))
             throw new InvalidDataException("Supported video: zero-start progressive H.264/AVC, square-pixel yuv420p, no rotation, even dimensions up to 4096.");
@@ -150,10 +163,20 @@ public sealed class Mp4TitleReplacement(string ffmpeg = "ffmpeg", string ffprobe
         Mp4Packet[] Packets(int index) => all.Where(p => Number(p, "stream_index") == index).Select(p => new Mp4Packet(Number(p, "pts"), Number(p, "dts"),
             Number(p, "duration"), Number(p, "pos"), checked((int)Number(p, "size")), Text(p, "flags").Contains('K'), Text(p, "data_hash"))).ToArray();
         var vp = Packets(checked((int)Number(v, "index")));
-        if (vp.Length == 0 || Number(v, "nb_frames") != vp.Length || Number(v, "duration_ts") != checked(vp.Length * step) ||
-            vp.Any(p => p.Duration != step) || !vp.Select(p => p.Pts).Order().SequenceEqual(Enumerable.Range(0, vp.Length).Select(i => i * step)) ||
-            vp.Zip(vp.Skip(1)).Any(pair => pair.First.Dts >= pair.Second.Dts))
-            throw new InvalidDataException("Only complete, constant-frame-rate MP4 with an unbroken zero-start frame grid is supported.");
+        if (vp.Length == 0 || Number(v, "nb_frames") != vp.Length)
+            throw new InvalidDataException("MP4 frame count does not match its video packet count.");
+        // MP4 movie/edit durations are commonly rounded to milliseconds (NVENC exports
+        // can differ by five ticks at 1/15360). Packet PTS/durations remain authoritative.
+        if (Math.Abs(Number(v, "duration_ts") - checked(vp.Length * step)) > Math.Max(1, (scale + 999L) / 1000))
+            throw new InvalidDataException("MP4 duration summary is outside the permitted millisecond rounding tolerance.");
+        int durationMismatch = Array.FindIndex(vp, p => p.Duration != step);
+        if (durationMismatch >= 0)
+            throw new InvalidDataException($"Video packet {durationMismatch} has duration {vp[durationMismatch].Duration}; expected {step} ticks.");
+        var displayed = vp.OrderBy(p => p.Pts).ToArray();
+        if (!displayed.Select(p => p.Pts).SequenceEqual(Enumerable.Range(0, vp.Length).Select(i => i * step)))
+            throw new InvalidDataException("Video presentation times contain a missing, duplicate or off-grid frame.");
+        if (vp.Zip(vp.Skip(1)).Any(pair => pair.First.Dts >= pair.Second.Dts))
+            throw new InvalidDataException("Video decode timestamps are not strictly increasing.");
         int reorder = checked((int)Number(v, "has_b_frames"));
         if (reorder is < 0 or > 2) throw new InvalidDataException("Unsupported decoder reorder delay.");
         return new(w, h, fps, scale, step, reorder, vp.Length, vp, audio.Length == 0 ? [] : Packets(checked((int)Number(audio[0], "index"))),
@@ -194,6 +217,8 @@ public sealed class Mp4TitleReplacement(string ffmpeg = "ffmpeg", string ffprobe
     {
         if ((expected.Width, expected.Height, expected.Fps, expected.Timescale) != (actual.Width, actual.Height, actual.Fps, actual.Timescale) ||
             !expected.Video.Select(p => (p.Pts, p.Duration)).OrderBy(p => p.Pts).SequenceEqual(actual.Video.Select(p => (p.Pts, p.Duration)).OrderBy(p => p.Pts)) ||
+            !expected.Video.Skip(expected.OpeningFrames).Select(p => (p.Pts, p.Dts, p.Duration))
+                .SequenceEqual(actual.Video.Skip(expected.OpeningFrames).Select(p => (p.Pts, p.Dts, p.Duration))) ||
             expected.AudioTimebase != actual.AudioTimebase ||
             !expected.Audio.Select(p => (p.Pts, p.Dts, p.Duration, p.Hash)).SequenceEqual(actual.Audio.Select(p => (p.Pts, p.Dts, p.Duration, p.Hash))))
             throw new InvalidDataException("The MP4 join could not preserve frame timing/count or original audio. No output was published.");
