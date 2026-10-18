@@ -13,7 +13,7 @@ public sealed class Mp4TitleReplacementTests
     [DataRow("30000/1001", 0, 181, 60, true)]
     [DataRow("30000/1001", 2, 181, 60, false)]
     [DataRow("30", 1, 7, 60, true)]
-    [DataRow("30", 0, 5101, 60, true)]
+    [DataRow("30", 3, 5101, 250, true)]
     public async Task ReplacesFrameZeroAndPreservesTimingAudioAndDecodedCopiedPictures(string fps, int bframes, int count, int gop, bool audio)
     {
         string dir = NewDirectory();
