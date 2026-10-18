@@ -71,7 +71,7 @@ AI can also upload supported source media through guarded MCP operations, adjust
 | **Audio / captions** | WAV/MP3/M4A audio clips, clip volume points and fades, transport monitoring level, caption editing and SRT import/export. |
 | **AI / MCP** | Same-session project queries and edits, guarded media upload, specified-time rendered frame capture, clip speed commands and bounded single-clip download. |
 | **Creative controls** | Clappers (named timeline/region references), reusable Effect Library, restricted Recipe-generated text/particle clips, editable visual automation. |
-| **Finishing** | Crossfades, navigation by frame, timeline follow during playback, title-image selection/export, MP4 export for 16:9 or 9:16. |
+| **Finishing** | Crossfades, navigation by frame, timeline follow during playback, title-image selection/export, [completed-MP4 first-frame replacement](docs/mp4-title-replacement.md), MP4 export for 16:9 or 9:16. |
 | **GPU options** | D3D11 preview composition and decoding fallback; independent CPU/D3D11 export composition and CPU/NVENC encoding paths, with CPU fallback. |
 
 The October 17 production-operation changes (media removal, title image, window restoration, timeline follow, crossfade, transport behavior) landed in [PR #92](https://github.com/flamoris-jp/flamoris-kachinco/pull/92). GPU export paths landed in [PR #83](https://github.com/flamoris-jp/flamoris-kachinco/pull/83). **Automated checks passed; physical deployment, performance and A/V acceptance are separate.**

@@ -84,6 +84,8 @@
         <Separator/>
         <MenuItem Header="{DynamicResource Shell.TitleReserve}" Click="TitleReserve_Click"/>
         <MenuItem Header="{DynamicResource Shell.TitleRelease}" Click="TitleRelease_Click"/>
+        <Separator/>
+        <MenuItem Header="{DynamicResource Shell.ReplaceMp4Title}" Click="ReplaceMp4Title_Click"/>
       </MenuItem>
       <MenuItem Header="{DynamicResource Shell.ViewV}">
         <MenuItem x:Name="SnappingMenuItem" Header="{DynamicResource Shell.SnappingN}" IsCheckable="True" IsChecked="True" Click="Snapping_Click" />

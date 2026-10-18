@@ -242,3 +242,15 @@ published editor/bridge external MCP, media import and clean-PATH startup.
 This documentation-only follow-up leaves Product/Test/workflow source unchanged
 from that validated code commit. PR #83 awaits independent human review and merge
 authorization; #82 remains open for measured Mango physical acceptance.
+
+## Exported MP4 first-frame replacement — Issue #94
+
+- Title-image menu supports completed MP4 + image/selected title, fitted preview,
+  explicit opening-encode/body-copy counts and save under a new filename.
+- File-only Infrastructure finishing path replaces frame zero, preserves frame grid,
+  uses a closed-IDR splice and copies later H.264 and original AAC. No project mutation
+  or timeline rendering; no overwrite or incomplete-file publication.
+- New real-codec tests 10/10, native 5/5 and WPF cross-target build pass. Existing
+  regression 355 pass/1 skip; two existing Unix named-pipe tests hit this workspace's
+  socket restriction and remain CI gates. Windows input/Media Player acceptance is
+  separate. See docs/reviews/issue-94-first-frame.md for benchmark and limits.

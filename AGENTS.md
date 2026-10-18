@@ -415,3 +415,15 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
 - ADR 0022 defines optional caption styles, reference-pixel/normalized coordinates, atomic partial patches, conditional v7 and legacy v1-v6 migration. Native owns style validation/mutation/codec; UI/MCP use the same guarded commands/history.
 - Evaluated captions carry styles to the shared WPF raster adapter for preview/capture/export. Null style retains legacy appearance/stacking. Font-only bulk edits preserve all other per-caption fields.
 - Required native capabilities are now 131071. Hub descriptors must be updated together with the producer; physical acceptance is staging/windows-caption-styles.md.
+
+## Exported MP4 first-frame replacement authority (Issue #94)
+
+- ADR 0023 defines a file finishing operation, independent of project mutations,
+  native timeline evaluation and Undo/Redo. Replace frame zero; never insert or infer a slot.
+- Inspect CFR packet timing and a closed IDR boundary. Encode only the opening
+  region, copy later H.264 and original AAC, validate timing/audio and strict splice
+  decode before publishing a new file. No silent full-video fallback or source overwrite.
+- Preview reports the actual encode/copy counts, including all-video encoding when
+  no later suitable IDR exists. Never claim losslessness for the re-encoded opening.
+- Run Mp4TitleReplacementTests on Linux/Windows. Physical NVENC/Media Player checks
+  and normal-timeline performance comparison remain staging/windows-issue94.md.
