@@ -5,7 +5,8 @@ namespace Kachinco.Core;
 public sealed record EvaluatedVideoLayer(Guid TrackId, Guid ClipId, Guid MediaAssetId,
     long SourceTicks, ClipAppearance Appearance);
 public sealed record EvaluatedAudio(Guid TrackId, Guid ClipId, Guid MediaAssetId, long SourceTicks, double Gain);
-public sealed record EvaluatedCaption(Guid TrackId, Guid CaptionId, string Text);
+public sealed record EvaluatedCaption(Guid TrackId, Guid CaptionId, string Text)
+{ public CaptionStyle? Style { get; init; } }
 public sealed record EvaluatedFrame(Guid SequenceId, long Tick, SequenceSettings Settings,
     ImmutableArray<EvaluatedVideoLayer> VideoLayers, ImmutableArray<EvaluatedAudio> Audio,
     ImmutableArray<EvaluatedCaption> Captions);
@@ -88,7 +89,7 @@ public sealed class TimelineEvaluator : IDisposable
                     new(new(a.X,a.Y,a.ScaleX,a.ScaleY,a.Rotation),a.Opacity,(BlendMode)a.Blend)));
             }
             else if (value.Kind == 1) audio.Add(new(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,Project.Assets.First(asset => asset.Id == id.Clip.MediaAssetId).Kind == MediaKind.Image ? 0 : value.SourceStart,value.Gain));
-            else captions.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text));
+            else captions.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text) { Style = id.Caption.Style });
         }
         return Result<EvaluatedFrame>.Ok(new(Sequence.Id,tick,Sequence.Settings,video.ToImmutable(),audio.ToImmutable(),captions.ToImmutable()));
     }

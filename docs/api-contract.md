@@ -309,3 +309,27 @@ ordinary host/grant guards and immutable render revision. See
 [ADR 0019](decisions/0019-clip-speed-and-download.md) and
 [client usage](clip-speed-and-download.md) for format, range, disabled-state,
 resource/cancellation, byte metadata and pinned Hub catalog contracts.
+
+## Caption styles (#95, ADR 0022)
+
+`get_project` includes nullable caption `style` in conditional schema v7.
+Existing `edit_batch` accepts `SetCaptionStyle(sequenceId, captionId, style)`
+(full style or null to reset) and `PatchCaptionStyles(sequenceId, captionIds, patch)`.
+Patches preserve omitted/null fields on each caption; explicit IDs (1–4096 unique)
+are atomic and share one Undo entry. Both retain existing Edit/document/revision guards.
+
+Example command inside the existing guarded `input.commands` envelope:
+
+```json
+{"type":"PatchCaptionStyles","sequenceId":"<sequence UUID>","captionIds":["<caption UUID>"],"patch":{"fontFamily":"Arial","fontSize":64,"color":"#FFFFFF"}}
+```
+
+Style fields: fontFamily, fontSize, color, outlineColor, outlineWidth, x, y,
+maxWidth, alignment (Left/Center/Right), verticalAnchor (Top/Center/Bottom),
+shadowEnabled, shadowColor, shadowX, shadowY. Size/outline/shadow values are reference
+pixels at short canvas edge 1080. x/y anchors are 0–1 canvas fractions; maxWidth
+is .05–1 canvas width. Colors are #RRGGBB or #AARRGGBB. Font sizes 1–500, outline
+0–100 and shadow offsets -500–500. Missing families warn/use Yu Gothic in Windows.
+
+SRT preserves text/time only. Refresh Hub's existing edit_batch descriptor from
+the producer fixture when deploying; tool names/count remain unchanged.

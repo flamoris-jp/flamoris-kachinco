@@ -40,7 +40,10 @@ public sealed record Clip(Guid Id, Guid MediaAssetId, long StartTicks, long Sour
     public long? SourceDurationTicks { get; init; }
     public long SourceOutTicks => checked(SourceInTicks + (SourceDurationTicks ?? checked(DurationTicks * PlaybackRate)));
 }
-public sealed record Caption(Guid Id, long StartTicks, long DurationTicks, string Text, bool Enabled = true);
+public sealed record Caption(Guid Id, long StartTicks, long DurationTicks, string Text, bool Enabled = true)
+{
+    public CaptionStyle? Style { get; init; }
+}
 public sealed record Transform2D(double X, double Y, double ScaleX, double ScaleY, double RotationDegrees)
 {
     public static Transform2D Identity => new(0, 0, 1, 1, 0);

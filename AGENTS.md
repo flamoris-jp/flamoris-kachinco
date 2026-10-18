@@ -409,3 +409,9 @@ This repository-specific `AGENTS.md` remains authoritative for product/domain ru
 - Required native capabilities are now 65535. Run CreationWorkflowTests,
   TitleImageTests, sanitizer contracts and Windows CreationWorkflowChecks.
   Physical acceptance remains staging/windows-creation-workflow.md.
+
+## Caption style authority (Issue #95)
+
+- ADR 0022 defines optional caption styles, reference-pixel/normalized coordinates, atomic partial patches, conditional v7 and legacy v1-v6 migration. Native owns style validation/mutation/codec; UI/MCP use the same guarded commands/history.
+- Evaluated captions carry styles to the shared WPF raster adapter for preview/capture/export. Null style retains legacy appearance/stacking. Font-only bulk edits preserve all other per-caption fields.
+- Required native capabilities are now 131071. Hub descriptors must be updated together with the producer; physical acceptance is staging/windows-caption-styles.md.

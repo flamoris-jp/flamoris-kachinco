@@ -6,6 +6,8 @@ namespace kn_editor {
 using json = nlohmann::ordered_json;
 struct rejected { json diagnostic; };
 json error(const std::string& code, const std::string& message, const json& id = nullptr, const json& path = nullptr);
+json default_caption_style();
+bool valid_caption_style(const json& style);
 json validate(const json& project);
 json apply(json project, const json& command);
 json encode_file(const json& project);

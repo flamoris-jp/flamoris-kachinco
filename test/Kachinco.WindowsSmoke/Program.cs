@@ -16,6 +16,7 @@ internal static class Program
         {
             try
             {
+                if(args is ["--caption-styles",var screenshot]) { await CaptionStyleChecks.Run(screenshot);exit=0;return; }
                 if (args is ["--export-bench", var project, var output, var device])
                 {
                     await ExportBench.Run(project, output, int.Parse(device, System.Globalization.CultureInfo.InvariantCulture));
@@ -36,6 +37,7 @@ internal static class Program
                 await TimelineRippleChecks.Run();
                 await CreationWorkflowChecks.Run();
                 await InspectorChecks.Run(main);
+                await CaptionStyleChecks.Run();
                 await VolumeChecks.Run(main);
                 await EffectChecks.Run(main);
                 await GpuPreviewChecks.Run(main);

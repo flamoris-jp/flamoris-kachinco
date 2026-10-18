@@ -108,7 +108,7 @@ public partial class TimelineSurface : UserControl
         project = value;
         revision = expectedRevision;
         sequence = value?.Sequences.FirstOrDefault(x => x.Id == sequenceId);
-        selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => t.Clips.Any(c => c.Id == id)) == true ? id : null;
+        selectedClipId = selectedId is { } id && sequence?.Tracks.Any(t => (t.Clips.Any(c => c.Id == id) || t.Captions.Any(c => c.Id == id))) == true ? id : null;
         if (sequence is null) playheadTicks = 0;
         else playheadTicks = Math.Clamp(playheadTicks, 0, sequence.DurationTicks);
         Rebuild();
@@ -205,12 +205,13 @@ public partial class TimelineSurface : UserControl
     public void DeleteSelected()
     {
         if (sequence is not null && selectedClipId is { } clipId)
-            Request(new([new DeleteClip(sequence.Id, clipId)], revision));
+            Request(new([sequence.Tracks.Any(t=>t.Captions.Any(c=>c.Id==clipId)) ? (EditCommand)new DeleteCaption(sequence.Id,clipId) : new DeleteClip(sequence.Id, clipId)], revision));
     }
 
     public void SplitSelected()
     {
         if (project is null || sequence is null || selectedClipId is not { } clipId) return;
+        if(sequence.Tracks.Any(t=>t.Captions.Any(c=>c.Id==clipId))) return;
         var result = TimelineEditPlanner.Split(project, sequence.Id, clipId, playheadTicks, Guid.NewGuid());
         if (result.Success) Request(new([result.Value!], revision));
         else InteractionFailed?.Invoke(this, new(result.Diagnostics));
@@ -266,8 +267,9 @@ public partial class TimelineSurface : UserControl
             foreach (var caption in TimelineQueries.ListCaptions(track))
             {
                 var block = new Border { Width = ToDouble(viewport.TicksToPixels(caption.DurationTicks)), Height = geometry.Row(row).ClipHeight,
-                    Background = Brushes.DarkMagenta, IsHitTestVisible = false,
+                    Background = Brushes.DarkMagenta, BorderBrush = caption.Id == selectedClipId ? Brushes.White : Brushes.Transparent, BorderThickness = new(2),
                     Child = new TextBlock { Text = caption.Text, Foreground = Brushes.White, Margin = new(5), TextTrimming = TextTrimming.CharacterEllipsis } };
+                block.MouseLeftButtonDown += (_,e) => { Select(caption.Id); e.Handled = true; };
                 Canvas.SetLeft(block, ToDouble(viewport.TicksToPixels(caption.StartTicks))); Canvas.SetTop(block, geometry.Row(row).ClipTop);
                 Panel.SetZIndex(block, 1);
                 TimelineCanvas.Children.Add(block);

@@ -26,6 +26,7 @@ public static class KachincoMcpTools
         [nameof(AddClipVolumePoint)] = typeof(AddClipVolumePoint), [nameof(UpdateClipVolumePoint)] = typeof(UpdateClipVolumePoint), [nameof(DeleteClipVolumePoint)] = typeof(DeleteClipVolumePoint),
         [nameof(SetClipPropertyCurve)] = typeof(SetClipPropertyCurve), [nameof(AddClipPropertyPoint)] = typeof(AddClipPropertyPoint), [nameof(UpdateClipPropertyPoint)] = typeof(UpdateClipPropertyPoint), [nameof(DeleteClipPropertyPoint)] = typeof(DeleteClipPropertyPoint),
         [nameof(SetTrackEnabled)] = typeof(SetTrackEnabled), [nameof(ReorderTrack)] = typeof(ReorderTrack),
+        [nameof(SetCaptionStyle)] = typeof(SetCaptionStyle), [nameof(PatchCaptionStyles)] = typeof(PatchCaptionStyles),
         [nameof(AddCaption)] = typeof(AddCaption), [nameof(UpdateCaption)] = typeof(UpdateCaption), [nameof(DeleteCaption)] = typeof(DeleteCaption)
     };
     private static readonly JsonSerializerOptions Wire = new()
@@ -140,7 +141,7 @@ public static class KachincoMcpTools
         nameof(AddRecipe) or nameof(UpdateRecipe) or nameof(CreateSequence) or nameof(SetSequenceDuration) or
         nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(RippleReorderClip) or nameof(TrimClip) or nameof(SplitClip) or
         nameof(SetClipSpeed) or nameof(DeleteClip) or nameof(SetClipProperties) or nameof(AddClipVolumePoint) or nameof(UpdateClipVolumePoint) or nameof(DeleteClipVolumePoint) or nameof(SetClipPropertyCurve) or nameof(AddClipPropertyPoint) or nameof(UpdateClipPropertyPoint) or nameof(DeleteClipPropertyPoint) or nameof(SetTrackEnabled) or nameof(ReorderTrack) or
-        nameof(AddCaption) or nameof(UpdateCaption) or nameof(DeleteCaption);
+        nameof(SetCaptionStyle) or nameof(PatchCaptionStyles) or nameof(AddCaption) or nameof(UpdateCaption) or nameof(DeleteCaption);
 
     private sealed class IntegerStringConverter : JsonConverter<long>
     {

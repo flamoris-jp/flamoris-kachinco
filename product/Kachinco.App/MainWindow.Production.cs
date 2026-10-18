@@ -335,7 +335,7 @@ public partial class MainWindow
         using var operation = BeginHumanOperation();
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
-        new CaptionEditorWindow(session, sequence.Id) { Owner = this }.ShowDialog();
+        new CaptionEditorWindow(session, sequence.Id, () => Refresh()) { Owner = this }.ShowDialog();
         Refresh("字幕編集を終了しました。");
     }
 }

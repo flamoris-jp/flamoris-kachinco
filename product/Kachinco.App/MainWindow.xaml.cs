@@ -457,7 +457,7 @@ public partial class MainWindow : Window
             $"{sequence.Settings.Width} × {sequence.Settings.Height}\n{sequence.Settings.FrameRate.Numerator}/{sequence.Settings.FrameRate.Denominator} fps · {Seconds(sequence.DurationTicks)} s";
         UndoButton.IsEnabled = UndoMenuItem.IsEnabled = snapshot.CanUndo;
         RedoButton.IsEnabled = RedoMenuItem.IsEnabled = snapshot.CanRedo;
-        SplitButton.IsEnabled = selectedClipId is not null;
+        SplitButton.IsEnabled = FindSelectedClip(session.GetProject().Project) is not null;
         SnappingButton.IsChecked = Timeline.SnappingEnabled;
         SnappingMenuItem.IsChecked = Timeline.SnappingEnabled;
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
@@ -473,7 +473,7 @@ public partial class MainWindow : Window
         RefreshClapperOverlay();
         PlayheadText.Text = $"{EditorText.Choose("再生ヘッド", "Playhead")} {Seconds(Timeline.PlayheadTicks)} s";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
-        SplitButton.IsEnabled = selectedClipId is not null;
+        SplitButton.IsEnabled = FindSelectedClip(session.GetProject().Project) is not null;
     }
 
     private void RefreshInspector()
@@ -485,9 +485,13 @@ public partial class MainWindow : Window
         var baseline = session.GetProject();
         var project = baseline.Project;
         var selected = FindSelectedClip(project);
+        var caption = project?.Sequences.FirstOrDefault(s=>s.Id==selectedSequenceId)?.Tracks.SelectMany(t=>t.Captions).FirstOrDefault(c=>c.Id==selectedClipId);
+        CaptionInspector.Visibility = caption is null ? Visibility.Collapsed : Visibility.Visible;
+        if(caption is not null && selectedSequenceId is { } captionSequence)
+            CaptionInspector.Configure(session,captionSequence,[caption.Id],result=>Show(result,EditorText.Choose("字幕スタイルを変更しました。", "Caption style updated.")));
         ClipContext.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         ContextClipName.Text = selected is { } chosen ? project?.Assets.FirstOrDefault(a => a.Id == chosen.Clip.MediaAssetId)?.Name : "";
-        InspectorEmpty.Visibility = selected is null && SelectedAsset(project) is null ? Visibility.Visible : Visibility.Collapsed;
+        InspectorEmpty.Visibility = caption is null && selected is null && SelectedAsset(project) is null ? Visibility.Visible : Visibility.Collapsed;
         ClipInspector.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         AssetInspector.Visibility = selected is null && SelectedAsset(project) is not null ? Visibility.Visible : Visibility.Collapsed;
         if (selected is { } value && project is not null)
