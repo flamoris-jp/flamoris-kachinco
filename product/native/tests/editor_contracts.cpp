@@ -141,7 +141,25 @@ static int ripple_contracts() {
         request(nullptr,json({{"action","serialize"},{"project",before_title}}).dump()).at("value"));
     kn_editor_destroy(s);return 0;
 }
+static int caption_style_contracts() {
+    kn_editor_session* s=nullptr;REQUIRE(kn_editor_create(10,&s)==KN_OK);
+    auto project=json{{"id",id(1)},{"name","captions"},{"assets",json::array()},{"sequences",json::array({{{"id",id(2)},{"name","S"},{"settings",{{"width",1920},{"height",1080},{"frameRate",{{"numerator",30},{"denominator",1}}}}},{"durationTicks",100},{"clappers",json::array()},{"recipes",json::array()},{"tracks",json::array({{{"id",id(3)},{"name","S1"},{"kind",2},{"enabled",true},{"clips",json::array()},{"captions",json::array({{{"id",id(4)},{"startTicks",0},{"durationTicks",30},{"text","Japanese English"},{"enabled",true}},{{"id",id(5)},{"startTicks",30},{"durationTicks",30},{"text","second"},{"enabled",true}}})}}})}}})}};
+    commit(s,{{"action","replace"},{"project",project}});const auto before=snapshot(s).at("project");
+    auto patch=edit(json::array({command("PatchCaptionStyles",{{"sequenceId",id(2)},{"captionIds",json::array({id(4),id(5)})},{"patch",{{"fontFamily","Arial"},{"fontSize",64}}}})}));
+    commit(s,patch);const auto after=snapshot(s).at("project");
+    REQUIRE(after["sequences"][0]["tracks"][0]["captions"][1]["style"]["fontSize"]==64);
+    auto encoded=request(nullptr,json({{"action","serialize"},{"project",after}}).dump());REQUIRE(encoded.at("diagnostics").empty());
+    REQUIRE(json::parse(encoded.at("value").get<std::string>())["schemaVersion"]==7);
+    REQUIRE(request(nullptr,json({{"action","deserialize"},{"text",encoded.at("value")}}).dump()).at("diagnostics").empty());
+    commit(s,{{"action","undo"}});REQUIRE(snapshot(s).at("project")==before);
+    commit(s,{{"action","redo"}});REQUIRE(snapshot(s).at("project")==after);
+    auto bad=patch;bad["commands"][0]["value"]["captionIds"].push_back(id(99));REQUIRE(request(s,bad.dump()).at("success")==false);REQUIRE(snapshot(s).at("project")==after);
+    bad=patch;bad["commands"][0]["value"]["patch"]={{"fontSize",0}};REQUIRE(request(s,bad.dump()).at("success")==false);REQUIRE(snapshot(s).at("project")==after);
+    bad=patch;bad["commands"][0]["value"]["patch"]={{"surprise",true}};REQUIRE(request(s,bad.dump()).at("success")==false);
+    kn_editor_destroy(s);return 0;
+}
 int main() {
+    REQUIRE(caption_style_contracts()==0);
     REQUIRE(history_contracts()==0);
     REQUIRE(ripple_contracts()==0);
     kn_editor_session* s=nullptr; REQUIRE(kn_editor_create(0,&s)==KN_INVALID_ARGUMENT&&!s); REQUIRE(kn_editor_create(2,&s)==KN_OK);

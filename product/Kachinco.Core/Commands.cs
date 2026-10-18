@@ -37,6 +37,8 @@ public sealed record SetTrackEnabled(Guid SequenceId, Guid TrackId, bool Enabled
 public sealed record ReorderTrack(Guid SequenceId, Guid TrackId, int NewIndex) : EditCommand;
 public sealed record AddCaption(Guid SequenceId, Guid TrackId, Caption Caption) : EditCommand;
 public sealed record UpdateCaption(Guid SequenceId, Guid CaptionId, long StartTicks, long DurationTicks, string Text, bool Enabled) : EditCommand;
+public sealed record SetCaptionStyle(Guid SequenceId, Guid CaptionId, CaptionStyle? Style) : EditCommand;
+public sealed record PatchCaptionStyles(Guid SequenceId, ImmutableArray<Guid> CaptionIds, CaptionStylePatch Patch) : EditCommand;
 public sealed record DeleteCaption(Guid SequenceId, Guid CaptionId) : EditCommand;
 
 public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? ExpectedRevision = null, bool DryRun = false);

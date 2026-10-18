@@ -216,6 +216,7 @@
               <TextBlock x:Name="AssetMetadataText" TextWrapping="Wrap" />
               <Button x:Name="RelinkButton" Content="{DynamicResource Shell.Relinkmedia}" Click="Relink_Click" Margin="0,8,0,0" />
             </StackPanel>
+            <local:CaptionStyleEditor x:Name="CaptionInspector" Visibility="Collapsed"/>
             <StackPanel x:Name="ClipInspector" Visibility="Collapsed">
               <TextBlock Text="{DynamicResource Shell.Clip}" Foreground="#B5BAC2" />
               <TextBlock x:Name="ClipNameText" FontWeight="SemiBold" TextWrapping="Wrap" />

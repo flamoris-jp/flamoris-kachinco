@@ -71,6 +71,31 @@ static void retime_curves(json& clip,int old_rate,int new_rate) {
     if(clip["appearance"].contains("automation")) for(auto& curve:clip["appearance"]["automation"]) for(auto& point:curve["points"]) point["tick"]=retime(integer(point.at("tick")),old_rate,new_rate);
 }
 static int64_t title_frame(const json& sequence);
+json default_caption_style() {
+    return {{"fontFamily","Yu Gothic"},{"fontSize",45.0},{"color","#FFFFFF"},
+        {"outlineColor","#000000"},{"outlineWidth",3.75},{"x",.5},{"y",.9},{"maxWidth",.84},
+        {"alignment","Center"},{"verticalAnchor","Bottom"},{"shadowEnabled",false},
+        {"shadowColor","#80000000"},{"shadowX",2.0},{"shadowY",2.0}};
+}
+bool valid_caption_style(const json& v) {
+    if(v.is_null()) return true;
+    auto defaults=default_caption_style();
+    if(!v.is_object()||v.size()!=defaults.size()) return false;
+    for(auto it=defaults.begin();it!=defaults.end();++it) if(!v.contains(it.key())) return false;
+    const auto& family=v.at("fontFamily");
+    if(!family.is_string()||family.get<std::string>().empty()||family.get<std::string>().size()>256) return false;
+    for(const auto ch:family.get<std::string>()) if(static_cast<unsigned char>(ch)<32) return false;
+    auto number=[&](const char* k,double lo,double hi) {const auto& n=v.at(k);return n.is_number()&&std::isfinite(n.get<double>())&&n.get<double>()>=lo&&n.get<double>()<=hi;};
+    if(!number("fontSize",1,500)||!number("outlineWidth",0,100)||!number("x",0,1)||!number("y",0,1)||!number("maxWidth",.05,1)||!number("shadowX",-500,500)||!number("shadowY",-500,500)) return false;
+    for(const char* k:{"color","outlineColor","shadowColor"}) {
+        if(!v.at(k).is_string()) return false;
+        const auto str=v.at(k).get<std::string>();
+        if((str.size()!=7&&str.size()!=9)||str[0]!='#') return false;
+        for(size_t i=1;i<str.size();++i) if(!((str[i]>='0'&&str[i]<='9')||(str[i]>='a'&&str[i]<='f')||(str[i]>='A'&&str[i]<='F'))) return false;
+    }
+    return (v.at("alignment")=="Left"||v.at("alignment")=="Center"||v.at("alignment")=="Right")&&
+        (v.at("verticalAnchor")=="Top"||v.at("verticalAnchor")=="Center"||v.at("verticalAnchor")=="Bottom")&&v.at("shadowEnabled").is_boolean();
+}
 json validate(const json& p) {
     json errors=json::array(); std::set<std::string> ids;
     auto e=[&](const char* code,const char* message,const json& id=null_value,const json& path=null_value){errors.push_back(error(code,message,id,path));};
@@ -245,6 +270,7 @@ json validate(const json& p) {
                 if(c.is_null()) { e("INVALID_CAPTION","Null caption."); continue; }
                 const auto& cid=c.at("id"); identity(cid,"caption","captions");
                 if(!valid_range(integer(c.at("startTicks")),integer(c.at("durationTicks")),duration)) e("INVALID_CAPTION_RANGE","Caption must fit inside the sequence.",cid);
+                if(!valid_caption_style(field(c,"style"))) e("INVALID_CAPTION_STYLE","Invalid caption style.",cid);
                 if(!text_ok(field(c,"text"),65536)) e("INVALID_CAPTION_TEXT","Caption text must contain 1–65536 characters.",cid);
             }
         }
@@ -329,10 +355,27 @@ json apply(json p,const json& request) {
         return p;
     }
     if(type=="CreateSequence") { p["sequences"].push_back({{"id",c.at("sequenceId")},{"name",c.at("name")},{"settings",c.at("settings")},{"durationTicks",c.at("durationTicks")},{"tracks",json::array()},{"clappers",json::array()},{"recipes",json::array()}}); return p; }
-    const std::set<std::string> supported={"SetTitleImage","ReserveTitleFrame","ReleaseTitleFrame","ApplyCrossfade","AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SetClipSpeed","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","AddCaption","UpdateCaption","DeleteCaption"};
+    const std::set<std::string> supported={"SetTitleImage","ReserveTitleFrame","ReleaseTitleFrame","ApplyCrossfade","AddClapper","UpdateClapper","DeleteClapper","AddRecipe","UpdateRecipe","SetSequenceDuration","AddTrack","InsertClip","MoveClip","RippleReorderClip","TrimClip","SetClipSpeed","SplitClip","DeleteClip","SetClipProperties","AddClipVolumePoint","UpdateClipVolumePoint","DeleteClipVolumePoint","SetClipPropertyCurve","AddClipPropertyPoint","UpdateClipPropertyPoint","DeleteClipPropertyPoint","SetTrackEnabled","ReorderTrack","SetCaptionStyle","PatchCaptionStyles","AddCaption","UpdateCaption","DeleteCaption"};
     if(!supported.count(type)) reject("UNSUPPORTED_COMMAND","Unknown editing command.");
     auto& s=p["sequences"][find(p.at("sequences"),c.at("sequenceId"),"SEQUENCE_NOT_FOUND","Sequence not found.")];
-    if(type=="SetTitleImage") {
+    if(type=="PatchCaptionStyles") {
+        const auto& ids=c.at("captionIds");const auto& patch=c.at("patch");
+        if(!ids.is_array()||ids.empty()||ids.size()>4096||!patch.is_object()) reject("INVALID_CAPTION_STYLE","Expected 1-4096 caption IDs and a style patch.");
+        const auto defaults=default_caption_style();std::set<std::string> seen;
+        for(auto it=patch.begin();it!=patch.end();++it) if(!defaults.contains(it.key())) reject("INVALID_CAPTION_STYLE","Unknown style field.");
+        for(const auto& id:ids) {
+            if(!seen.insert(guid(id)).second) reject("INVALID_CAPTION_STYLE","Duplicate caption ID.",id);
+            json* target=nullptr;
+            for(auto& track:s["tracks"]) for(auto& caption:track["captions"]) if(caption.at("id")==id) target=&caption;
+            if(!target) reject("CAPTION_NOT_FOUND","Caption not found.",id);
+            auto style=field(*target,"style");if(style.is_null()) style=defaults;
+            bool changed=false;
+            for(auto it=patch.begin();it!=patch.end();++it) if(!it.value().is_null()) {style[it.key()]=it.value();changed=true;}
+            if(!valid_caption_style(style)) reject("INVALID_CAPTION_STYLE","Invalid caption style.",id);
+            if(changed) (*target)["style"]=style;
+        }
+    }
+    else if(type=="SetTitleImage") {
         s["titleImage"]=c.at("selection"); sync_title(s);
     }
     else if(type=="ReserveTitleFrame") {
@@ -408,7 +451,7 @@ json apply(json p,const json& request) {
         else s["tracks"][index][type=="InsertClip"?"clips":"captions"].push_back(c.at(type=="InsertClip"?"clip":"caption"));
     }
     else {
-        bool caption=type=="UpdateCaption"||type=="DeleteCaption"; auto id=c.at(caption?"captionId":"clipId"); size_t ti=0,ci=0; bool found=false;
+        bool caption=type=="SetCaptionStyle"||type=="UpdateCaption"||type=="DeleteCaption"; auto id=c.at(caption?"captionId":"clipId"); size_t ti=0,ci=0; bool found=false;
         for(;ti<s.at("tracks").size();++ti) {const auto& values=s.at("tracks")[ti].at(caption?"captions":"clips"); for(ci=0;ci<values.size();++ci) if(values[ci].at("id")==id) {found=true; break;} if(found) break;}
         if(!found) reject(caption?"CAPTION_NOT_FOUND":"CLIP_NOT_FOUND",caption?"Caption not found.":"Clip not found.",id);
         auto& values=s["tracks"][ti][caption?"captions":"clips"];
@@ -530,6 +573,7 @@ json apply(json p,const json& request) {
             if(points.empty()) curves.erase(curve);
             std::stable_sort(curves.begin(),curves.end(),[](const json& a,const json& b){return integer(a.at("property"))<integer(b.at("property"));});
         }
+        else if(type=="SetCaptionStyle") values[ci]["style"]=c.at("style");
         else if(type=="UpdateCaption") for(const char* k:{"startTicks","durationTicks","text","enabled"}) values[ci][k]=c.at(k);
     }
     return p;

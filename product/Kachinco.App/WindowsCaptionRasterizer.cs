@@ -12,6 +12,8 @@ namespace Kachinco.App;
 // A shared raster input, never a screenshot of the editor's viewport.
 public sealed class WindowsCaptionRasterizer(Dispatcher dispatcher) : ICaptionRasterizer
 {
+    private readonly HashSet<string> installedFonts = Fonts.SystemFontFamilies.Select(f=>f.Source).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static Brush Brush(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
     public async ValueTask<ImmutableArray<byte>> RasterizeAsync(ImmutableArray<EvaluatedCaption> captions, int width, int height, CancellationToken token)
     {
         return await dispatcher.InvokeAsync(() =>
@@ -20,17 +22,29 @@ public sealed class WindowsCaptionRasterizer(Dispatcher dispatcher) : ICaptionRa
             var visual = new DrawingVisual();
             using (var drawing = visual.RenderOpen())
             {
-                double fontSize = Math.Min(width, height) / 24d;
+                double scale = Math.Min(width, height) / 1080d;
                 double bottom = height * .90;
                 foreach (var caption in captions.Reverse())
                 {
+                    token.ThrowIfCancellationRequested();
+                    var style = caption.Style ?? CaptionStyle.Default;
+                    var font = installedFonts.Contains(style.FontFamily) ? style.FontFamily : "Yu Gothic";
+                    double fontSize = style.FontSize * scale, textWidth = width * style.MaxWidth;
                     var text = new FormattedText(caption.Text, CultureInfo.GetCultureInfo("ja-JP"), FlowDirection.LeftToRight,
-                        new Typeface("Yu Gothic"), fontSize, Brushes.White, 1d)
-                    { MaxTextWidth = width * .84, TextAlignment = TextAlignment.Center };
-                    var origin = new Point(width * .08, bottom - text.Height);
+                        new Typeface(font), fontSize, Brush(style.Color), 1d)
+                    { MaxTextWidth = textWidth, TextAlignment = Enum.Parse<TextAlignment>(style.Alignment) };
+                    double left = width * style.X - (style.Alignment == "Left" ? 0 : style.Alignment == "Right" ? textWidth : textWidth / 2);
+                    double anchor = caption.Style is null ? bottom : height * style.Y;
+                    double top = anchor - (style.VerticalAnchor == "Top" ? 0 : style.VerticalAnchor == "Center" ? text.Height / 2 : text.Height);
+                    var origin = new Point(left,top);
                     var geometry = text.BuildGeometry(origin);
-                    drawing.DrawGeometry(Brushes.White, new Pen(Brushes.Black, fontSize / 12), geometry);
-                    bottom -= text.Height + fontSize * .4;
+                    if(style.ShadowEnabled)
+                    {
+                        drawing.PushTransform(new TranslateTransform(style.ShadowX * scale,style.ShadowY * scale));
+                        drawing.DrawGeometry(Brush(style.ShadowColor),null,geometry); drawing.Pop();
+                    }
+                    drawing.DrawGeometry(Brush(style.Color), style.OutlineWidth == 0 ? null : new Pen(Brush(style.OutlineColor), style.OutlineWidth * scale), geometry);
+                    if(caption.Style is null) bottom -= text.Height + fontSize * .4;
                 }
             }
             var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
