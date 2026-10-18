@@ -145,7 +145,9 @@ public sealed class Mp4TitleReplacementTests
             string delayed = Path.Combine(dir, "delayed.mp4"), output = Path.Combine(dir, "fixed.mp4");
             // Reproduce the real NVENC file's three-frame DTS lead with unchanged PTS.
             await Run("ffmpeg", ["-v", "error", "-i", source, "-map", "0", "-c", "copy",
-                "-bsf:v", "setts=pts=PTS:dts=DTS-512", "-avoid_negative_ts", "disabled", delayed]);
+                "-bsf:v", "setts=pts=PTS:dts=DTS-1/30/TB", "-avoid_negative_ts", "disabled",
+                "-video_track_timescale", "15360", "-movie_timescale", "1000", delayed]);
+            // Pin both timescales: FFmpeg builds can choose a different movie clock.
             // Movie edit duration is 6033 ms; packet end is 6033 1/3 ms (-5 video ticks).
             SetVideoEditDuration(delayed, 6033);
             using (var metadata = JsonDocument.Parse(await Run("ffprobe", ["-v", "error", "-select_streams", "v:0",
