@@ -16,6 +16,7 @@ internal static class Program
         {
             try
             {
+                if (args is ["--caption-timing"]) { await CaptionTimingChecks.Run(); exit = 0; return; }
                 if(args is ["--caption-styles",var screenshot]) { await CaptionStyleChecks.Run(screenshot);exit=0;return; }
                 if (args is ["--export-bench", var project, var output, var device])
                 {
@@ -35,6 +36,7 @@ internal static class Program
                 var main = new MainWindow(); main.Show();
                 await TimelineLayoutChecks.Run(main);
                 await TimelineRippleChecks.Run();
+                await CaptionTimingChecks.Run();
                 await CreationWorkflowChecks.Run();
                 await InspectorChecks.Run(main);
                 await CaptionStyleChecks.Run();
@@ -44,15 +46,15 @@ internal static class Program
                 await PreviewFrameChecks.Run(main);
                 await GpuExportChecks.Run(main);
                 var compiler = new RecipeCompiler();
-                var compiled = await compiler.CompileAsync("text(text='グエー', x=10, y=20)\nparticles(count=3,x=30,y=100,size=3)");
+                var compiled = await compiler.CompileAsync("text(text='�O�G�[', x=10, y=20)\nparticles(count=3,x=30,y=100,size=3)");
                 if (!compiled.Success) throw new Exception(string.Join(";",compiled.Diagnostics.Select(d=>d.Message)));
                 var clapper = new Clapper(Guid.NewGuid(),"A-1",0,TimelineTime.TicksPerSecond,new(ClapperGeometryKind.Rectangle,0,0,500,500),null,null,"");
-                var recipe = new Recipe(Guid.NewGuid(),clapper.Id,"text(text='グエー')",1,42,"1","1");
+                var recipe = new Recipe(Guid.NewGuid(),clapper.Id,"text(text='�O�G�[')",1,42,"1","1");
                 var renderer = new WindowsRecipeRasterizer(app.Dispatcher);
                 var a = await renderer.RenderAsync(compiled.Value!,recipe,clapper,SequenceSettings.Landscape,TimelineTime.TicksPerSecond/2,default);
                 var b = await renderer.RenderAsync(compiled.Value!,recipe,clapper,SequenceSettings.Landscape,TimelineTime.TicksPerSecond/2,default);
                 if (!a.SequenceEqual(b) || !a.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Recipe RGBA determinism/visible output failed.");
-                var caption = await new WindowsCaptionRasterizer(app.Dispatcher).RasterizeAsync([new(Guid.NewGuid(),Guid.NewGuid(),"存在薄明")],1920,1080,default);
+                var caption = await new WindowsCaptionRasterizer(app.Dispatcher).RasterizeAsync([new(Guid.NewGuid(),Guid.NewGuid(),"���ݔ���")],1920,1080,default);
                 if (!caption.Where((_,i)=>i%4==3).Any(x=>x>0)) throw new Exception("Caption rasterization is empty.");
                 await InteractivePreviewChecks.Run(main);
                 main.Close(); exit=0; Console.WriteLine("Windows Recipe worker limits, repeatable RGBA, captions and shell: PASS");
