@@ -127,5 +127,6 @@
   <system:String x:Key="Shell.TitleClear">タイトル画像の選択を解除</system:String>
   <system:String x:Key="Shell.TitleReserve">先頭1フレームを確保 / 適用</system:String>
   <system:String x:Key="Shell.TitleRelease">先頭1フレームの確保を解除</system:String>
+  <system:String x:Key="Shell.ReplaceMp4Title">完成MP4の先頭フレームを差し替え…</system:String>
 </ResourceDictionary>
 
