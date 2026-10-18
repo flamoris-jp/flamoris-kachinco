@@ -23,4 +23,6 @@ fast/CRF 18 and copies later video and original AAC. The opening can lose some q
 if no suitable later IDR exists, the preview explicitly reports full-video encoding.
 Cancellation/failure does not publish incomplete output or overwrite input files.
 
+MP4の総尺ヘッダーにはミリ秒単位の丸めがあり、再muxで1ms程度の表記差が生じる場合があります。実際のフレーム数・表示時刻・音声時刻は維持します。NVIDIA書き出しとCPU書き出しで異なるデコード時刻の開始位置も、接続前に合わせます。
+
 See [ADR 0023](decisions/0023-exported-mp4-first-frame.md) for supported input and validation.

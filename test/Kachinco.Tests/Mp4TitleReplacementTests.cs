@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Buffers.Binary;
+using System.Collections.Immutable;
+using Kachinco.Core;
 using System.Text.Json;
 using Kachinco.Infrastructure;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -131,6 +134,96 @@ public sealed class Mp4TitleReplacementTests
                 "Transparent title must composite on black, not the previous video image.");
         }
         finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
+    public async Task RoundedEditDurationAndNvencStyleDecodeLeadRetainTheCfrGrid()
+    {
+        string dir = NewDirectory();
+        try
+        {
+            var (source, image) = await Fixture(dir, "30", 3, 181, 60, true);
+            string delayed = Path.Combine(dir, "delayed.mp4"), output = Path.Combine(dir, "fixed.mp4");
+            // Reproduce the real NVENC file's three-frame DTS lead with unchanged PTS.
+            await Run("ffmpeg", ["-v", "error", "-i", source, "-map", "0", "-c", "copy",
+                "-bsf:v", "setts=pts=PTS:dts=DTS-1/30/TB", "-avoid_negative_ts", "disabled",
+                "-video_track_timescale", "15360", "-movie_timescale", "1000", delayed]);
+            // Pin both timescales: FFmpeg builds can choose a different movie clock.
+            // Movie edit duration is 6033 ms; packet end is 6033 1/3 ms (-5 video ticks).
+            SetVideoEditDuration(delayed, 6033);
+            using (var metadata = JsonDocument.Parse(await Run("ffprobe", ["-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=duration_ts", "-of", "json", delayed])))
+                Assert.AreEqual(181 * 512 - 5, metadata.RootElement.GetProperty("streams")[0].GetProperty("duration_ts").GetInt64());
+            var service = new Mp4TitleReplacement(); var plan = await service.PrepareAsync(delayed, image);
+            Assert.AreEqual(181, plan.FrameCount); Assert.AreEqual(60, plan.ReencodedFrames);
+            await service.ReplaceAsync(plan, output);
+            await Run("ffmpeg", ["-v", "error", "-xerror", "-i", output, "-f", "null", "-"]);
+            CollectionAssert.AreEqual(await PacketTimes(delayed), await PacketTimes(output));
+            var before = await FrameHashes(delayed); var after = await FrameHashes(output);
+            CollectionAssert.AreEqual(before[60..], after[60..]);
+            // A genuinely truncated duration must still fail, even with complete packets.
+            SetVideoEditDuration(delayed, 6023);
+            await Assert.ThrowsAsync<InvalidDataException>(() => service.PrepareAsync(delayed, image));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [TestMethod]
+    public async Task RealKachincoCpuExportWithUnspecifiedPixelAspectCanBeRetitled()
+    {
+        string dir = NewDirectory();
+        try
+        {
+            string source = Path.Combine(dir, "cpu.mp4"), image = Path.Combine(dir, "title.png");
+            var request = new EncodingRequest(Guid.NewGuid(), source, ExportPreset.YoutubeH264AacMp4,
+                SequenceSettings.Landscape, 4, 48000, 2, 6400);
+            var encoded = await new FfmpegEncodingBackend().EncodeAsync(request, new FourBlueFrames(), new(null, VideoEncoderPreference.Cpu), null, default);
+            Assert.AreEqual(ExportStage.Completed, encoded.Stage, string.Join(";", encoded.Diagnostics.Select(d => d.Message)));
+            await Run("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "color=red:s=160x90", "-frames:v", "1", "-threads", "1", image]);
+            var service = new Mp4TitleReplacement(); var plan = await service.PrepareAsync(source, image);
+            Assert.AreEqual(4, plan.FrameCount);
+            string output = Path.Combine(dir, "title.mp4"); await service.ReplaceAsync(plan, output);
+            CollectionAssert.AreEqual(await PacketTimes(source), await PacketTimes(output));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    private sealed class FourBlueFrames : IRenderedMediaSource
+    {
+        public async IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+        {
+            byte[] bytes = new byte[1920 * 1080 * 4];
+            for (int i = 0; i < bytes.Length; i += 4) { bytes[i + 2] = 255; bytes[i + 3] = 255; }
+            var rgba = ImmutableArray.CreateRange(bytes);
+            for (int i = 0; i < 4; i++) { token.ThrowIfCancellationRequested(); yield return new(i, TimelineTime.FrameToTicks(i, new(30, 1)), 1920, 1080, rgba); }
+            await Task.CompletedTask;
+        }
+        public async IAsyncEnumerable<RenderedAudioBlock> ReadAudioAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            yield return new(0, 48000, 2, ImmutableArray.CreateRange(new float[12800]));
+            await Task.CompletedTask;
+        }
+    }
+    // Patch only a small generated fixture's first video edit-list duration. Packet
+    // bytes and sample timing stay untouched, reproducing the reported NVENC header.
+    private static void SetVideoEditDuration(string path, uint milliseconds)
+    {
+        byte[] data = File.ReadAllBytes(path);
+        (int Offset, int Size) Child(int start, int end, string kind)
+        {
+            for (int at = start; at + 8 <= end;)
+            {
+                int size = checked((int)BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(at, 4)));
+                Assert.IsTrue(size >= 8 && size <= end - at);
+                if (System.Text.Encoding.ASCII.GetString(data, at + 4, 4) == kind) return (at, size);
+                at += size;
+            }
+            throw new AssertFailedException("Missing fixture box: " + kind);
+        }
+        var box = Child(0, data.Length, "moov");
+        foreach (string kind in new[] { "trak", "edts", "elst" }) box = Child(box.Offset + 8, box.Offset + box.Size, kind);
+        Assert.AreEqual((byte)0, data[box.Offset + 8]);
+        Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(box.Offset + 12, 4)));
+        BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(box.Offset + 16, 4), milliseconds);
+        File.WriteAllBytes(path, data);
     }
     private sealed class CallbackProgress(Action<string> action) : IProgress<string> { public void Report(string value) => action(value); }
     private static string NewDirectory()

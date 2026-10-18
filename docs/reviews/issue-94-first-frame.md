@@ -66,3 +66,32 @@ For re-encoded source frames 1–59 (excluding intentionally replaced frame zero
 SSIM reports **All: 0.998615**. This is additional compression, not lossless equivalence.
 Source and replacement decode strictly without errors. Physical playback/subjective
 quality are not claimed by this synthetic check.
+
+## Production-file regression and correction (2026-10-18)
+
+A reported 1920×1080 / 30fps NVENC MP4 contained 3307 frames, each with exact
+512-tick packet duration at timebase 1/15360. All PTS were precisely on the frame
+grid; DTS were strictly increasing. The MP4 `duration_ts` summary was 1693179,
+while the nominal packet end was 1693184: a five-tick (0.326ms) edit-list rounding
+difference, incorrectly rejected as non-CFR by the first implementation.
+
+The same file also had initial DTS -1536 (three frames) despite `has_b_frames=2`.
+An x264 opening started at -1024. Simply loosening the duration check would still
+fail the splice. Align the encoded opening's actual DTS while explicitly preserving
+PTS, then retain copied-body DTS in runtime validation. A separate actual CPU-export
+reproduction exposed absent SAR metadata; unspecified SAR is now accepted.
+
+Corrected end-to-end production-file experiment: 3307 input/output frames, 250
+re-encoded + 3057 copied, 6.894 seconds for replacement including verification
+(excludes initial preparation). Strict full decode passed. Every copied decoded
+picture matches exactly; copied-body PTS/DTS/durations match; original AAC packet
+hashes/times and complete decoded PCM hash match. Audio duration remains 5291184
+samples at 48kHz. Video header duration normalized from 1693179 to 1693184 ticks
+on this FFmpeg version; this sub-millisecond summary rounding does not add or
+remove a frame or shift sound. The original upload was not modified or committed.
+
+Regression additions: synthetic three-frame DTS lead plus a 6033ms rounded video
+edit duration (-5 video ticks), rejection of a 10ms-too-short edit duration, and
+four frames written by the real CPU encoding backend with unspecified SAR.
+Targeted suite: 12/12 pass; native contracts: 5/5 pass. Final CI is recorded on the
+fix PR; physical Mango playback is separate from these Linux decoding checks.
