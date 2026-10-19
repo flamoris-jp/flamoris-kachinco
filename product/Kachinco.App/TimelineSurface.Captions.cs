@@ -41,9 +41,9 @@ public partial class TimelineSurface
             }
             thumb.ToolTip = edge switch
             {
-                TrimEdge.Start => EditorText.Choose("�����̊J�n�𒲐�", "Adjust caption start"),
-                TrimEdge.End => EditorText.Choose("�����̏I���𒲐�", "Adjust caption end"),
-                _ => EditorText.Choose("���������E�Ɉړ�", "Move caption horizontally")
+                TrimEdge.Start => EditorText.Choose("字幕の開始を調整", "Adjust caption start"),
+                TrimEdge.End => EditorText.Choose("字幕の終了を調整", "Adjust caption end"),
+                _ => EditorText.Choose("字幕を左右に移動", "Move caption horizontally")
             };
             thumb.DragStarted += (_, _) =>
             {
