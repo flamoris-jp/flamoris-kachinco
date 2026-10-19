@@ -461,7 +461,8 @@ public partial class MainWindow : Window
         SnappingButton.IsChecked = Timeline.SnappingEnabled;
         SnappingMenuItem.IsChecked = Timeline.SnappingEnabled;
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
-        Title = $"{(IsDirty() ? "* " : "")}{project?.Name ?? "FLAMORIS Kachinco"} — Kachinco";
+        string documentName = filename is null ? project?.Name ?? "FLAMORIS Kachinco" : System.IO.Path.GetFileNameWithoutExtension(filename);
+        Title = $"{(IsDirty() ? "* " : "")}{documentName} — Kachinco";
         if (message is not null) Status.Text = message;
         refreshing = false;
         RefreshInspector(); RefreshTimelineStatus();
