@@ -181,7 +181,7 @@ public partial class TimelineSurface : UserControl
             dropGhost = new Border { Width = Math.Max(1, ToDouble(viewport.TicksToPixels(asset.DurationTicks))),
                 Height = geometry.Row(row).ClipHeight, Background = new SolidColorBrush(Color.FromArgb(90, 210, 11, 58)),
                 BorderBrush = Brushes.White, BorderThickness = new Thickness(1), IsHitTestVisible = false,
-                Child = new TextBlock { Text = $"{asset.Name} �E {FormatTime(ticks)}", Foreground = Brushes.White, Margin = new Thickness(8, 2, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis } };
+                Child = new TextBlock { Text = $"{asset.Name} ・ {FormatTime(ticks)}", Foreground = Brushes.White, Margin = new Thickness(8, 2, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis } };
             Canvas.SetLeft(dropGhost, ToDouble(Coordinates.ContentX(ticks)));
             Canvas.SetTop(dropGhost, geometry.Row(row).ClipTop);
             Panel.SetZIndex(dropGhost, 4);
@@ -262,7 +262,7 @@ public partial class TimelineSurface : UserControl
             if (lane.TrackId is not { } trackId)
             {
                 var label = lane.Kind == TrackKind.Video ? "+ V" : "+ A";
-                DrawTrack(new(Guid.Empty, EditorText.Choose("�h���b�v�Œǉ�", "Drop to add"), lane.Kind, true, [], []), label, row, width);
+                DrawTrack(new(Guid.Empty, EditorText.Choose("ドロップで追加", "Drop to add"), lane.Kind, true, [], []), label, row, width);
                 continue;
             }
             var track = sequence.Tracks.First(t => t.Id == trackId);
@@ -272,7 +272,7 @@ public partial class TimelineSurface : UserControl
         }
         foreach (var clapper in sequence.Clappers)
         {
-            var marker = new TextBlock { Text = "�� " + clapper.Name, Foreground = Brushes.Gold, FontSize = 10, IsHitTestVisible = false };
+            var marker = new TextBlock { Text = "◆ " + clapper.Name, Foreground = Brushes.Gold, FontSize = 10, IsHitTestVisible = false };
             Canvas.SetLeft(marker, ToDouble(viewport.TicksToPixels(clapper.StartTicks))); Canvas.SetTop(marker, 15); RulerCanvas.Children.Add(marker);
         }
         DrawPlayhead(height);
@@ -332,7 +332,7 @@ public partial class TimelineSurface : UserControl
         TimelineCanvas.Children.Add(background);
         if (track.Id == Guid.Empty)
         {
-            var hint = new TextBlock { Text = EditorText.Choose("�f�ނ��h���b�v���ăg���b�N��ǉ�", "Drop media to add a track"), Foreground = Brushes.Gray, FontSize = 11, IsHitTestVisible = false };
+            var hint = new TextBlock { Text = EditorText.Choose("素材をドロップしてトラックを追加", "Drop media to add a track"), Foreground = Brushes.Gray, FontSize = 11, IsHitTestVisible = false };
             Canvas.SetTop(hint, geometry.Row(row).Top + 4); Canvas.SetLeft(hint, HorizontalScroll.Value + 8); TimelineCanvas.Children.Add(hint);
         }
         var separator = new Rectangle { Width = width, Height = 1, Fill = header.BorderBrush, IsHitTestVisible = false };
@@ -369,7 +369,7 @@ public partial class TimelineSurface : UserControl
             VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false
         });
         if (TimelineEditPlanner.Overlaps(track, clip.StartTicks, clip.DurationTicks, clip.Id))
-            grid.ToolTip += "\n" + EditorText.Choose("����g���b�N�ŏd�Ȃ��Ă��܂��B�f���͏��ɍ����A�����͉��Z����܂��B", "Same-track overlap: ordered video composition / summed audio.");
+            grid.ToolTip += "\n" + EditorText.Choose("同じトラックで重なっています。映像は順に合成、音声は加算されます。", "Same-track overlap: ordered video composition / summed audio.");
         AddMediaVisual(grid, clip, width, geometry.Row(row));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Left, TrimEdge.Start));
         grid.Children.Add(TrimThumb(state, HorizontalAlignment.Right, TrimEdge.End));
@@ -384,7 +384,7 @@ public partial class TimelineSurface : UserControl
     {
         var thumb = GestureThumb();
         thumb.Width = Math.Min(7, state.Width / 3); thumb.HorizontalAlignment = alignment;
-        thumb.ToolTip = edge == TrimEdge.Start ? EditorText.Choose("�J�n�ʒu���g����", "Trim start") : EditorText.Choose("�I���ʒu���g����", "Trim end");
+        thumb.ToolTip = edge == TrimEdge.Start ? EditorText.Choose("開始位置をトリム", "Trim start") : EditorText.Choose("終了位置をトリム", "Trim end");
         var handle = new FrameworkElementFactory(typeof(Border));
         handle.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
         handle.SetValue(Border.BorderBrushProperty, Brushes.White);
@@ -406,7 +406,7 @@ public partial class TimelineSurface : UserControl
         Panel.SetZIndex(line, 3);
         canvasPlayhead = line; TimelineCanvas.Children.Add(line);
         playheadHandle = GestureThumb(); playheadHandle.Width = 10; playheadHandle.Height = height;
-        playheadHandle.Cursor = Cursors.SizeWE; playheadHandle.ToolTip = EditorText.Choose("�h���b�O���ăt���[�����m�F", "Drag to scrub");
+        playheadHandle.Cursor = Cursors.SizeWE; playheadHandle.ToolTip = EditorText.Choose("ドラッグしてフレームを確認", "Drag to scrub");
         playheadHandle.DragStarted += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
         playheadHandle.DragDelta += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
         playheadHandle.DragCompleted += (_, _) => SetPlayhead(Mouse.GetPosition(TimelineViewportHost).X);
