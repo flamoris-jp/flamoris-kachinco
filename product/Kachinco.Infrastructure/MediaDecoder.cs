@@ -51,9 +51,21 @@ public sealed class FfmpegMediaDecoder(string executable = "ffmpeg") : IMediaDec
     public async Task<ImmutableArray<float>> AudioAsync(string path, long sourceTicks, int count, int rate, int channels, CancellationToken token)
     {
         int size = checked(count * channels * 4);
+        long decodeTicks = sourceTicks;
+        long skipSamples = 0;
+        if (Path.GetExtension(path).Equals(".mp3", StringComparison.OrdinalIgnoreCase))
+        {
+            // A fresh MP3 seek lacks the earlier bit reservoir and synthesis history.
+            // Decode 1-2 seconds of preroll, then discard it after resampling. Whole
+            // second seek positions also preserve the 44.1 -> 48 kHz resampling phase.
+            decodeTicks = Math.Max(0, sourceTicks / TimelineTime.TicksPerSecond - 1) * TimelineTime.TicksPerSecond;
+            skipSamples = TimelineTime.SampleCount(sourceTicks - decodeTicks, rate);
+        }
+        string filter = skipSamples == 0 ? $"aresample={rate},atrim=end_sample={count}" :
+            $"aresample={rate},atrim=start_sample={skipSamples}:end_sample={checked(skipSamples + count)}";
         var bytes = await MediaProcess.ReadAsync(executable,
-            ["-v", "error", "-nostdin", "-ss", Seconds(sourceTicks), "-i", Path.GetFullPath(path), "-map", "0:a:0",
-             "-vn", "-af", $"aresample={rate},atrim=end_sample={count}", "-ac", channels.ToString(CultureInfo.InvariantCulture),
+            ["-v", "error", "-nostdin", "-ss", Seconds(decodeTicks), "-i", Path.GetFullPath(path), "-map", "0:a:0",
+             "-vn", "-af", filter, "-ac", channels.ToString(CultureInfo.InvariantCulture),
              "-ar", rate.ToString(CultureInfo.InvariantCulture), "-f", "f32le", "pipe:1"], size, token);
         return ImmutableArray.CreateRange(NativeDecodedMedia.Pcm(bytes, count, channels));
     }
