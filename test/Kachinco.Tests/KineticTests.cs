@@ -97,6 +97,15 @@ public sealed class KineticTests
         }
         finally {Directory.Delete(directory,true);}
     }
+    [TestMethod]
+    public void SongLengthIsIndependentOfOldRecipeLimitAndActiveClipsAreBounded()
+    {
+        var d=KineticComposition.New();var clips=new JsonArray();
+        for(int i=0;i<300;++i) clips.Add(KineticComposition.Clip("歌詞 "+i,TimelineTime.SecondsToTicks(i*2),TimelineTime.SecondsToTicks(2)));
+        d["clips"]=clips;d["durationTicks"]=TimelineTime.SecondsToTicks(600).ToString();KineticComposition.Validate(d);
+        var overlap=new JsonArray();for(int i=0;i<129;++i)overlap.Add(KineticComposition.Clip("overlap",0,TimelineTime.TicksPerSecond));
+        d["clips"]=overlap;Assert.ThrowsExactly<InvalidDataException>(()=>KineticComposition.Validate(d));
+    }
     private sealed class MaskDecoder(string mask) : IMediaDecoder
     {
         public List<long> Ticks { get; } = [];

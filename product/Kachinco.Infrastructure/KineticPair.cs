@@ -99,7 +99,7 @@ public static class KineticPair
         int width = root["width"]!.GetValue<int>(), height = root["height"]!.GetValue<int>();
         var fps = FrameRate.Create(root["fpsNumerator"]!.GetValue<int>(), root["fpsDenominator"]!.GetValue<int>());
         long duration = KineticComposition.Tick(root, "durationTicks"), frames = KineticComposition.Tick(root, "frameCount");
-        if (duration != KineticComposition.Duration(composition) || frames != TimelineTime.FrameCount(duration, fps) || width != composition["width"]!.GetValue<int>() || height != composition["height"]!.GetValue<int>()) throw new InvalidDataException("Mask pair metadata mismatch.");
+        if (fps.Numerator != composition["fpsNumerator"]!.GetValue<int>() || fps.Denominator != composition["fpsDenominator"]!.GetValue<int>() || duration != KineticComposition.Duration(composition) || frames != TimelineTime.FrameCount(duration, fps) || width != composition["width"]!.GetValue<int>() || height != composition["height"]!.GetValue<int>()) throw new InvalidDataException("Mask pair metadata mismatch.");
         string directory = Path.GetDirectoryName(full)!;
         async Task<string> ReadEntry(string key)
         {
@@ -115,6 +115,7 @@ public static class KineticPair
     }
     private static async Task VerifyStreamAsync(string path, int width, int height, FrameRate fps, long frames, CancellationToken token)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromMinutes(2)); token = timeout.Token;
         // Frame PTS are checked as a bounded streaming ffprobe output, not loaded for a song.
         using var process = new Process { StartInfo = MediaProcess.StartInfo("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate,nb_frames,color_range:frame=best_effort_timestamp_time", "-of", "compact=p=1:nk=0", path]) };
         process.StartInfo.RedirectStandardOutput = true; process.Start();

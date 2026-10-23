@@ -32,6 +32,9 @@ int main(){
     REQUIRE(kn_text_render(renderer,bytes,size,0,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);
     REQUIRE(kn_text_render(renderer,bytes,size,12345678,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);REQUIRE(pixels==again);
     REQUIRE(kn_text_render(renderer,bytes,size,176400000,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);REQUIRE(std::all_of(again.begin(),again.end(),[](uint8_t n){return n==0;}));
+    auto translucent=d;translucent["clips"][0]["text"]="M";translucent["clips"][0]["program"]["ops"]=json::array({{{"op","opacity"},{"value",0.5}}});auto ts=translucent.dump();
+    REQUIRE(kn_text_render(renderer,reinterpret_cast<const uint8_t*>(ts.data()),static_cast<uint32_t>(ts.size()),0,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);
+    uint8_t maximum_alpha=0;for(size_t i=3;i<again.size();i+=4)maximum_alpha=std::max(maximum_alpha,again[i]);REQUIRE(maximum_alpha>0&&maximum_alpha<=129);
     kn_text_renderer_destroy(renderer);
 #else
     REQUIRE(kn_text_renderer_create(0,&renderer,&error)==KN_GPU_UNSUPPORTED&&renderer==nullptr);

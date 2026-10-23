@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <d2d1_1.h>
+#include <d2d1_1helper.h>
 #include <dwrite.h>
 #include <wrl/client.h>
 #include <map>
@@ -63,7 +64,7 @@ struct kn_text_renderer {
     std::mutex gate;bool warp=false;std::string adapter;int width=0,height=0;
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;ComPtr<ID2D1Factory1> factory;ComPtr<ID2D1Device> d2d;ComPtr<ID2D1DeviceContext> draw;ComPtr<IDWriteFactory> write;
     ComPtr<ID3D11Texture2D> target,readback;ComPtr<ID2D1Bitmap1> bitmap;ComPtr<ID2D1SolidColorBrush> brush;
-    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0;std::string source;kn_text::json document;
+    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0;std::string cached_source;kn_text::json document;
     explicit kn_text_renderer(bool use_warp):warp(use_warp) {
         D3D_FEATURE_LEVEL level;check(D3D11CreateDevice(nullptr,warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
         ComPtr<IDXGIDevice> dxgi;check(device.As(&dxgi));ComPtr<IDXGIAdapter> ad;check(dxgi->GetAdapter(&ad));DXGI_ADAPTER_DESC description{};check(ad->GetDesc(&description));adapter=utf8(description.Description);
@@ -95,7 +96,7 @@ void KN_CALL kn_text_renderer_destroy(kn_text_renderer* r) noexcept {delete r;}
 int32_t KN_CALL kn_text_render(kn_text_renderer* r,const uint8_t* data,uint32_t size,int64_t tick,int32_t width,int32_t height,uint8_t* bgra,uint32_t capacity,int32_t* error) noexcept {
     if(!r||!data||!size||size>16*1024*1024||!bgra||!error||tick<0||width<1||height<1||width>4096||height>4096||capacity!=static_cast<uint32_t>(width*height*4))return KN_INVALID_ARGUMENT;
     *error=0;try {
-        std::lock_guard<std::mutex> lock(r->gate);std::string source(reinterpret_cast<const char*>(data),size);if(source!=r->source){auto next=kn_editor::parse(source);kn_text::validate(next);r->document=std::move(next);r->source=std::move(source);}const auto& d=r->document;r->resize(width,height);r->faces.clear();r->warnings.clear();r->draw->BeginDraw();r->draw->SetTransform(D2D1::Matrix3x2F::Identity());r->draw->Clear(D2D1::ColorF(0,0,0,0));
+        std::lock_guard<std::mutex> lock(r->gate);std::string source(reinterpret_cast<const char*>(data),size);if(source!=r->cached_source){auto next=kn_editor::parse(source);kn_text::validate(next);r->document=std::move(next);r->cached_source=std::move(source);}const auto& d=r->document;r->resize(width,height);r->faces.clear();r->warnings.clear();r->draw->BeginDraw();r->draw->SetTransform(D2D1::Matrix3x2F::Identity());r->draw->Clear(D2D1::ColorF(0,0,0,0));
         try {
             const float sx=static_cast<float>(width)/d.at("width").get<float>(),sy=static_cast<float>(height)/d.at("height").get<float>();
             for(const auto& clip:d.at("clips")) {
@@ -103,11 +104,15 @@ int32_t KN_CALL kn_text_render(kn_text_renderer* r,const uint8_t* data,uint32_t 
                 auto& layout=r->get_layout(clip,d.at("width").get<int>(),d.at("height").get<int>());r->faces.insert(layout.faces.begin(),layout.faces.end());if(!layout.warning.empty())r->warnings.insert(layout.warning);
                 for(const auto& glyph:layout.shapes) {
                     auto m=kn_text::evaluate(clip,tick,glyph.unit);if(m.opacity<=0)continue;
+                    r->draw->SetTransform(D2D1::Matrix3x2F::Identity());
+                    const bool group_opacity=m.opacity<1;
+                    if(group_opacity){auto parameters=D2D1::LayerParameters1();parameters.opacity=static_cast<float>(m.opacity);r->draw->PushLayer(parameters,nullptr);}
                     auto matrix=D2D1::Matrix3x2F::Scale(static_cast<float>(m.scale),static_cast<float>(m.scale))*D2D1::Matrix3x2F::Rotation(static_cast<float>(m.rotation))*D2D1::Matrix3x2F::Translation(glyph.x+clip.at("x").get<float>()+static_cast<float>(m.x),glyph.y+clip.at("y").get<float>()+static_cast<float>(m.y));
-                    const auto color=[&](const kn_text::json& c){return D2D1::ColorF(c[0].get<float>(),c[1].get<float>(),c[2].get<float>(),c[3].get<float>()*static_cast<float>(m.opacity));};
+                    const auto color=[&](const kn_text::json& c){return D2D1::ColorF(c[0].get<float>(),c[1].get<float>(),c[2].get<float>(),c[3].get<float>());};
                     auto shadow=clip.at("shadowColor");if(shadow[3].get<double>()>0){auto sm=matrix*D2D1::Matrix3x2F::Translation(clip.at("shadowX").get<float>(),clip.at("shadowY").get<float>())*D2D1::Matrix3x2F::Scale(sx,sy);r->draw->SetTransform(sm);r->brush->SetColor(color(shadow));r->draw->FillGeometry(glyph.geometry.Get(),r->brush.Get());}
                     r->draw->SetTransform(matrix*D2D1::Matrix3x2F::Scale(sx,sy));float stroke=clip.at("strokeWidth").get<float>();if(stroke>0){r->brush->SetColor(color(clip.at("strokeColor")));r->draw->DrawGeometry(glyph.geometry.Get(),r->brush.Get(),stroke*2);}
                     r->brush->SetColor(color(clip.at("color")));r->draw->FillGeometry(glyph.geometry.Get(),r->brush.Get());
+                    if(group_opacity)r->draw->PopLayer();
                 }
             }
         }catch(...){r->draw->EndDraw();throw;}
