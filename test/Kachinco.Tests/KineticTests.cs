@@ -31,6 +31,9 @@ public sealed class KineticTests
         var invalid = (JsonObject)changed.DeepClone(); invalid["clips"]![0]!["program"]!["version"] = 55;
         Assert.IsFalse(session.Edit(invalid, 4)["success"]!.GetValue<bool>());
         Assert.IsTrue(JsonNode.DeepEquals(changed, session.Get()["document"]));
+        var excessive=(JsonObject)document.DeepClone();excessive["clips"]![0]!["program"]!["ops"]=new JsonArray(
+            new JsonObject{["op"]="scale",["value"]=100},new JsonObject{["op"]="scale",["value"]=100});
+        Assert.ThrowsExactly<InvalidDataException>(()=>KineticComposition.Validate(excessive));
         Assert.ThrowsExactly<InvalidDataException>(() => KineticComposition.Parse(document.ToJsonString().Replace("\"version\":1", "\"version\":1,\"version\":1")));
     }
     [TestMethod]

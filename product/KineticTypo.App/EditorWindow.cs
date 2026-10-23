@@ -90,6 +90,15 @@ public sealed partial class EditorWindow : Window
         }
         else if (args.Length == 1) Load(KineticComposition.Read(args[0]), args[0]);
         else Load(KineticComposition.New(), null);
+        PreviewKeyDown += (_, e) => {
+            bool control = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+            if (control && e.Key == System.Windows.Input.Key.S) { Guard(Save); e.Handled = true; }
+            else if (control && e.Key == System.Windows.Input.Key.O) { Guard(Open); e.Handled = true; }
+            else if (System.Windows.Input.Keyboard.FocusedElement is not TextBox) {
+                if (e.Key == System.Windows.Input.Key.Space) { TogglePlay(); e.Handled = true; }
+                else if (control && e.Key is System.Windows.Input.Key.Z or System.Windows.Input.Key.Y) { Guard(() => History(e.Key == System.Windows.Input.Key.Z ? "undo" : "redo")); e.Handled = true; }
+            }
+        };
         InitializeMcp(bar);
         Loaded += (_, _) => Render();
         Closing += (_, e) => {

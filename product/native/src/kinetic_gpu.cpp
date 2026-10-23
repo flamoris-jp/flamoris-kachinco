@@ -68,6 +68,7 @@ struct kn_text_renderer {
     explicit kn_text_renderer(bool use_warp):warp(use_warp) {
         D3D_FEATURE_LEVEL level;check(D3D11CreateDevice(nullptr,warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
         ComPtr<IDXGIDevice> dxgi;check(device.As(&dxgi));ComPtr<IDXGIAdapter> ad;check(dxgi->GetAdapter(&ad));DXGI_ADAPTER_DESC description{};check(ad->GetDesc(&description));adapter=utf8(description.Description);
+        ComPtr<IDXGIAdapter1> actual_adapter;check(ad.As(&actual_adapter));DXGI_ADAPTER_DESC1 actual_description{};check(actual_adapter->GetDesc1(&actual_description));if(!warp&&(actual_description.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)!=0)throw static_cast<HRESULT>(DXGI_ERROR_UNSUPPORTED);
         D2D1_FACTORY_OPTIONS options{};check(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,__uuidof(ID2D1Factory1),&options,reinterpret_cast<void**>(factory.GetAddressOf())));check(factory->CreateDevice(dxgi.Get(),&d2d));check(d2d->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,&draw));
         check(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),reinterpret_cast<IUnknown**>(write.GetAddressOf())));check(draw->CreateSolidColorBrush(D2D1::ColorF(1,1,1,1),&brush));draw->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     }

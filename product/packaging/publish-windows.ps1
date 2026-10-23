@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Force $bundle | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Editor publish failed.' }
 & dotnet publish (Join-Path $repositoryRoot 'product/KineticTypo.App/KineticTypo.App.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $bundle 'kinetai') /p:DebugType=None /p:DebugSymbols=false
 if ($LASTEXITCODE -ne 0) { throw 'KineticTypo companion publish failed.' }
-foreach ($required in @('KineticTypo.App.exe', 'Kachinco.Native.Runtime.dll', 'Kachinco.Native.dll', 'Kachinco.Infrastructure.dll', 'coreclr.dll', 'PresentationFramework.dll')) {
+foreach ($required in @('KineticTypo.App.exe', 'recipe-worker.py', 'Flamoris.Mcp.Wpf.dll', 'Kachinco.Native.Runtime.dll', 'Kachinco.Native.dll', 'Kachinco.Infrastructure.dll', 'coreclr.dll', 'PresentationFramework.dll')) {
     if (-not (Test-Path (Join-Path $bundle "kinetai/$required"))) { throw "KineticTypo dependency missing: $required" }
 }
 $hostNativeHash = (Get-FileHash (Join-Path $bundle 'Kachinco.Native.Runtime.dll')).Hash
@@ -56,4 +56,4 @@ Copy-Item (Join-Path $repositoryRoot 'staging/windows-native-phase2.md') (Join-P
 foreach ($required in @('BUILD-INFO.txt', 'START-HERE.md', 'NATIVE-ACCEPTANCE.md', 'licenses/Kachinco-LICENSE', 'licenses/nlohmann-json-LICENSE.MIT')) {
     if (-not (Test-Path -LiteralPath (Join-Path $bundle $required) -PathType Leaf)) { throw "Missing notice/provenance: $required" }
 }
-Complete-PortablePackage -PackageRoot $bundle -RepositoryRoot $repositoryRoot -AllowedSourcePaths @('recipe-worker.py')
+Complete-PortablePackage -PackageRoot $bundle -RepositoryRoot $repositoryRoot -AllowedSourcePaths @('recipe-worker.py', 'kinetai/recipe-worker.py')

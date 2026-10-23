@@ -51,10 +51,11 @@ void validate(const json& d) {
         for(auto k:{"x","y","shadowX","shadowY"}) number(c.at(k),-16384,16384);
         auto seed=kn_editor::integer(c.at("seed"));if(seed<0||seed>UINT32_MAX) throw std::invalid_argument("Kinetic seed");
         const auto& p=c.at("program");fields(p,{"version","ops"});if(!p.at("version").is_number_integer()||p.at("version")!=1||!p.at("ops").is_array()||p.at("ops").size()>32) throw std::invalid_argument("Kinetic IR version/limit");
+        double cumulative_scale=1;
         for(const auto& op:p.at("ops")) {
             auto type=op.at("op").get<std::string>();
             if(type=="translate"||type=="flight") {fields(op,type=="flight"?std::initializer_list<const char*>{"op","x","y","durationTicks"}:std::initializer_list<const char*>{"op","x","y"});number(op.at("x"),-16384,16384);number(op.at("y"),-16384,16384);if(type=="flight") ticks(op.at("durationTicks"),true);}
-            else if(type=="scale") {fields(op,{"op","value"});number(op.at("value"),0.01,100);}
+            else if(type=="scale") {fields(op,{"op","value"});cumulative_scale*=number(op.at("value"),0.01,100);if(cumulative_scale<0.001||cumulative_scale>1000)throw std::invalid_argument("Combined kinetic scale limit");}
             else if(type=="rotate") {fields(op,{"op","degrees"});number(op.at("degrees"),-36000,36000);}
             else if(type=="opacity") {fields(op,{"op","value"});number(op.at("value"),0,1);}
             else if(type=="shake") {fields(op,{"op","amplitude","frequency"});number(op.at("amplitude"),0,2048);number(op.at("frequency"),0,240);}
@@ -89,8 +90,9 @@ void response(const kn_text::json& value,kn_buffer** output) {auto s=value.dump(
 int32_t KN_CALL kn_text_create(kn_text_session** output) noexcept {if(!output)return KN_INVALID_ARGUMENT;*output=nullptr;try {auto s=std::make_unique<kn_text_session>();s->document=kn_text::initial();*output=s.release();return KN_OK;}catch(...){return KN_OUT_OF_MEMORY;}}
 void KN_CALL kn_text_destroy(kn_text_session* session) noexcept {delete session;}
 int32_t KN_CALL kn_text_request(kn_text_session* s,const uint8_t* data,uint32_t size,kn_buffer** output) noexcept {
-    if(!s||!output||!data||!size||size>16*1024*1024)return KN_INVALID_ARGUMENT;
+    if(!output)return KN_INVALID_ARGUMENT;
     *output=nullptr;
+    if(!s||!data||!size||size>16*1024*1024)return KN_INVALID_ARGUMENT;
     try {
         auto r=kn_editor::parse(std::string(reinterpret_cast<const char*>(data),size));std::lock_guard<std::mutex> lock(s->gate);
         auto action=r.at("action").get<std::string>();auto candidate=s->document;auto undo=s->undo,redo=s->redo;auto revision=s->revision;
