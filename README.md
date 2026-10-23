@@ -1,13 +1,23 @@
 # FLAMORIS Kachinco 🎬
 
-Linux headless CLI and resident Hub host: [Updater-based LIME setup and command reference](docs/linux-cli.md)
-(CPU composition / optional VAAPI encoding; physical LIME/AMD acceptance tracked separately in #100).
+**Windows desktop editor + Linux headless CLI**, sharing the same native editing and rendering engine.
+
+**Windowsの画面でも、LinuxのCLI・MCPでも、同じ編集エンジンで動画を制作できます。**
+
+[Linux CLI setup and command reference](docs/linux-cli.md) · [Physical LIME/AMD smoke result](docs/linux-cli-acceptance.md)
+
+CLI 0.1.1 has passed an external MCP edit → Japanese-caption preview → save →
+VAAPI H.264/AAC export → durable workspace publication → complete-byte download
+smoke on LIME. The saved caption-only project was also reopened and visually
+confirmed in the Windows editor. Composition remains CPU work. Representative
+media, restart, cross-platform media/font comparison and performance acceptance
+remain tracked in [#100](https://github.com/flamoris-jp/flamoris-kachinco/issues/100).
 
 **An AI-native video editor where AI can actually edit the timeline.**
 
 **AIが動画編集を提案するだけではなく、タイムラインを見て、編集し、完成動画を書き出す。**
 
-Kachinco is an open-source Windows video editor built around a different premise:
+Kachinco is an open-source video editor with a Windows desktop application and a Linux headless CLI, built around a different premise:
 **AI is a first-class editor, not an add-on button.** A person can edit directly, or an MCP-connected AI assistant can inspect the same project, work with media and clips, request a rendered frame at a specified time, make edits, and help produce a real MP4.
 
 We didn't just build an AI-editable video editor. **We've used it to create and publish videos about making that very editor.** 🪆
@@ -69,6 +79,7 @@ AI can also upload supported source media through guarded MCP operations, adjust
 
 | Area | Implemented on reviewed `main` |
 | --- | --- |
+| **Linux CLI / resident MCP** | Headless project inspection, typed editing, frame capture, explicit save and sequence export/download; CPU composition with CPU/VAAPI encoding. [Guide](docs/linux-cli.md). |
 | **Windows editing** | Media bin, multitrack timeline, playback/scrubbing, move/trim/split/delete, Undo/Redo, save/reopen and overwrite save. |
 | **Video / still images** | MOV/MP4 and PNG/JPEG/WebP import, layer transforms, opacity, Normal/Screen composition, image motion via property automation. |
 | **Audio / captions** | WAV/MP3/M4A audio clips, clip volume points and fades, transport monitoring level, caption editing and SRT import/export. |
