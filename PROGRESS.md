@@ -1,5 +1,21 @@
 # Delivery progress
 
+## Physical Linux CLI smoke accepted — 2026-10-24 (JST)
+
+- CLI 0.1.1: external MCP project query, guarded dry-run/commit, styled Japanese
+  captions, composed-frame visual inspection and explicit saved revision 2 accepted.
+- Three-second 1920 × 1080 / 30 fps export completed: 90 frames, actual
+  `h264_vaapi`, no encoder fallback, 1,915.2177 ms job total. Composition was
+  90 CPU frames / 0 GPU frames; this is not a representative speedup benchmark.
+- Durable workspace publication completed. All 39,889 MP4 bytes were retrieved;
+  ffprobe verified H.264/AAC, stereo 48 kHz and exactly 3 seconds / 90 video frames.
+  A decoded MP4 frame was visually checked, including Japanese glyphs.
+- No imported image/video/audio or audible source was used. Shared Undo/Redo,
+  restart/reload, reboot/outage, failure/cancellation, production-media A/V,
+  Windows reopen and simultaneous live Windows/Linux acceptance remain pending.
+- [Bounded evidence and remaining gates](docs/linux-cli-acceptance.md).
+  Issue #100 remains open. The older preparation records below are historical.
+
 ## Configured resident project storage — 2026-10-23
 
 - CLI 0.1.1 candidate adds optional `workspace.json`: selected project folders
