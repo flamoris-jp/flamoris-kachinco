@@ -21,6 +21,9 @@ public static class MediaReferenceResolver
         var result = ImmutableArray.CreateBuilder<MediaAvailability>();
         foreach (var asset in TimelineQueries.ListMediaAssets(project))
         {
+            if (asset.Kind == MediaKind.KineticText) {
+                result.Add(new(asset.Id, asset.SourcePath, null, true, [])); continue;
+            }
             string? resolved = null;
             Diagnostic? diagnostic = null;
             try

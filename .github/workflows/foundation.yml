@@ -93,7 +93,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'CMake is unavailable.' }
       - run: dotnet build Kachinco.slnx -c Release
       - name: Windows managed-native ABI parity
-        run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests|FullyQualifiedName~GpuDecodeTests|FullyQualifiedName~PreviewBackendTests|FullyQualifiedName~NativeGpuTests|FullyQualifiedName~ClipSpeedTests|FullyQualifiedName~ClipDownloadTests|FullyQualifiedName~GpuExportTests|FullyQualifiedName~RealExportTests|FullyQualifiedName~Mp4TitleReplacementTests|FullyQualifiedName~CreationWorkflowTests|FullyQualifiedName~TitleImageTests|FullyQualifiedName~StillImageTests"
+        run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~KineticTests|FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests|FullyQualifiedName~GpuDecodeTests|FullyQualifiedName~PreviewBackendTests|FullyQualifiedName~NativeGpuTests|FullyQualifiedName~ClipSpeedTests|FullyQualifiedName~ClipDownloadTests|FullyQualifiedName~GpuExportTests|FullyQualifiedName~RealExportTests|FullyQualifiedName~Mp4TitleReplacementTests|FullyQualifiedName~CreationWorkflowTests|FullyQualifiedName~TitleImageTests|FullyQualifiedName~StillImageTests"
       - name: Windows worker and raster acceptance
         run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
       - uses: actions/upload-artifact@v4
@@ -129,6 +129,23 @@ jobs:
               if ($process.MainWindowHandle -ne 0) { $ready = $true; break }
             }
             if (-not $ready) { throw 'Shell did not create its main window.' }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - name: Launch packaged KineticTypo companion
+        shell: pwsh
+        run: |
+          $app = Resolve-Path 'artifacts/windows/FLAMORIS-Kachinco-win-x64/kinetai/KineticTypo.App.exe'
+          $process = Start-Process $app -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 20; $attempt++) {
+              Start-Sleep -Milliseconds 500
+              $process.Refresh()
+              if ($process.HasExited) { throw "Companion exited with $($process.ExitCode)" }
+              if ($process.MainWindowHandle -ne 0) { $ready = $true; break }
+            }
+            if (-not $ready) { throw 'Companion did not create its window.' }
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }

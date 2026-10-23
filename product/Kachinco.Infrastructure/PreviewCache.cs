@@ -67,7 +67,9 @@ public sealed class PreviewContext
         var evaluator = TimelineEvaluator.Create(snapshot.Project, sequenceId);
         return evaluator.Success ? Result<PreviewContext>.Ok(new(snapshot, evaluator.Value!, projectPath)) : new(null, evaluator.Diagnostics);
     }
-    public string MediaKey(Guid id) => Hash(new { Asset = assets[id], Path = paths[id], Stamp = FileStamp(paths[id]) });
+    public string MediaKey(Guid id) => Hash(new { Asset = assets[id], Path = paths[id], Stamp = FileStamp(paths[id]), MaskStamp = FileStamp(ResolveMaskPath(assets[id])) });
+    private string? ResolveMaskPath(MediaAsset asset) => asset.MaskSourcePath is null ? null : Path.IsPathFullyQualified(asset.MaskSourcePath)
+        ? asset.MaskSourcePath : ProjectPath is null ? null : Path.GetFullPath(asset.MaskSourcePath, Path.GetDirectoryName(Path.GetFullPath(ProjectPath))!);
     public static string FileStamp(string? path)
     {
         if (path is null) return "unresolved";

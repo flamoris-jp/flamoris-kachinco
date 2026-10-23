@@ -45,3 +45,5 @@ public sealed record EditBatch(ImmutableArray<EditCommand> Commands, long? Expec
 public sealed record EditResult(bool Success, long Revision, ImmutableArray<Diagnostic> Diagnostics);
 public sealed record ProjectSnapshot(long Revision, Project? Project, bool CanUndo, bool CanRedo);
 
+
+public sealed record SetTextComposition(Guid MediaAssetId, string TextComposition) : EditCommand;

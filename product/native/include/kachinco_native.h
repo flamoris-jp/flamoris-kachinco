@@ -36,6 +36,7 @@ extern "C" {
 #define KN_CAP_CLIP_SPEED UINT64_C(16384)
 #define KN_CAP_TITLE_EDITING UINT64_C(32768)
 #define KN_CAP_CAPTION_STYLES UINT64_C(65536)
+#define KN_CAP_KINETIC_TEXT UINT64_C(131072)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -207,6 +208,22 @@ KN_API int32_t KN_CALL kn_editor_create(int32_t history_limit, kn_editor_session
 KN_API void KN_CALL kn_editor_destroy(kn_editor_session* session) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_editor_request(kn_editor_session* session, const uint8_t* data, uint32_t size, kn_buffer** output) KN_NOEXCEPT;
 
+/* Kinetic v1 standalone document commands and native GPU text. Optional ABI extension;
+   companions require these entry points from their matched package. */
+typedef struct kn_text_session kn_text_session;
+typedef struct kn_text_renderer kn_text_renderer;
+typedef struct kn_text_motion { double x,y,scale,rotation,opacity; } kn_text_motion;
+KN_API int32_t KN_CALL kn_text_create(kn_text_session** output) KN_NOEXCEPT;
+KN_API void KN_CALL kn_text_destroy(kn_text_session* session) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_request(kn_text_session* session,const uint8_t* data,uint32_t size,kn_buffer** output) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_evaluate(const uint8_t* data,uint32_t size,int64_t tick,uint32_t unit,kn_text_motion* output) KN_NOEXCEPT;
+/* Premultiplied BGRA -> straight RGBA + associated RGB + full-range RGB gray mask. */
+KN_API int32_t KN_CALL kn_text_convert(const uint8_t* bgra,uint8_t* rgba,uint8_t* rgb,uint8_t* mask,uint32_t pixels) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_apply_mask(const uint8_t* rgb,const uint8_t* mask,uint8_t* rgba,uint32_t pixels) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_renderer_create(int32_t force_warp,kn_text_renderer** output,int32_t* error) KN_NOEXCEPT;
+KN_API void KN_CALL kn_text_renderer_destroy(kn_text_renderer* renderer) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_render(kn_text_renderer* renderer,const uint8_t* data,uint32_t size,int64_t tick,int32_t width,int32_t height,uint8_t* bgra,uint32_t capacity,int32_t* error) KN_NOEXCEPT;
+KN_API int32_t KN_CALL kn_text_renderer_info(kn_text_renderer* renderer,kn_buffer** output) KN_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

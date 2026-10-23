@@ -55,6 +55,6 @@
 
 - [Completed MP4 first-frame replacement](mp4-title-replacement.md), [ADR 0023](decisions/0023-exported-mp4-first-frame.md), [Windows acceptance](../staging/windows-issue94.md).
 
-## Planned companion editor
+## KineticTypo companion
 
-- [KineticTypo / キネタイ ADR](decisions/0027-kinetai-native-text-editor.md): proposed separate C# executable with native C++ GPU text, scriptable motion and Kachinco launch/return. Design only; not an implemented capability.
+- [User guide](kinetai.md), [runtime contracts](decisions/0028-kinetai-first-runtime.md), [original design](decisions/0027-kinetai-native-text-editor.md), [Windows acceptance](../staging/windows-kinetai.md).

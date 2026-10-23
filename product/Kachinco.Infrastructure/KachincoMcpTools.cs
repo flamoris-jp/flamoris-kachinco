@@ -19,6 +19,7 @@ public static class KachincoMcpTools
         [nameof(UnregisterMedia)] = typeof(UnregisterMedia), [nameof(SetTitleImage)] = typeof(SetTitleImage),
         [nameof(ReserveTitleFrame)] = typeof(ReserveTitleFrame), [nameof(ReleaseTitleFrame)] = typeof(ReleaseTitleFrame),
         [nameof(ApplyCrossfade)] = typeof(ApplyCrossfade),
+        [nameof(SetTextComposition)] = typeof(SetTextComposition),
         [nameof(RegisterMedia)] = typeof(RegisterMedia), [nameof(RelinkMedia)] = typeof(RelinkMedia),
         [nameof(SetSequenceDuration)] = typeof(SetSequenceDuration), [nameof(AddTrack)] = typeof(AddTrack),
         [nameof(InsertClip)] = typeof(InsertClip), [nameof(MoveClip)] = typeof(MoveClip), [nameof(RippleReorderClip)] = typeof(RippleReorderClip), [nameof(TrimClip)] = typeof(TrimClip),
@@ -136,7 +137,7 @@ public static class KachincoMcpTools
     public static IReadOnlyDictionary<string, bool> CommandDispositions => Commands.ToDictionary(p => p.Key, p => AllowedCommand(p.Value), StringComparer.Ordinal);
 
     private static bool AllowedCommand(Type type) => type.Name is
-        nameof(UnregisterMedia) or nameof(SetTitleImage) or nameof(ReserveTitleFrame) or nameof(ReleaseTitleFrame) or nameof(ApplyCrossfade) or
+        nameof(SetTextComposition) or nameof(UnregisterMedia) or nameof(SetTitleImage) or nameof(ReserveTitleFrame) or nameof(ReleaseTitleFrame) or nameof(ApplyCrossfade) or
         nameof(AddClapper) or nameof(UpdateClapper) or nameof(DeleteClapper) or
         nameof(AddRecipe) or nameof(UpdateRecipe) or nameof(CreateSequence) or nameof(SetSequenceDuration) or
         nameof(AddTrack) or nameof(InsertClip) or nameof(MoveClip) or nameof(RippleReorderClip) or nameof(TrimClip) or nameof(SplitClip) or

@@ -14,6 +14,13 @@ foreach ($path in @($bundle, "$bundle.zip", "$bundle.inventory.json")) {
 New-Item -ItemType Directory -Force $bundle | Out-Null
 & dotnet publish (Join-Path $repositoryRoot 'product/Kachinco.App/Kachinco.App.csproj') -c Release -r win-x64 --self-contained true -o $bundle /p:DebugType=None /p:DebugSymbols=false
 if ($LASTEXITCODE -ne 0) { throw 'Editor publish failed.' }
+& dotnet publish (Join-Path $repositoryRoot 'product/KineticTypo.App/KineticTypo.App.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $bundle 'kinetai') /p:DebugType=None /p:DebugSymbols=false
+if ($LASTEXITCODE -ne 0) { throw 'KineticTypo companion publish failed.' }
+foreach ($required in @('KineticTypo.App.exe', 'Kachinco.Native.Runtime.dll', 'Kachinco.Native.dll', 'Kachinco.Infrastructure.dll', 'coreclr.dll', 'PresentationFramework.dll')) {
+    if (-not (Test-Path (Join-Path $bundle "kinetai/$required"))) { throw "KineticTypo dependency missing: $required" }
+}
+$hostNativeHash = (Get-FileHash (Join-Path $bundle 'Kachinco.Native.Runtime.dll')).Hash
+if ((Get-FileHash (Join-Path $bundle 'kinetai/Kachinco.Native.Runtime.dll')).Hash -ne $hostNativeHash) { throw 'Companion and host native runtime differ.' }
 & dotnet publish (Join-Path $repositoryRoot 'product/Kachinco.Mcp/Kachinco.Mcp.csproj') -c Release -r win-x64 --self-contained true -o (Join-Path $bundle 'mcp') /p:DebugType=None /p:DebugSymbols=false
 if ($LASTEXITCODE -ne 0) { throw 'MCP bridge publish failed.' }
 Get-ChildItem -LiteralPath $bundle -Filter '*.pdb' -File -Recurse |
