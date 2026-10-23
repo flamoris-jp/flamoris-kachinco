@@ -1,5 +1,13 @@
 # Delivery progress
 
+## Linux CLI distribution preparation — 2026-10-23
+
+- Gate immutable CLI publication on the shared Product workflow and actual
+  Docker/Updater candidate acceptance. Publish the exact accepted image/catalog,
+  Hub tool catalog, descriptor generator, guide and SHA256SUMS; no host build.
+- Release identity remains cli-v0.1.0. Existing tags are never replaced. Physical
+  LIME VAAPI, Hub attachment and speed remain separate deployment acceptance.
+
 ## Clip speed and single-clip downloads — Issues #78–#79
 
 - ADR 0019 and the client guide define native constant speed, exact retained source
