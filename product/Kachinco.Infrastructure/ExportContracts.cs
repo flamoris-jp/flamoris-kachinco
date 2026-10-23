@@ -3,7 +3,7 @@ using Kachinco.Core;
 
 namespace Kachinco.Infrastructure;
 
-public enum VideoEncoderPreference { Auto, Cpu, Nvenc }
+public enum VideoEncoderPreference { Auto, Cpu, Nvenc, Vaapi }
 public enum ExportPreset { YoutubeH264AacMp4, ClipPreviewH264Mp4 }
 public enum ExportStage { Planning, Rendering, Encoding, Completed, Cancelled, Failed }
 public sealed record ExportRequest(Guid JobId, Guid SequenceId, string OutputPath, ExportPreset Preset, long? ExpectedRevision = null);
@@ -18,10 +18,12 @@ public interface IExportService
 }
 
 // App configuration, never Project persistence. Explicit path takes priority over PATH.
-public sealed record FfmpegSettings(string? ExecutablePath, VideoEncoderPreference Encoder = VideoEncoderPreference.Auto, int NvencDevice = 0);
+public sealed record FfmpegSettings(string? ExecutablePath, VideoEncoderPreference Encoder = VideoEncoderPreference.Auto,
+    int NvencDevice = 0, string VaapiDevice = "/dev/dri/renderD128", bool RequireHardware = false);
 public sealed record ExportMetrics(string VideoEncoder, int? NvencDevice, string? EncoderFallbackReason,
     double TotalMilliseconds, double VideoRenderMilliseconds, double VideoPipelineMilliseconds,
-    double AudioRenderMilliseconds, double MuxMilliseconds, ExportCompositionStatistics? Composition = null);
+    double AudioRenderMilliseconds, double MuxMilliseconds, ExportCompositionStatistics? Composition = null,
+    string? VaapiDevice = null);
 public sealed record FfmpegInstallation(string ExecutablePath, string Version);
 public interface IFfmpegExecutableResolver
 {

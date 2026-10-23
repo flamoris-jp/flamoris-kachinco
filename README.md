@@ -1,5 +1,8 @@
 # FLAMORIS Kachinco 🎬
 
+Linux headless CLI and resident Hub host: [Updater-based LIME setup and command reference](docs/linux-cli.md)
+(CPU composition / optional VAAPI encoding; physical LIME/AMD acceptance tracked separately in #100).
+
 **An AI-native video editor where AI can actually edit the timeline.**
 
 **AIが動画編集を提案するだけではなく、タイムラインを見て、編集し、完成動画を書き出す。**

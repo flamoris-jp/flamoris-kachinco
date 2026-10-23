@@ -10,3 +10,4 @@ artifacts/
 
 # WPF temporary compilation projects
 *_wpftmp.csproj
+__pycache__/

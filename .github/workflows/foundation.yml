@@ -27,7 +27,24 @@ jobs:
           ctest --test-dir artifacts/native-sanitized --output-on-failure
       - name: Ensure ffprobe test dependency
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Linux caption dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libcairo2 fonts-noto-cjk
       - run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --logger "trx;LogFileName=product.trx"
+      - name: Linux CLI real media and styled Japanese captions
+        run: |
+          dotnet publish product/Kachinco.Cli/Kachinco.Cli.csproj -c Release -r linux-x64 --self-contained true -o artifacts/linux-cli
+          python3 test/cli/smoke.py artifacts/linux-cli/kachinco
+          cp product/packaging/install-linux-user.sh product/packaging/create-linux-hub-descriptor.py artifacts/linux-cli/
+          cp docs/linux-cli.md LICENSE artifacts/linux-cli/
+          artifacts/linux-cli/kachinco catalog > artifacts/linux-cli/kachinco-lime-tools.json
+          tar -C artifacts/linux-cli -czf artifacts/FLAMORIS-Kachinco-linux-x64.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kachinco-linux-x64
+          path: artifacts/FLAMORIS-Kachinco-linux-x64.tar.gz
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         if: always()
         with:

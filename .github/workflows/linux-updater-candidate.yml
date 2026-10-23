@@ -1,0 +1,42 @@
+name: Linux Updater candidate
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['product/Kachinco.Cli/**', 'product/packaging/**', 'release/**', 'test/cli/**', '.dockerignore', '.github/workflows/linux-updater-candidate.yml']
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: flamoris-jp/flamoris-mcp-hub
+          ref: eab21d70b851c2ddcd91e5a0fe322fcd30c95e95
+          path: artifacts/hub-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build immutable amd64 image and catalog
+        run: |
+          docker build --platform linux/amd64 -f product/packaging/Dockerfile.linux -t kachinco-cli-candidate .
+          mkdir -p dist
+          docker image save --output dist/image.tar kachinco-cli-candidate
+          image_id=$(docker image inspect --format '{{.Id}}' kachinco-cli-candidate)
+          python product/packaging/package-updater.py --image dist/image.tar --image-id "$image_id" --revision "$GITHUB_SHA" --output dist/release
+      - name: Verify actual Updater install/start and container export
+        run: |
+          # Paired DRM-capable Updater source; same validated tree as the local feature commit.
+          python -m pip install 'https://github.com/flamoris-jp/flamoris-updater/archive/93561720aed68e34ee3d4ffb9ccd81a9f035ab79.zip' python-dotenv pyyaml jsonschema
+          sudo env GITHUB_ACTIONS=true "$(command -v python)" test/cli/verify-updater-catalog.py dist/release/catalog.json --install
+      - name: Windows and Linux Hub namespaces coexist
+        run: |
+          docker run --rm --entrypoint /app/kachinco kachinco-cli-candidate catalog > dist/cli-tools.json
+          python test/cli/verify-hub-namespaces.py artifacts/hub-source dist/cli-tools.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kachinco-updater-candidate
+          path: dist/release/
+          retention-days: 3

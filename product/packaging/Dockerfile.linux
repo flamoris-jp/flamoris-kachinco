@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+RUN apt-get update && apt-get install -y --no-install-recommends cmake g++ make && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . .
+RUN dotnet publish product/Kachinco.Cli/Kachinco.Cli.csproj -c Release -r linux-x64 --self-contained true -m:1 -o /publish
+
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libicu74 libstdc++6 libssl3t64 zlib1g ffmpeg python3 \
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 fonts-noto-cjk mesa-va-drivers libva2 vainfo \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --create-home --home-dir /home/kachinco kachinco
+WORKDIR /app
+LABEL org.opencontainers.image.title="flamoris-kachinco-cli" org.opencontainers.image.version="0.1.0"
+COPY --from=build /publish/ /app/
+COPY product/packaging/updater-entrypoint.py /app/updater-entrypoint.py
+USER 10001:10001
+ENV DOTNET_EnableDiagnostics=0
+ENTRYPOINT ["python3", "/app/updater-entrypoint.py"]
