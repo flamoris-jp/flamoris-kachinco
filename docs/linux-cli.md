@@ -5,9 +5,11 @@ FFmpeg export engine. It adds a Pango/Cairo caption adapter and Linux VAAPI H.26
 encoding. Native composition, captions, decoding and audio remain CPU work.
 A physical LIME/AMD caption-only smoke has verified guarded MCP editing, Japanese
 caption preview/save, actual VAAPI export, durable publication and complete MP4
-retrieval. See the [measured result and remaining gates](linux-cli-acceptance.md).
-Representative media, restart/recovery, cross-platform acceptance and comparative
-performance remain unverified. See ADR 0024 for lifecycle, output, caption and
+retrieval. The saved caption-only project was also reopened in Windows, where its
+Japanese captions were visually confirmed. See the
+[measured result and remaining gates](linux-cli-acceptance.md).
+Representative media, restart/recovery, cross-platform media/font comparison and
+comparative performance remain unverified. See ADR 0024 for lifecycle, output, caption and
 project compatibility boundaries.
 
 ## LIME deployment through Updater
@@ -82,6 +84,22 @@ references. External `/media` assets are not copied or automatically relinked.
 Change `projectName` or `projectsRoot` in the file, then stop/restart gracefully
 to switch projects; the previous project and all its media remain untouched.
 There is no remote arbitrary-path open tool or automatic data migration.
+
+### If a saved project looks empty or has a `.lock` file
+
+A new workspace project starts with an empty ten-second **Main** sequence. Edits
+may be in another sequence: choose the intended sequence in the Windows timeline
+selector before treating an empty Main view as missing or unsaved content.
+Opening the file does not necessarily select the sequence most recently edited
+by the headless host.
+
+The CLI opens `<project>.fkproj.lock` as an exclusive file handle while owning a
+writable session. The empty lock file can remain after the handle is closed;
+its presence is not an unsaved-changes indicator. Confirm `dirty:false` through
+the project query or a successful `project_save` result. Keep the lock file while
+the CLI is using the project. Coordinate write ownership before editing or saving
+the same project in Windows; seeing it open there does not prove concurrent writes
+are safe.
 
 Completed sequence exports are copied from local scratch to `exports/` using
 exclusive staging, flush and non-overwriting rename. File names contain the
