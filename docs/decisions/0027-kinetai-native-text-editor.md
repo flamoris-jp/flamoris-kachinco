@@ -109,12 +109,48 @@ This ADR does not allocate a schema number or reinterpret existing Recipe fields
 
 ## Output and integration
 
-The primary Kachinco handoff remains editable text/motion state. Support a rendered
-alpha clip as an explicit interchange/cache, with recipe/provenance retained.
-Transparent MOV is the first external-video target, subject to actual codec/import
-verification; PNG sequences may be added when needed. A normal MP4 preview may
-have a chosen background. GPU drawing and video encoding are separate policies:
-an alpha codec need not use NVENC, and H.264 MP4 is not promised to preserve alpha.
+The primary Kachinco handoff remains editable text/motion state, so ordinary
+same-engine editing need not generate intermediate videos. When a rendered
+interchange/cache is requested, the owner-selected default is a synchronized
+**RGB video on black plus a separate grayscale opacity-mask video**, not an
+alpha-channel MOV requirement.
+
+- Proposed package: `text_rgb.mp4`, `text_mask.mp4` and a versioned manifest
+  retaining source/recipe/seed, frame rate, dimensions, origin, duration, exact
+  frame count, pair identity/checksums, color/range and RGB association.
+- White mask pixels reveal the text; black hides it; gray carries antialiasing,
+  translucency, blur/shadow and fades. Generate the mask from the native opacity
+  surface, never from the RGB video's brightness. Black letters and shadows must
+  remain valid foreground content. This is not black-color keying.
+- Produce both streams from the exact same native evaluation/frame requests,
+  with matched CFR timestamps and frame count. Import as one paired logical
+  asset/clip. Move, trim, speed, relink, cache and export must use the same source
+  mapping for both; reject mismatched or incomplete pairs before committing.
+- The black-matted RGB stream is associated/premultiplied color. With normalized
+  decoded mask M, normal composition is RGB + (1-M)*background; do not multiply
+  RGB by M again. Store that association explicitly. Define/retest byte rounding,
+  mask range normalization and color handling at the native boundary. Other
+  blend modes need equivalent association-aware semantics before being enabled.
+- H.264 MP4 is the first compatibility/size candidate. Set RGB and mask quality
+  independently, preserving mask edges and exact black/white normalization.
+  Measure the **combined** size and two-decoder cost against alpha alternatives
+  at comparable visual quality; no fixed size reduction is promised. Chroma
+  subsampling/ringing and mask compression must pass the edge/halo tests.
+- Existing Kachinco has no paired-mask asset/track-matte implementation. Add its
+  native command/schema, evaluation, CPU/D3D11 composition and packaging contracts
+  in an explicit implementation slice. Do not insert masks as visible timeline
+  layers or implement mask evaluation solely in FFmpeg/UI/MCP.
+- Preserve the internal native alpha surface contract above; separating alpha at
+  the file boundary does not eliminate opacity evaluation inside the renderer.
+  A self-contained alpha video or PNG sequence is optional future interchange,
+  not a prerequisite for this RGB/mask workflow.
+
+GPU drawing and video encoding remain independent policies. Reuse available
+hardware encoding after actual initialization checks, with observable fallback.
+The pair contains no duplicated soundtrack by default; audio stays in the host
+timeline. The supplied legacy KineticTypo already documents RGB/mask generation;
+reuse its intent and fixtures without importing its ASS renderer as native GPU
+implementation authority.
 
 UI and MCP query/edit the same native commands, selection and playhead projections.
 MCP can inspect text, program/parameters, target IDs, revision and render backend,
@@ -132,7 +168,9 @@ Hub descriptors change only with implemented producer tools.
    parameters, Undo/Redo; preserve font/script/seed through reopen. Package a
    matched executable and native DLL together.
 3. Kachinco launch/return: selected text opens, explicit Apply is one undoable
-   host edit, conflicts/cancel/crash preserve the host project and draft.
+   host edit, conflicts/cancel/crash preserve the host project and draft. Add
+   paired RGB/mask export/import with a native mask evaluator/compositor; verify
+   synchronized trimming/speed and reject incomplete or mismatched pairs.
 4. PONPON JSON/SRT import and optional audio-feature binding. Missing audio,
    Analyzer or semantic data does not prevent ordinary text animation.
 5. Versioned script extension, presets, MCP and full-song resource tests.
@@ -140,8 +178,10 @@ Hub descriptors change only with implemented producer tools.
 Deterministic tests cover native motion, time/trim behavior, serialization,
 schema/capability rejection and revision conflicts. Windows tests cover native
 glyph/alpha rendering, package startup and GPU device loss. Physical acceptance
-compares preview/capture/export, Japanese fonts, edge transparency, seek latency,
-frame preparation and VRAM on real hardware. Measure; do not promise a frame rate.
+compares preview/capture/export, Japanese fonts, black/colored glyphs, gray mask
+edges/shadows, halo-free association and range handling, synchronized RGB/mask
+trim/speed/relink, combined file size, two-decoder cost, seek latency, frame
+preparation and VRAM on real hardware. Measure; do not promise a frame rate.
 Existing Kachinco projects and caption rendering remain compatible.
 
 ## References
@@ -152,3 +192,5 @@ Existing Kachinco projects and caption rendering remain compatible.
 - [GPU composition](0016-d3d11-preview.md) / [GPU export](0020-gpu-export.md)
 - [Microsoft: Direct2D device contexts and D3D11 interoperability](https://learn.microsoft.com/en-us/windows/win32/direct2d/devices-and-device-contexts)
 - [Microsoft: DirectWrite and Direct2D text](https://learn.microsoft.com/en-us/windows/win32/direct2d/direct2d-and-directwrite)
+
+- [FFmpeg: alphaextract / alphamerge](https://ffmpeg.org/ffmpeg-filters.html#alphaextract)
