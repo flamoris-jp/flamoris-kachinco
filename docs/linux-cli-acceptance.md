@@ -39,13 +39,27 @@ MV benchmark or a CPU/GPU speedup comparison. VAAPI accelerates compression;
 composition, captions, decoding and audio remain CPU work. CQP 20 is not
 equivalent to x264 CRF 18.
 
+## Windows reopen and caption display — 2026-10-24 (JST)
+
+The operator opened the saved `.fkproj` in the Windows editor, then selected the
+separate three-second test sequence instead of the original empty Main sequence.
+A live FLAMORIS Capture screenshot showed the selected sequence, its subtitle
+track and the green multiline English/Japanese captions on black. The operator
+confirmed the screen appeared correctly. This accepts Windows reopening and
+Japanese-caption display for this caption-only project.
+
+No external media paths were exercised. This is a visual smoke, not a quantitative
+WPF/Pango font-metric or pixel-parity comparison, a Windows write-back test, or
+proof that simultaneous editing of one file is safe.
+
 ## Still unverified on the physical deployment
 
 - Image/video/audio upload and an edit using representative production material.
 - Shared Undo/Redo exercise, controlled service restart and saved-project reload.
 - Reboot, NAS/network outage and recovery.
 - Cancellation, publication-failure recovery and live resource/quality benchmarks.
-- Audible A/V synchronization and Windows reopen/path/font comparison.
+- Audible A/V synchronization, Windows external-media relinking and cross-platform
+  font-metric/pixel comparison; Windows write-back followed by Linux reload.
 - Simultaneous Windows/Linux operation; preservation of Windows registration
   alone does not establish live coexistence.
 
