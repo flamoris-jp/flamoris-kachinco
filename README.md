@@ -8,8 +8,10 @@
 
 CLI 0.1.1 has passed an external MCP edit → Japanese-caption preview → save →
 VAAPI H.264/AAC export → durable workspace publication → complete-byte download
-smoke on LIME. Composition remains CPU work. Representative media, restart,
-Windows reopen and performance acceptance remain tracked in [#100](https://github.com/flamoris-jp/flamoris-kachinco/issues/100).
+smoke on LIME. The saved caption-only project was also reopened and visually
+confirmed in the Windows editor. Composition remains CPU work. Representative
+media, restart, cross-platform media/font comparison and performance acceptance
+remain tracked in [#100](https://github.com/flamoris-jp/flamoris-kachinco/issues/100).
 
 **An AI-native video editor where AI can actually edit the timeline.**
 
