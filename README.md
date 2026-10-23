@@ -101,6 +101,10 @@ Some capabilities have explicit boundaries:
 
 The full engineering status and outstanding acceptance evidence live in [PROGRESS.md](PROGRESS.md), [the roadmap](docs/roadmap.md), and [Windows creation-workflow acceptance](staging/windows-creation-workflow.md).
 
+## Planned text companion: KineticTypo / キネタイ
+
+KineticTypo is planned in this repository as a separate Windows executable launched from Kachinco, with a C# UI and native C++ GPU text rendering. It will author editable script-driven text clips; PONPON and AudioAnalyzer belong to [StudioClient](https://github.com/flamoris-jp/flamoris-studio-client). This is a design proposal, not a shipped feature. [Design and acceptance](docs/decisions/0027-kinetai-native-text-editor.md).
+
 ## Getting started (Windows)
 
 **For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start `Kachinco.App.exe`. The destination machine does **not** need the .NET SDK, but media workflows require `ffmpeg` and `ffprobe` on `PATH`; restricted Recipes additionally require Python 3.

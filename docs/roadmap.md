@@ -35,3 +35,7 @@ Use the final #36 portable bundle and [native checklist](../staging/windows-nati
 #28 remains open pending clip-boundary pause evidence; #29 Inspector and #30
 automation UI/domain/persistence are independent follow-up features. The native
 automation evaluation seam does not deliver editable/persisted animation curves.
+
+## Planned KineticTypo companion (2026-10-24)
+
+[ADR 0027](decisions/0027-kinetai-native-text-editor.md) records the owner-selected repository split: a separate C# UI executable in Kachinco, native C++ GPU text drawing, editable scripted motion and host launch/return. Delivery starts with a native GPU text vertical slice. PONPON and AudioAnalyzer implementation belongs to StudioClient; this roadmap does not schedule an Analyzer port into Kachinco. No executable, schema extension or GPU text milestone is implemented by this planning change.

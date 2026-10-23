@@ -54,3 +54,7 @@
 - [GPU MP4 export ADR](decisions/0020-gpu-export.md) and [Windows comparison/acceptance](../staging/windows-issue82.md): independent D3D11 composition and NVENC with CPU recovery.
 
 - [Completed MP4 first-frame replacement](mp4-title-replacement.md), [ADR 0023](decisions/0023-exported-mp4-first-frame.md), [Windows acceptance](../staging/windows-issue94.md).
+
+## Planned companion editor
+
+- [KineticTypo / キネタイ ADR](decisions/0027-kinetai-native-text-editor.md): proposed separate C# executable with native C++ GPU text, scriptable motion and Kachinco launch/return. Design only; not an implemented capability.
