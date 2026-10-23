@@ -3,8 +3,12 @@
 The Linux CLI uses Kachinco's shared native editing/evaluation/composition and
 FFmpeg export engine. It adds a Pango/Cairo caption adapter and Linux VAAPI H.264
 encoding. Native composition, captions, decoding and audio remain CPU work.
-Physical AMD device/driver compatibility and performance remain unverified.
-See ADR 0024 for lifecycle, output, caption and project compatibility boundaries.
+A physical LIME/AMD caption-only smoke has verified guarded MCP editing, Japanese
+caption preview/save, actual VAAPI export, durable publication and complete MP4
+retrieval. See the [measured result and remaining gates](linux-cli-acceptance.md).
+Representative media, restart/recovery, cross-platform acceptance and comparative
+performance remain unverified. See ADR 0024 for lifecycle, output, caption and
+project compatibility boundaries.
 
 ## LIME deployment through Updater
 
