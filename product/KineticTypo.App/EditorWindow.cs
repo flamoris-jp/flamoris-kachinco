@@ -113,7 +113,7 @@ public sealed partial class EditorWindow : Window
     private void Commit(JsonObject next)
     {
         Stop(); Accept(session.Edit(next, revision));
-        if (handoff is not null && filePath is not null) KineticComposition.Save(filePath, document);
+        if (handoff is not null && filePath is not null) { try { KineticComposition.Save(filePath, document); } catch (IOException ex) { status.Text = ex.Message; } }
         Refresh();
     }
     private void Refresh()
@@ -177,9 +177,9 @@ public sealed partial class EditorWindow : Window
             double ratio = Math.Min(1, 900d / width); int w = Math.Max(1, (int)(width * ratio)), h = Math.Max(1, (int)(height * ratio));
             var pixels = await Task.Run(() => { renderer ??= new(); var frame = renderer.Render(source, tick, w, h); return (frame, info: renderer.Info); });
             if (closed) return;
-            if (generation != renderGeneration) { _ = Dispatcher.BeginInvoke(Render); return; }
+            if (generation != renderGeneration && !clock.IsRunning) { _ = Dispatcher.BeginInvoke(Render); return; }
             preview.Source = BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, pixels.frame.BgraPremultiplied, w * 4);
-            status.Text = $"{tick / (double)TimelineTime.TicksPerSecond:F3} s  ·  {pixels.info["backend"]}  ·  {pixels.info["adapter"]}  ·  {pixels.info["resolvedFonts"]}";
+            status.Text = $"{tick / (double)TimelineTime.TicksPerSecond:F3} s  ·  {pixels.info["backend"]}  ·  {pixels.info["adapter"]}  ·  {pixels.info["resolvedFonts"]}  {pixels.info["fontWarnings"]}";
         }
         catch (Exception ex) { preview.Source = null; status.Text = ex.Message; Stop(); }
         finally { rendering.Release(); }

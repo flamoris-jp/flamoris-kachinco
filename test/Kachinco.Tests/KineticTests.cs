@@ -13,7 +13,7 @@ public sealed class KineticTests
     {
         var clip = new Clip(Guid.NewGuid(), asset.Id, 0, 0, asset.DurationTicks, true, ClipAppearance.Default, AudioProperties.Default);
         var track = new Track(Guid.NewGuid(), "Kinetic", TrackKind.Video, true, [clip], []);
-        var sequence = new Sequence(Guid.NewGuid(), "Sequence", new(32,32,new(30,1)), asset.DurationTicks, [track]);
+        var sequence = new Sequence(Guid.NewGuid(), "Sequence", SequenceSettings.Landscape, asset.DurationTicks, [track]);
         return new(Guid.NewGuid(), "Project", [asset], [sequence]);
     }
     [TestMethod]
@@ -38,7 +38,7 @@ public sealed class KineticTests
     {
         var document = KineticComposition.New();
         var asset = new MediaAsset(Guid.NewGuid(), "Text", "missing.ktproj", MediaKind.KineticText, KineticComposition.Duration(document)) { TextComposition = document.ToJsonString() };
-        var project = ProjectWith(asset); using var session = new EditorSession(); Assert.IsTrue(session.ReplaceProject(project).Success);
+        var project = ProjectWith(asset); using var session = new EditorSession(); var replacement = session.ReplaceProject(project); Assert.IsTrue(replacement.Success, string.Join(";", replacement.Diagnostics.Select(d => d.Code + ":" + d.Message)));
         var encoded = ProjectJson.Serialize(project); Assert.IsTrue(encoded.Success); StringAssert.Contains(encoded.Value!, "\"schemaVersion\": 8");
         var decoded = ProjectJson.Deserialize(encoded.Value); Assert.IsTrue(decoded.Success); Assert.AreEqual(asset.TextComposition, decoded.Value!.Assets[0].TextComposition);
         Assert.IsTrue(MediaReferenceResolver.Inspect(decoded.Value, null)[0].IsAvailable);
@@ -88,8 +88,8 @@ public sealed class KineticTests
             var asset = new MediaAsset(Guid.NewGuid(), "Pair", rgb, MediaKind.MaskedVideo, TimelineTime.SecondsToTicks(4)) { MaskSourcePath = mask };
             var p = ProjectWith(asset); var s = p.Sequences[0]; var t=s.Tracks[0]; var c=t.Clips[0] with { SourceInTicks=TimelineTime.TicksPerSecond, DurationTicks=TimelineTime.TicksPerSecond, PlaybackRate=2, SourceDurationTicks=2*TimelineTime.TicksPerSecond };
             p=p with { Sequences=[s with { Tracks=[t with { Clips=[c] }] }] };
-            Assert.IsTrue(ProjectJson.Deserialize(ProjectJson.Serialize(p).Value!).Success);
-            using var evaluation = TimelineEvaluator.Create(p,s.Id).Value!; var frame=evaluation.Evaluate(TimelineTime.SecondsToTicks(0.5m)).Value!;
+            var serialized = ProjectJson.Serialize(p); Assert.IsTrue(serialized.Success, string.Join(";", serialized.Diagnostics.Select(d => d.Code + ":" + d.Message))); var reopened = ProjectJson.Deserialize(serialized.Value!); Assert.IsTrue(reopened.Success, string.Join(";", reopened.Diagnostics.Select(d => d.Code + ":" + d.Message)));
+            using var evaluation = TimelineEvaluator.Create(p,s.Id).Value!; var frame=evaluation.Evaluate(TimelineTime.SecondsToTicks(0.5m)).Value! with { Settings = new(32,32,new(30,1)) };
             var decoder=new MaskDecoder(mask); var result=await new SharedFrameRenderer(decoder).RenderAsync(p,frame,15,default);
             Assert.IsTrue(result.Success); CollectionAssert.AreEqual(new[]{2*TimelineTime.TicksPerSecond,2*TimelineTime.TicksPerSecond},decoder.Ticks.ToArray());
             Assert.AreEqual((byte)64,result.Value!.Rgba8[0]); Assert.AreEqual((byte)255,result.Value.Rgba8[3]);

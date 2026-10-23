@@ -23,7 +23,9 @@ public static class KineticPair
         {
             string rgbPath = Path.Combine(temporary, "text_rgb.mp4"), maskPath = Path.Combine(temporary, "text_mask.mp4");
             using var renderer = new NativeKineticRenderer();
-            using var rgb = Start(rgbPath, false, width, height, fps); using var mask = Start(maskPath, true, width, height, fps);
+            using var rgb = Start(rgbPath, false, width, height, fps);
+            try {
+            using var mask = Start(maskPath, true, width, height, fps);
             using var cancel = token.Register(() => { MediaProcess.Kill(rgb); MediaProcess.Kill(mask); });
             var rgbError = MediaProcess.DrainErrorAsync(rgb.StandardError, CancellationToken.None);
             var maskError = MediaProcess.DrainErrorAsync(mask.StandardError, CancellationToken.None);
@@ -65,6 +67,7 @@ public static class KineticPair
                 await Task.WhenAll(rgb.WaitForExitAsync(), mask.WaitForExitAsync());
                 await Task.WhenAll(rgbError, maskError);
             }
+            } finally { MediaProcess.Kill(rgb); await rgb.WaitForExitAsync(); }
         }
         finally { if (Directory.Exists(temporary)) Directory.Delete(temporary, true); }
     }

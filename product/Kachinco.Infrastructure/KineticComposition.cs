@@ -48,7 +48,7 @@ public static class KineticComposition
         using var session = new NativeKineticDocument();
         var result = session.Edit(document, 0, replace: true);
         if (result["success"]?.GetValue<bool>() != true) throw new InvalidDataException(result["error"]?.GetValue<string>() ?? "Invalid text composition.");
-        return result["document"]!.AsObject();
+        return (JsonObject)result["document"]!.DeepClone();
     }
     public static JsonObject Parse(string text)
     {
@@ -56,7 +56,7 @@ public static class KineticComposition
         using var session = new NativeKineticDocument();
         var result = session.Request(new() { ["action"] = "deserialize", ["expectedRevision"] = 0, ["text"] = text.TrimStart('\uFEFF') });
         if (result["success"]?.GetValue<bool>() != true) throw new InvalidDataException(result["error"]?.GetValue<string>() ?? "Invalid text composition.");
-        return result["document"]!.AsObject();
+        return (JsonObject)result["document"]!.DeepClone();
     }
     public static JsonObject Read(string path)
     {

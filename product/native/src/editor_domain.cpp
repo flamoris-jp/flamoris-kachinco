@@ -212,7 +212,7 @@ json validate(const json& p) {
         for(const auto& t:tracks) {
             if(t.is_null()) { e("INVALID_TRACK","Null track."); continue; }
             const auto& tid=t.at("id"); identity(tid,field(t,"name"),"tracks"); auto kind=integer(t.at("kind"));
-            if(kind<0||kind>4) e("INVALID_TRACK_KIND","Unknown track kind.",tid);
+            if(kind<0||kind>2) e("INVALID_TRACK_KIND","Unknown track kind.",tid);
             const auto& clips=field(t,"clips"); const auto& captions=field(t,"captions");
             if(!clips.is_array()||!captions.is_array()) { e("INVALID_COLLECTION","Track items must be initialized.",tid); continue; }
             if((kind==2&&!clips.empty())||(kind!=2&&!captions.empty())) e("TRACK_ITEM_MISMATCH","Captions belong to subtitle tracks; media clips do not.",tid);
