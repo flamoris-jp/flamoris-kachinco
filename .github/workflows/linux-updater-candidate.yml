@@ -1,11 +1,16 @@
 name: Linux Updater candidate
 on:
+  push:
+    branches: [main]
+    paths: ['release/**', '.github/workflows/linux-updater-candidate.yml']
   workflow_dispatch:
   pull_request:
     paths: ['product/Kachinco.Cli/**', 'product/packaging/**', 'release/**', 'test/cli/**', '.dockerignore', '.github/workflows/linux-updater-candidate.yml']
 permissions:
   contents: read
 jobs:
+  product:
+    uses: ./.github/workflows/foundation.yml
   candidate:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -33,10 +38,41 @@ jobs:
           sudo env GITHUB_ACTIONS=true "$(command -v python)" test/cli/verify-updater-catalog.py dist/release/catalog.json --install
       - name: Windows and Linux Hub namespaces coexist
         run: |
-          docker run --rm --entrypoint /app/kachinco kachinco-cli-candidate catalog > dist/cli-tools.json
-          python test/cli/verify-hub-namespaces.py artifacts/hub-source dist/cli-tools.json
+          docker run --rm --entrypoint /app/kachinco kachinco-cli-candidate catalog > dist/release/cli-tools.json
+          python test/cli/verify-hub-namespaces.py artifacts/hub-source dist/release/cli-tools.json
+          cp product/packaging/create-linux-hub-descriptor.py dist/release/
+          cp docs/linux-cli.md dist/release/
+          (cd dist/release && sha256sum catalog.json candidate.json linux-amd64--image.tar cli-tools.json create-linux-hub-descriptor.py linux-cli.md > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: kachinco-updater-candidate
           path: dist/release/
           retention-days: 3
+  publish:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [product, candidate]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: kachinco-cli-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kachinco-updater-candidate
+          path: dist/release
+      - name: Verify accepted bytes and publish an immutable CLI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist/release && sha256sum --check SHA256SUMS)
+          version=$(python3 -c 'import json; print(json.load(open("release/updater.json"))["version"])')
+          tag="cli-v$version"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo 'CLI release tag already exists; refusing to replace it'
+            exit 1
+          fi
+          gh release create "$tag" dist/release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Kachinco Linux CLI $version" --notes-file release/cli-notes.md --latest
