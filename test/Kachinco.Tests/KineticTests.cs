@@ -109,6 +109,27 @@ public sealed class KineticTests
         var overlap=new JsonArray();for(int i=0;i<129;++i)overlap.Add(KineticComposition.Clip("overlap",0,TimelineTime.TicksPerSecond));
         d["clips"]=overlap;Assert.ThrowsExactly<InvalidDataException>(()=>KineticComposition.Validate(d));
     }
+    [TestMethod]
+    public async Task RealMaskPairImportRejectsChangedFilesAndMismatchedFrameCounts()
+    {
+        var directory=Path.Combine(Path.GetTempPath(),"kinetai-codec-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        try {
+            async Task Encode(string name,bool mask,int frames) {
+                var info=new System.Diagnostics.ProcessStartInfo("ffmpeg"){UseShellExecute=false,RedirectStandardInput=true,RedirectStandardError=true};
+                foreach(var argument in new[]{"-v","error","-y","-f","rawvideo","-pixel_format",mask?"gray":"rgb24","-video_size","32x32","-framerate","30/1","-i","pipe:0","-an","-c:v","libx264","-crf","0","-pix_fmt",mask?"gray":"yuv444p","-color_range","pc","-colorspace","bt709","-threads","1",Path.Combine(directory,name)})info.ArgumentList.Add(argument);
+                using var process=System.Diagnostics.Process.Start(info)!;var error=process.StandardError.ReadToEndAsync();
+                await process.StandardInput.BaseStream.WriteAsync(Enumerable.Repeat((byte)128,32*32*(mask?1:3)*frames).ToArray());process.StandardInput.Close();await process.WaitForExitAsync();Assert.AreEqual(0,process.ExitCode,await error);
+            }
+            JsonObject Entry(string name) {var bytes=File.ReadAllBytes(Path.Combine(directory,name));return new(){["file"]=name,["bytes"]=bytes.Length.ToString(),["sha256"]=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))};}
+            await Encode("rgb.mp4",false,3);await Encode("mask.mp4",true,3);
+            var doc=KineticComposition.New(32,32);doc["durationTicks"]=TimelineTime.SecondsToTicks(0.1m).ToString();doc["clips"]![0]!["durationTicks"]=doc["durationTicks"]!.DeepClone();
+            var manifest=new JsonObject{["format"]="flamoris-kinetic-pair",["version"]=1,["pairId"]=Guid.NewGuid().ToString(),["width"]=32,["height"]=32,["fpsNumerator"]=30,["fpsDenominator"]=1,["originTicks"]="0",["durationTicks"]=doc["durationTicks"]!.DeepClone(),["frameCount"]="3",["rgbAssociation"]="premultiplied-black",["maskRange"]="full",["color"]="SDR-BT709-full",["rgb"]=Entry("rgb.mp4"),["mask"]=Entry("mask.mp4"),["composition"]=doc};
+            string path=Path.Combine(directory,"text.ktpair.json");File.WriteAllText(path,manifest.ToJsonString());
+            var imported=await KineticPair.ImportAsync(path);Assert.AreEqual(MediaKind.MaskedVideo,imported.Kind);Assert.AreEqual(TimelineTime.SecondsToTicks(0.1m),imported.DurationTicks);
+            await File.AppendAllTextAsync(Path.Combine(directory,"mask.mp4"),"changed");await Assert.ThrowsExactlyAsync<InvalidDataException>(()=>KineticPair.ImportAsync(path));
+            await Encode("mask.mp4",true,2);manifest["mask"]=Entry("mask.mp4");File.WriteAllText(path,manifest.ToJsonString());await Assert.ThrowsExactlyAsync<InvalidDataException>(()=>KineticPair.ImportAsync(path));
+        } finally {Directory.Delete(directory,true);}
+    }
     private sealed class MaskDecoder(string mask) : IMediaDecoder
     {
         public List<long> Ticks { get; } = [];
