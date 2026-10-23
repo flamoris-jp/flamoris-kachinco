@@ -16,6 +16,7 @@ def main():
     binary = '/app/kachinco'
     project = pathlib.Path('/data/projects/resident.fkproj')
     exports = pathlib.Path('/data/exports')
+    workspace = pathlib.Path('/data/projects/workspace.json')
     port = int(os.environ.get('KACHINCO_PORT', '8772'))
     if not 1 <= port <= 65535:
         raise ValueError('Invalid health port')
@@ -28,10 +29,14 @@ def main():
         raise ValueError('Configure a nonempty private Hub connector credential')
     if encoder == 'vaapi':
         subprocess.run([binary, 'gpu', 'check', '--vaapi-device', device], check=True, timeout=20)
-    project.parent.mkdir(parents=True, exist_ok=True)
-    exports.mkdir(parents=True, exist_ok=True)
-    if not project.exists():
-        subprocess.run([binary, 'project', 'new', '--output', str(project), '--name', 'Resident editor'], check=True)
+    if os.path.lexists(workspace):
+        storage_args = ['--workspace-config', str(workspace)]
+    else:
+        project.parent.mkdir(parents=True, exist_ok=True)
+        exports.mkdir(parents=True, exist_ok=True)
+        if not project.exists():
+            subprocess.run([binary, 'project', 'new', '--output', str(project), '--name', 'Resident editor'], check=True)
+        storage_args = ['--project', str(project), '--output-root', str(exports)]
     ready, stopping = threading.Event(), threading.Event()
     child = None
 
@@ -60,7 +65,7 @@ def main():
         with os.fdopen(fd, 'w') as output:
             output.write(credential)
         credential = None
-        child = subprocess.Popen([binary, 'serve', '--project', str(project), '--output-root', str(exports),
+        child = subprocess.Popen([binary, 'serve', *storage_args,
                                   '--hub-endpoint', endpoint, '--credential-file', str(token), '--permission', permission,
                                   '--encoder', encoder, '--vaapi-device', device],
                                  stdout=subprocess.PIPE, text=True)

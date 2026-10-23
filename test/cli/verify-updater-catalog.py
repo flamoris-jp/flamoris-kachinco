@@ -10,6 +10,8 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import time
+import urllib.request
 
 from flamoris_updater_adapters.managed import Catalog, Manager, Start
 
@@ -68,6 +70,37 @@ def verify(catalog_path, install=False):
                 subprocess.run(['docker', 'exec', container, '/app/kachinco', 'export',
                                 '/data/projects/acceptance.fkproj', '--output', '/data/exports/acceptance.mp4'], check=True, timeout=60)
                 assert (root / 'apps' / recipe.application_id / 'exports/acceptance.mp4').is_file()
+                # Opt-in workspace config uses exactly the same retained mounts.
+                # This checks entrypoint wiring/UID/config persistence, not NAS acceptance.
+                workspace_root = project.parent / 'workspace'
+                workspace_root.mkdir(mode=0o750)
+                os.chown(workspace_root, 10001, 10001)
+                workspace_config = project.parent / 'workspace.json'
+
+                def select(name):
+                    workspace_config.write_text(json.dumps({'projectsRoot': '/data/projects/workspace', 'projectName': name,
+                                                            'temporaryExportRoot': '/data/exports'}))
+                    os.chmod(workspace_config, 0o644)
+                    subprocess.run(['docker', 'restart', container], check=True, timeout=60)
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        try:
+                            with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=2) as response:
+                                if response.status == 200:
+                                    return
+                        except OSError:
+                            pass
+                        time.sleep(.2)
+                    raise RuntimeError('Configured workspace did not become healthy')
+
+                select('First')
+                first = workspace_root / 'First/project.fkproj'
+                saved = first.read_bytes()
+                select('Second')
+                assert (workspace_root / 'Second/project.fkproj').is_file()
+                select('First')
+                assert first.read_bytes() == saved
+                assert project.is_file()  # legacy project was not migrated or reset
         finally:
             if install:
                 subprocess.run(['docker', 'rm', '--force', recipe.application['container_name']], check=False,

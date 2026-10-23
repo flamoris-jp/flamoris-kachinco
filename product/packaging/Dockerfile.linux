@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --create-home --home-dir /home/kachinco kachinco
 WORKDIR /app
-LABEL org.opencontainers.image.title="flamoris-kachinco-cli" org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.title="flamoris-kachinco-cli" org.opencontainers.image.version="0.1.1"
 COPY --from=build /publish/ /app/
 COPY product/packaging/updater-entrypoint.py /app/updater-entrypoint.py
 USER 10001:10001
