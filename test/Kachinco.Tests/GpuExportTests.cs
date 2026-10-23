@@ -13,6 +13,33 @@ namespace Kachinco.Tests;
 public sealed class GpuExportTests
 {
     [TestMethod]
+    [DataRow("success", true)]
+    [DataRow("initialize", true)]
+    [DataRow("midstream", true)]
+    [DataRow("initialize", false)]
+    [DataRow("midstream", false)]
+    public async Task VaapiArgumentsStrictFailureAndOptionalCpuReplay(string mode, bool strict)
+    {
+        if (OperatingSystem.IsWindows()) { Assert.Inconclusive("POSIX injected encoder; physical VAAPI acceptance is separate."); return; }
+        using var fixture = new EncoderFixture(mode, vaapi: true);
+        var source = new Frames();
+        var result = await new FfmpegEncodingBackend().EncodeAsync(fixture.Request, source,
+            new(fixture.Executable, VideoEncoderPreference.Vaapi, VaapiDevice: "/dev/dri/renderD129", RequireHardware: strict), null, default);
+        var calls = File.ReadAllLines(fixture.Calls).Select(line => JsonSerializer.Deserialize<string[]>(line)!).ToArray();
+        var probe = calls.Single(a => a.Contains("lavfi"));
+        Assert.AreEqual("/dev/dri/renderD129", probe[Array.IndexOf(probe, "-vaapi_device") + 1]);
+        Assert.IsTrue(probe.Contains("format=nv12,hwupload"));
+        bool failed = strict && mode != "success";
+        Assert.AreEqual(failed ? ExportStage.Failed : ExportStage.Completed, result.Stage);
+        Assert.AreEqual(strict && mode == "initialize" ? 0 : mode == "midstream" && !strict ? 2 : 1, source.Enumerations);
+        Assert.AreEqual(!strict && mode != "success" ? 1 : 0, calls.Count(a => a.Contains("rawvideo") && a.Contains("libx264")));
+        Assert.AreEqual(failed, !File.Exists(fixture.Request.OutputPath));
+        if (mode == "success") Assert.AreEqual("h264_vaapi", result.Metrics!.VideoEncoder);
+        Assert.AreEqual("/dev/dri/renderD129", result.Metrics!.VaapiDevice);
+        Assert.AreEqual(0, Directory.GetDirectories(fixture.Directory).Length);
+    }
+
+    [TestMethod]
     [DataRow("initialize")]
     [DataRow("midstream")]
     [DataRow("success")]
@@ -199,18 +226,18 @@ public sealed class GpuExportTests
         public string Executable => Path.Combine(Directory, "ffmpeg-test");
         public string Calls => Path.Combine(Directory, "calls.jsonl");
         public EncodingRequest Request => new(Guid.NewGuid(), Path.Combine(Directory, "out.mp4"), ExportPreset.ClipPreviewH264Mp4, new(480, 270, new(30, 1)), 3, 48000, 2, 4800);
-        public EncoderFixture(string mode)
+        public EncoderFixture(string mode, bool vaapi = false)
         {
             System.IO.Directory.CreateDirectory(Directory);
             File.WriteAllText(Executable, "#!/usr/bin/python3\nimport sys,json,os\na=sys.argv[1:]\nwith open(" + JsonSerializer.Serialize(Calls) + ", 'a') as f: f.write(json.dumps(a)+'\\n')\n" +
-                "mode=" + JsonSerializer.Serialize(mode) + "\n" +
+                "mode=" + JsonSerializer.Serialize(mode) + "\nhw=" + JsonSerializer.Serialize(vaapi ? "h264_vaapi" : "h264_nvenc") + "\n" +
                 "if mode=='hangprobe' and 'lavfi' in a:\n import time;time.sleep(30)\n" +
                 "if mode=='bothfail' and 'libx264' in a: sys.exit(21)\n" +
-                "if 'h264_nvenc' in a:\n" +
+                "if hw in a:\n" +
                 " if 'lavfi' in a:\n  sys.exit(1 if mode=='initialize' else 0)\n" +
                 " if mode in ['midstream','bothfail']:\n  sys.stdin.buffer.read(480*270*4)\n  open(a[-1],'wb').write(b'partial')\n  sys.exit(12)\n" +
-                " drop=['-gpu','-tune','-rc','-cq','-b:v']\n b=[];i=0\n while i<len(a):\n" +
-                "  if a[i] in drop: i+=2;continue\n  b.append('libx264' if a[i]=='h264_nvenc' else 'fast' if a[i]=='p5' else a[i]);i+=1\n a=b\n" +
+                " drop=['-gpu','-tune','-rc','-cq','-b:v','-vaapi_device','-vf','-profile:v','-rc_mode','-qp']\n b=[];i=0\n while i<len(a):\n" +
+                "  if a[i] in drop: i+=2;continue\n  b.append('libx264' if a[i]==hw else 'fast' if a[i]=='p5' else a[i]);i+=1\n a=b[:-1]+['-pix_fmt','yuv420p']+b[-1:]\n" +
                 "os.execvp('ffmpeg',['ffmpeg']+a)\n");
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }

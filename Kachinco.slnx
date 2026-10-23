@@ -4,6 +4,7 @@
     <Project Path="product/Kachinco.Core/Kachinco.Core.csproj" />
     <Project Path="product/Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />
     <Project Path="product/Kachinco.Mcp/Kachinco.Mcp.csproj" />
+    <Project Path="product/Kachinco.Cli/Kachinco.Cli.csproj" />
     <Project Path="product/Kachinco.App/Kachinco.App.csproj" />
   </Folder>
   <Folder Name="/test/">

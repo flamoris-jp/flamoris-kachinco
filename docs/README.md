@@ -1,5 +1,9 @@
 # Design index
 
+- [Linux CLI and LIME host](linux-cli.md): CPU rendering/export, resident setup and deployment boundaries.
+- [Linux CLI ADR](decisions/0024-linux-cli-and-resident-host.md): shared authority, captions, save and MCP job contracts.
+- [Linux VAAPI ADR](decisions/0025-linux-vaapi-encoding.md): required GPU encoding, fallback and independent Hub registration.
+
 - [Production architecture](production-architecture.md): implemented decisions and boundaries.
 - [WPF ownership boundaries](ui-ownership.md): shell/partial audit and homes for new editor behavior.
 - [Roadmap](roadmap.md): active phased delivery order.

@@ -14,6 +14,7 @@
     <None Update="Fixtures/title-image-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/media-upload-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../product/Kachinco.Core/Kachinco.Core.csproj" />
+    <ProjectReference Include="../../product/Kachinco.Cli/Kachinco.Cli.csproj" />
     <ProjectReference Include="../../product/Kachinco.Infrastructure/Kachinco.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

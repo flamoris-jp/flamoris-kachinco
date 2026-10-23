@@ -13,11 +13,13 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
         string? work = null;
         var total = Stopwatch.StartNew();
         double videoRenderMs = 0, videoPipelineMs = 0, audioMs = 0, muxMs = 0;
-        bool hardware = false;
+        bool hardware = false, vaapi = false;
         string? fallback = null;
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
-        ExportMetrics Metrics() => new(hardware ? "h264_nvenc" : "libx264", hardware ? settings.NvencDevice : null,
-            fallback, total.Elapsed.TotalMilliseconds, videoRenderMs, videoPipelineMs, audioMs, muxMs);
+        string EncoderName() => hardware ? vaapi ? "h264_vaapi" : "h264_nvenc" : "libx264";
+        ExportMetrics Metrics() => new(EncoderName(), hardware && !vaapi ? settings.NvencDevice : null,
+            fallback, total.Elapsed.TotalMilliseconds, videoRenderMs, videoPipelineMs, audioMs, muxMs,
+            VaapiDevice: vaapi ? settings.VaapiDevice : null);
         ExportResult Complete(string output) => new(request.JobId, ExportStage.Completed, output, diagnostics.ToImmutable(), Metrics());
         try
         {
@@ -25,6 +27,7 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
             if (request.FrameCount <= 0 || request.AudioSampleCount <= 0 || request.AudioSampleRate != 48000 || request.AudioChannels != 2 ||
                 !request.VideoSettings.FrameRate.IsValid || !Enum.IsDefined(request.Preset) ||
                 !Enum.IsDefined(settings.Encoder) || settings.NvencDevice < 0 ||
+                !ValidVaapiDevice(settings.VaapiDevice) ||
                 !ValidSize(request) ||
                 !Path.GetExtension(request.OutputPath).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
                 return Fail(request, "INVALID_ENCODING_REQUEST", "Expected landscape/portrait H.264 MP4 with 48 kHz stereo audio.");
@@ -38,22 +41,29 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
                 fallback = await ProbeNvencAsync(executable, request, settings.NvencDevice, cancellationToken);
                 hardware = fallback is null;
             }
-            else if (settings.Encoder == VideoEncoderPreference.Auto) fallback = "Automatic NVENC selection is Windows-only.";
+            else if (settings.Encoder == VideoEncoderPreference.Vaapi || settings.Encoder == VideoEncoderPreference.Auto && OperatingSystem.IsLinux())
+            {
+                vaapi = true;
+                fallback = await ProbeVaapiAsync(executable, request, settings.VaapiDevice, cancellationToken);
+                hardware = fallback is null;
+            }
+            if (!hardware && settings.RequireHardware)
+                return new(request.JobId, ExportStage.Failed, null, [Diagnostic.Error("GPU_ENCODER_UNAVAILABLE", fallback ?? "Hardware encoding is required.")], Metrics());
             if (fallback is not null) diagnostics.Add(new("ENCODER_FALLBACK", DiagnosticSeverity.Info, fallback));
             var videoClock = Stopwatch.StartNew();
-            try { videoRenderMs += await EncodeVideoAsync(executable, request, media, videoPath, hardware, settings.NvencDevice, progress, cancellationToken); }
-            catch (VideoEncoderException e) when (hardware && !cancellationToken.IsCancellationRequested)
+            try { videoRenderMs += await EncodeVideoAsync(executable, request, media, videoPath, hardware, settings.NvencDevice, progress, cancellationToken, vaapi, settings.VaapiDevice); }
+            catch (VideoEncoderException e) when (hardware && !settings.RequireHardware && !cancellationToken.IsCancellationRequested)
             {
                 videoRenderMs += e.RenderMilliseconds;
                 hardware = false; fallback = e.Message;
-                diagnostics.Add(new("ENCODER_FALLBACK", DiagnosticSeverity.Warning, "NVENC failed; restarting video once through libx264. " + fallback));
+                diagnostics.Add(new("ENCODER_FALLBACK", DiagnosticSeverity.Warning, "Hardware encoder failed; restarting video once through libx264. " + fallback));
                 File.Delete(videoPath);
-                progress?.Report(new(request.JobId, ExportStage.Rendering, 0, request.FrameCount, 0, "NVENC failed; CPU retry from frame zero."));
+                progress?.Report(new(request.JobId, ExportStage.Rendering, 0, request.FrameCount, 0, "Hardware encoder failed; CPU retry from frame zero."));
                 videoRenderMs += await EncodeVideoAsync(executable, request, media, videoPath, false, settings.NvencDevice, progress, cancellationToken);
             }
             videoPipelineMs = videoClock.Elapsed.TotalMilliseconds;
             diagnostics.Add(new("ENCODER_SELECTED", DiagnosticSeverity.Info,
-                hardware ? $"h264_nvenc: GPU {settings.NvencDevice}, p5 / hq / VBR-CQ 19 (not equivalent to x264 CRF 18)." : "libx264: fast / CRF 18."));
+                hardware ? vaapi ? $"h264_vaapi: {settings.VaapiDevice}, CQP 20 (not equivalent to x264 CRF 18)." : $"h264_nvenc: GPU {settings.NvencDevice}, p5 / hq / VBR-CQ 19 (not equivalent to x264 CRF 18)." : "libx264: fast / CRF 18."));
             if (request.Preset == ExportPreset.ClipPreviewH264Mp4)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -112,9 +122,42 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
         { return cancellationToken.IsCancellationRequested ? new(request.JobId, ExportStage.Cancelled, null, []) : new(request.JobId, ExportStage.Failed, null, [Diagnostic.Error("ENCODING_FAILED", e.Message), .. diagnostics], Metrics()); }
         finally { if (work is not null) try { Directory.Delete(work, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
-    private static string[] EncoderArguments(bool hardware, int device) => hardware
+    private static string[] EncoderArguments(bool hardware, int device, bool vaapi = false) => hardware && vaapi
+        ? ["-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-profile:v", "high", "-rc_mode", "CQP", "-qp", "20"] : hardware
         ? ["-c:v", "h264_nvenc", "-gpu", device.ToString(System.Globalization.CultureInfo.InvariantCulture), "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", "19", "-b:v", "0", "-pix_fmt", "yuv420p"]
         : ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"];
+
+    public static bool ValidVaapiDevice(string path) => path is not null &&
+        System.Text.RegularExpressions.Regex.IsMatch(path, "^/dev/dri/renderD[0-9]{3}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    public static async Task<Result<string>> CheckVaapiAsync(string device, CancellationToken token)
+    {
+        if (!ValidVaapiDevice(device)) return Result<string>.Fail(Diagnostic.Error("INVALID_GPU_DEVICE", "Select /dev/dri/renderDNNN."));
+        var request = new EncodingRequest(Guid.NewGuid(), "unused.mp4", ExportPreset.YoutubeH264AacMp4,
+            SequenceSettings.Landscape, 3, 48000, 2, 4800);
+        string? reason = await ProbeVaapiAsync("ffmpeg", request, device, token);
+        return reason is null ? Result<string>.Ok("h264_vaapi") : Result<string>.Fail(Diagnostic.Error("GPU_ENCODER_UNAVAILABLE", reason));
+    }
+
+    private static async Task<string?> ProbeVaapiAsync(string executable, EncodingRequest request, string device, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(8));
+        var fps = request.VideoSettings.FrameRate;
+        using var process = NativeMediaProcess.Start(executable, ["-v", "error", "-nostdin", "-vaapi_device", device,
+            "-f", "lavfi", "-i", $"color=c=black:s={request.VideoSettings.Width}x{request.VideoSettings.Height}:r={fps.Numerator}/{fps.Denominator}",
+            "-frames:v", "3", "-an", .. EncoderArguments(true, 0, true), "-f", "null", "-"]);
+        using var cancel = deadline.Token.Register(() => MediaProcess.Kill(process));
+        var error = MediaProcess.DrainErrorAsync(process.StandardError, deadline.Token);
+        try
+        {
+            await process.WaitForExitAsync(deadline.Token); string detail = await error;
+            token.ThrowIfCancellationRequested();
+            return process.ExitCode == 0 ? null : "VAAPI initialization encode failed: " + detail;
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { return "VAAPI initialization encode timed out."; }
+        finally { MediaProcess.Kill(process); try { await error; } catch (OperationCanceledException) { } }
+    }
 
     private static async Task<string?> ProbeNvencAsync(string executable, EncodingRequest request, int device, CancellationToken token)
     {
@@ -139,13 +182,15 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
     }
 
     private static async Task<double> EncodeVideoAsync(string executable, EncodingRequest request, IRenderedMediaSource media,
-        string path, bool hardware, int device, IProgress<ExportProgress>? progress, CancellationToken token)
+        string path, bool hardware, int device, IProgress<ExportProgress>? progress, CancellationToken token,
+        bool vaapi = false, string vaapiDevice = "/dev/dri/renderD128")
     {
         token.ThrowIfCancellationRequested();
         var fps = request.VideoSettings.FrameRate;
         var info = MediaProcess.StartInfo(executable,
-            ["-v", "error", "-nostdin", "-y", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", $"{request.VideoSettings.Width}x{request.VideoSettings.Height}",
-             "-r", $"{fps.Numerator}/{fps.Denominator}", "-i", "pipe:0", "-an", .. EncoderArguments(hardware, device), path]);
+            ["-v", "error", "-nostdin", "-y", .. (hardware && vaapi ? new[] { "-vaapi_device", vaapiDevice } : []),
+             "-f", "rawvideo", "-pix_fmt", "rgba", "-s", $"{request.VideoSettings.Width}x{request.VideoSettings.Height}",
+             "-r", $"{fps.Numerator}/{fps.Denominator}", "-i", "pipe:0", "-an", .. EncoderArguments(hardware, device, vaapi), path]);
         info.RedirectStandardInput = true;
         using var process = new Process { StartInfo = info };
         process.Start();
@@ -178,7 +223,7 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
                 count++;
                 if (request.Preset == ExportPreset.ClipPreviewH264Mp4 && File.Exists(path) && new FileInfo(path).Length > ClipDownloadStore.MaximumFileBytes)
                     throw new InvalidDataException("download_size_limit");
-                progress?.Report(new(request.JobId, ExportStage.Rendering, count, request.FrameCount, 0, hardware ? "h264_nvenc" : "libx264"));
+                progress?.Report(new(request.JobId, ExportStage.Rendering, count, request.FrameCount, 0, hardware ? vaapi ? "h264_vaapi" : "h264_nvenc" : "libx264"));
             }
             if (count != request.FrameCount) throw new InvalidDataException("Renderer returned too few frames.");
             process.StandardInput.Close();

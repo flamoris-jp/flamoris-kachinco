@@ -254,3 +254,65 @@ authorization; #82 remains open for measured Mango physical acceptance.
   regression 355 pass/1 skip; two existing Unix named-pipe tests hit this workspace's
   socket restriction and remain CI gates. Windows input/Media Player acceptance is
   separate. See docs/reviews/issue-94-first-frame.md for benchmark and limits.
+
+## 2026-10-23 — Issue #100 Linux CLI / resident host (implementation, physical acceptance pending)
+
+- Added `Kachinco.Cli`: project create/inspect/validate, probe-backed import/relink,
+  shared typed edit batches, atomic Save As, PNG/JPEG frames and CPU H.264/AAC MP4.
+- Native EditorSession/evaluator/compositor/codec remain the sole authority.
+  Linux Pango/Cairo supplies styled Japanese captions; WPF pixel/font parity is
+  explicitly not claimed. Windows media paths require explicit relinking.
+- Added one-project resident host using the common outbound Hub provider,
+  serialized edits/history, atomic checkpoints, preview/uploads and one bounded
+  cancellable export job with opaque artifact chunk retrieval. Separate LIME
+  descriptor generation preserves Mango's existing route.
+- Added self-contained Linux publishing, user systemd installer, ADR 0024 and
+  setup documentation. Installer preserves config/project and waits for actual
+  connector configuration before service activation.
+- Development-host verification: native 5/5; four new host/caption/job tests;
+  real CLI import/edit/save/reopen, styled Japanese captions, PNG/JPEG, exact
+  six-frame H.264/AAC, source/output preservation, missing media and SIGTERM cleanup.
+  Full managed run: 366 pass / 1 GPU skip / 2 pre-existing Unix-pipe failures due
+  to this host's socket restriction; these remain CI gates, not waived tests.
+- Physical LIME installation, Hub registration, Windows visual/reopen acceptance
+  and AMD GPU acceleration remain open. Server observation reported LIME healthy;
+  this development host cannot resolve/reach its private SSH hostname. No claim
+  that a prepared unit/bundle is already deployed or connected.
+
+### Updater deployment correction
+
+- LIME rollout uses Updater, as the operator specified. The user-systemd script is
+  a developer fallback, not the managed installation path.
+- Added application-owned Docker packaging, a digested repository catalog and
+  candidate metadata, with a non-root entrypoint and loopback process health.
+  Updater owns install/start/version orchestration; projects and media stay in
+  preserved data mounts. Existing media roots are configured read-only.
+- The catalog/profile was validated locally against actual Updater source
+  `d7182b40b05013be7f597dbaf9e952689649e816`, using fixture archive bytes only.
+  This proves schema/settings/profile compatibility, not Docker image validity.
+- Added candidate CI for an actual image build, actual Updater install/start and
+  container MP4 export. This host has no Docker executable; those checks have not
+  run here. No release, image, catalog or service was published/deployed.
+
+### VAAPI encoding and simultaneous Windows/Linux Hub routing
+
+- Added Linux `auto/cpu/vaapi` encoding with a real three-frame bounded VAAPI
+  initialization probe. Explicit `vaapi` requires hardware and never silently
+  uses CPU; Auto permits one video-only libx264 replay. Metrics report the actual
+  encoder, selected VAAPI node, fallback and CPU composition counts.
+- Native composition, Pango captions, decode and audio remain CPU work. No Linux
+  GPU composition, zero-copy pipeline or measured speedup is claimed.
+- Added `gpu check`; managed VAAPI startup probes hardware before process health.
+  Mesa/libva and application OCI identity labels are part of the Docker image.
+- GPU access requires the paired Updater source `93561720aed68e34ee3d4ffb9ccd81a9f035ab79`
+  (typed DRM node and observed render-group mapping). Candidate CI pins that source;
+  the referenced branch is published for review. This is not a
+  published/installed Updater capability yet.
+- Actual Hub parser acceptance combines 34 same-named tools under independent
+  `kachinco` and `kachinco_lime` namespaces, separate connector IDs/tokens. Live Hub
+  inspection still shows Windows `kachinco` only; no LIME route was registered.
+- Related encoder/host tests: 20 pass / 1 Windows WARP skip, including five new
+  injected-VAAPI cases. Available headless regression: 371 pass / 1 skip; two known
+  workspace Unix-pipe failures remain CI gates. Real CPU codec/caption/cancellation
+  smoke passes. Physical LIME VAAPI, Docker GPU access, A/V quality and speed remain
+  separate deployment acceptance; Server Manager confirms only amdgpu/16-GB presence.
