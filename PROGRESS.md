@@ -10,9 +10,14 @@
 - Durable workspace publication completed. All 39,889 MP4 bytes were retrieved;
   ffprobe verified H.264/AAC, stereo 48 kHz and exactly 3 seconds / 90 video frames.
   A decoded MP4 frame was visually checked, including Japanese glyphs.
+- The operator reopened the saved project in Windows and selected the three-second
+  test sequence. A live FLAMORIS Capture screenshot confirmed its green multiline
+  Japanese/English captions and subtitle track without visible missing glyphs.
+  The original Main sequence is empty; selecting it does not indicate a failed save.
 - No imported image/video/audio or audible source was used. Shared Undo/Redo,
   restart/reload, reboot/outage, failure/cancellation, production-media A/V,
-  Windows reopen and simultaneous live Windows/Linux acceptance remain pending.
+  media-path/font-metric comparison and simultaneous live Windows/Linux acceptance
+  remain pending.
 - [Bounded evidence and remaining gates](docs/linux-cli-acceptance.md).
   Issue #100 remains open. The older preparation records below are historical.
 
