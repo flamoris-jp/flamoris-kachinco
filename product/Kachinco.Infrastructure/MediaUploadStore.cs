@@ -6,7 +6,7 @@ using Flamoris.Mcp.Core;
 namespace Kachinco.Infrastructure;
 
 // One attachment owns unfinished bytes. Only the ordinary editor owns assets/history.
-public sealed class MediaUploadStore(string root, IMediaProbe probe, TimeProvider? clock = null) : IDisposable
+public sealed class MediaUploadStore(string root, IMediaProbe probe, TimeProvider? clock = null, string? projectDirectory = null) : IDisposable
 {
     public const long MaximumFileBytes = 512L * 1024 * 1024;
     public const int MaximumChunkBytes = 128 * 1024;
@@ -168,7 +168,8 @@ public sealed class MediaUploadStore(string root, IMediaProbe probe, TimeProvide
             File.Move(upload.Path, final);
             try
             {
-                var asset = (prepared.Info with { SourcePath = final }).ToMediaAsset(upload.Id, upload.Name);
+                var asset = (prepared.Info with { SourcePath = projectDirectory is null ? final : Path.GetRelativePath(projectDirectory, final) })
+                    .ToMediaAsset(upload.Id, upload.Name);
                 var result = session.Execute(new([new RegisterMedia(asset)], session.GetProject().Revision), token);
                 if (!result.Success) throw new McpFault("upload_registration_failed");
                 uploads.Remove(upload.Id);

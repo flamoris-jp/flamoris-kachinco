@@ -39,6 +39,7 @@ public static class Program
                 render frame movie.fkproj --time 1.5 --output frame.png [--sequence UUID]
                 export movie.fkproj --output movie.mp4 [--sequence UUID] [--encoder cpu|auto|vaapi] [--vaapi-device /dev/dri/renderD128]
                 serve --project movie.fkproj --hub-endpoint wss://host/desktop/kachinco-lime --credential-file token --permission edit|readOnly --output-root directory
+                serve --workspace-config workspace.json --hub-endpoint wss://host/desktop/kachinco-lime --credential-file token --permission edit|readOnly
                 catalog
                 gpu check [--vaapi-device /dev/dri/renderD128]
                 JSON results on stdout; diagnostics/progress on stderr. Outputs must be new files.
@@ -59,7 +60,7 @@ public static class Program
         }
         if (args[0] == "serve")
         {
-            string[] keys = ["project", "hub-endpoint", "credential-file", "permission", "output-root", "encoder", "vaapi-device"];
+            string[] keys = ["project", "hub-endpoint", "credential-file", "permission", "output-root", "encoder", "vaapi-device", "workspace-config"];
             Options service;
             if (args is ["serve", "--config", var configPath])
             {
@@ -173,7 +174,14 @@ public static class Program
     }
     private static async Task ServeAsync(Options o, CancellationToken token)
     {
-        string project = o.Require("project"), root = o.Require("output-root");
+        WorkspaceStorage? workspace = null;
+        if (o.Get("workspace-config") is { } workspaceConfig)
+        {
+            if (o.Get("project") is not null || o.Get("output-root") is not null)
+                throw new ArgumentException("workspace-config replaces project and output-root.");
+            workspace = await WorkspaceStorage.LoadAsync(workspaceConfig, token);
+        }
+        string project = workspace?.ProjectPath ?? o.Require("project"), root = workspace?.TemporaryExportRoot ?? o.Require("output-root");
         var permission = o.Require("permission") switch { "edit" => McpPermission.Edit, "readOnly" => McpPermission.ReadOnly, _ => throw new ArgumentException("Permission must be edit or readOnly.") };
         var settings = new HubConnectionSettings(new Uri(o.Require("hub-endpoint"))); settings.Validate();
         string credentialFile = Path.GetFullPath(o.Require("credential-file"));
@@ -182,9 +190,10 @@ public static class Program
         string credential = (await ReadBoundedAsync(credentialFile, 4096, token)).Trim();
         if (string.IsNullOrWhiteSpace(credential) || credential.Any(char.IsControl))
             throw new UnauthorizedAccessException("Configure a nonempty connector credential in the private credential file.");
+        workspace?.Prepare();
         using var host = new HeadlessSession(project, writable: true, autosave: permission == McpPermission.Edit, outputRoot: root,
-            encoding: CliOperations.Encoding(o.Get("encoder"), o.Get("vaapi-device")));
-        await host.LoadAsync(token);
+            encoding: CliOperations.Encoding(o.Get("encoder"), o.Get("vaapi-device")), workspace: workspace);
+        await host.LoadAsync(token, createIfMissing: workspace is not null && permission == McpPermission.Edit);
         var grant = await host.Boundary.EnableAsync(permission, token);
         var provider = new HubConnectionProvider(settings, host.Boundary, grant, async ct => (await ReadBoundedAsync(credentialFile, 4096, ct)).Trim());
         try

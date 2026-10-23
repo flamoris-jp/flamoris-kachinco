@@ -7,7 +7,8 @@ using Kachinco.Infrastructure;
 namespace Kachinco.Cli;
 
 // One admitted immutable export; session mutations still use the ordinary boundary.
-public sealed class ExportJobs(EditorSession session, string projectPath, string outputRoot, FfmpegSettings? settings = null) : IAsyncDisposable
+public sealed class ExportJobs(EditorSession session, string projectPath, string outputRoot, FfmpegSettings? settings = null,
+    WorkspaceStorage? workspace = null) : IAsyncDisposable
 {
     private readonly object gate = new();
     private CancellationTokenSource? cancellation;
@@ -18,6 +19,10 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
     private ExportProgress? progress;
     private long revision;
     private bool stopping;
+    private bool downloadAvailable;
+    private bool retainForRecovery;
+    private string? publishedPath;
+    private string? publicationStage;
 
     public IEnumerable<HostTool> Tools() => [
         new HostTool<JsonElement>("export_begin", "Start one H.264/AAC sequence export with host-configured GPU/CPU encoding at the guarded revision. Returns an opaque job ID.",
@@ -38,12 +43,15 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
         lock (gate)
         {
             if (stopping || worker is { IsCompleted: false }) throw new McpFault(McpErrors.Busy);
+            workspace?.VerifyAvailable();
             var snapshot = session.GetProject();
             if (!snapshot.Project!.Sequences.Any(s => s.Id == sequenceId)) throw new McpFault("sequence_not_found");
             CliOperations.CheckMedia(snapshot.Project, projectPath); CliOperations.CheckCanvas(snapshot.Project.Sequences.Single(s => s.Id == sequenceId));
             Cleanup(); Directory.CreateDirectory(outputRoot);
             id = Guid.NewGuid(); revision = snapshot.Revision; output = Path.Combine(Path.GetFullPath(outputRoot), id.ToString("N") + ".mp4");
             cancellation = new(TimeSpan.FromHours(1)); result = null; progress = null;
+            downloadAvailable = false; retainForRecovery = false; publishedPath = null;
+            publicationStage = workspace is null ? "NotConfigured" : "Pending";
             var request = new ExportRequest(id, sequenceId, output, ExportPreset.YoutubeH264AacMp4, revision);
             var token = cancellation.Token;
             worker = Task.Run(async () => {
@@ -51,6 +59,26 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
                 try { finished = await CliOperations.ExportAsync(snapshot, projectPath, request, new Reporter(p => { lock (gate) progress = p; }), token, settings); }
                 catch (OperationCanceledException) { finished = new(request.JobId, ExportStage.Cancelled, null, []); }
                 catch { finished = new(request.JobId, ExportStage.Failed, null, [Diagnostic.Error("EXPORT_FAILED", "Export failed; inspect local diagnostics.")]); }
+                bool encoded = finished.Stage == ExportStage.Completed;
+                lock (gate) downloadAvailable = encoded;
+                if (workspace is not null && encoded)
+                {
+                    try
+                    {
+                        string durable = await workspace.PublishAsync(request.OutputPath, request.JobId, sequenceId, snapshot.Revision, token);
+                        lock (gate) { publishedPath = durable; publicationStage = "Completed"; }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        finished = finished with { Stage = ExportStage.Cancelled, Diagnostics = [Diagnostic.Error("EXPORT_PUBLICATION_CANCELLED", "Durable publication cancelled; local encoded MP4 retained for recovery.")] };
+                        lock (gate) { retainForRecovery = true; publicationStage = "Cancelled"; }
+                    }
+                    catch
+                    {
+                        finished = finished with { Stage = ExportStage.Failed, Diagnostics = [Diagnostic.Error("EXPORT_PUBLICATION_FAILED", "Durable publication failed; local encoded MP4 retained for recovery.")] };
+                        lock (gate) { retainForRecovery = true; publicationStage = "Failed"; }
+                    }
+                }
                 lock (gate) result = finished;
             }, CancellationToken.None);
             return Json(new { jobId = id, revision = revision.ToString(CultureInfo.InvariantCulture) });
@@ -61,11 +89,16 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
         lock (gate)
         {
             Demand(job);
-            return Json(new { jobId = id, revision = revision.ToString(CultureInfo.InvariantCulture), stage = result?.Stage.ToString() ?? progress?.Stage.ToString() ?? "Planning",
+            // The encoder reports Completed before durable publication returns.
+            // Only the final Job result may expose a terminal stage to pollers.
+            string stage = result?.Stage.ToString() ?? (workspace is not null && (downloadAvailable || progress?.Stage == ExportStage.Completed)
+                ? "Publishing" : progress?.Stage == ExportStage.Completed ? "Encoding" : progress?.Stage.ToString() ?? "Planning");
+            return Json(new { jobId = id, revision = revision.ToString(CultureInfo.InvariantCulture),
+                stage,
                 framesCompleted = (progress?.FramesCompleted ?? 0).ToString(CultureInfo.InvariantCulture),
                 totalFrames = (progress?.TotalFrames ?? 0).ToString(CultureInfo.InvariantCulture),
-                diagnostics = result?.Diagnostics, metrics = result?.Metrics,
-                bytes = result?.Stage == ExportStage.Completed ? new FileInfo(output!).Length.ToString(CultureInfo.InvariantCulture) : null });
+                diagnostics = result?.Diagnostics, metrics = result?.Metrics, publicationStage, publishedPath, downloadAvailable,
+                bytes = downloadAvailable ? new FileInfo(output!).Length.ToString(CultureInfo.InvariantCulture) : null });
         }
     }
     private JsonElement Read(JsonElement input)
@@ -73,7 +106,7 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
         lock (gate)
         {
             Demand(input.GetProperty("jobId").GetGuid());
-            if (result?.Stage != ExportStage.Completed) throw new McpFault("export_not_ready");
+            if (!downloadAvailable) throw new McpFault("export_not_ready");
             var text = input.GetProperty("offset").GetString();
             if (!long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var offset) || offset.ToString(CultureInfo.InvariantCulture) != text)
                 throw new JsonException();
@@ -84,7 +117,11 @@ public sealed class ExportJobs(EditorSession session, string projectPath, string
         }
     }
     private void Demand(Guid job) { if (job == Guid.Empty || job != id) throw new McpFault("export_not_found"); }
-    private void Cleanup() { if (output is not null) File.Delete(output); cancellation?.Dispose(); cancellation = null; output = null; }
+    private void Cleanup()
+    {
+        if (output is not null && !retainForRecovery) File.Delete(output);
+        cancellation?.Dispose(); cancellation = null; output = null; downloadAvailable = false;
+    }
     public async ValueTask DisposeAsync()
     {
         Task? pending; lock (gate) { stopping = true; cancellation?.Cancel(); pending = worker; }

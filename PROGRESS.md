@@ -1,5 +1,24 @@
 # Delivery progress
 
+## Configured resident project storage — 2026-10-23
+
+- CLI 0.1.1 candidate adds optional `workspace.json`: selected project folders
+  with `project.fkproj`, portable uploaded `media/` and durable `exports/`.
+- Settings apply on graceful restart; existing data/legacy resident projects are
+  not migrated or reset. Native commands, persistence, history and encoding remain
+  shared. A required CIFS/NFS mount guard fails on missing storage.
+- Encode locally, publish with exclusive staging/flush/non-overwriting rename,
+  retain completed durable MP4s independently of Job cleanup. Failed publication
+  is observable and retains the local encoded file for operator recovery.
+- Keeps 0.1.0's exact Updater mount/settings contract and opts into the existing
+  retained project mount; no Updater profile mutation or additional service.
+- Local targeted storage/host/upload checks: 23 passed; native contracts 5/5.
+  Full regression: 379 passed, 1 skipped; the same two Unix pipe transport tests
+  fail under this workspace's socket restrictions. Full CI and Docker/Windows
+  candidate gates are recorded on the PR.
+  NAS mounting, permissions/locking, real GPU export and live Hub acceptance
+  remain deployment work, not certified by a source configuration or local test.
+
 ## Linux CLI distribution preparation — 2026-10-23
 
 - Gate immutable CLI publication on the shared Product workflow and actual

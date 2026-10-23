@@ -20,24 +20,30 @@ public sealed class HeadlessSession : IDisposable
     public ExportJobs? Jobs { get; }
     private readonly MediaUploadStore? uploads;
     private readonly bool autosave;
+    private readonly WorkspaceStorage? workspace;
     public HeadlessSession(string path, string? savePath = null, bool writable = false, bool autosave = false, string? outputRoot = null,
-        FfmpegSettings? encoding = null)
+        FfmpegSettings? encoding = null, WorkspaceStorage? workspace = null)
     {
-        ProjectPath = Path.GetFullPath(path); SavePath = Path.GetFullPath(savePath ?? path); this.autosave = autosave;
+        ProjectPath = Path.GetFullPath(path); SavePath = Path.GetFullPath(savePath ?? path); this.autosave = autosave; this.workspace = workspace;
         try
         {
+            workspace?.VerifyAvailable();
+            if (workspace is not null && (ProjectPath != workspace.ProjectPath || SavePath != ProjectPath || outputRoot != workspace.TemporaryExportRoot))
+                throw new ArgumentException("Session paths must match the configured workspace.");
             if (writable) projectLock = new FileStream(ProjectPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             Host = new(Session, () => false, async (action, token) => {
                 await lane.WaitAsync(token);
-                try { token.ThrowIfCancellationRequested(); action(); } finally { lane.Release(); }
+                try { token.ThrowIfCancellationRequested(); workspace?.VerifyAvailable(); action(); } finally { lane.Release(); }
             });
             var capture = new PreviewFrameCapture(new FfmpegImageEncoder(), new LinuxCaptionRasterizer());
             if (outputRoot is not null)
             {
-                Jobs = new(Session, ProjectPath, outputRoot, encoding);
-                uploads = new(Path.Combine(Path.GetDirectoryName(ProjectPath)!, "imported-media"), new FfprobeMediaProbe());
+                Jobs = new(Session, ProjectPath, outputRoot, encoding, workspace);
+                uploads = new(workspace?.MediaDirectory ?? Path.Combine(Path.GetDirectoryName(ProjectPath)!, "imported-media"),
+                    new FfprobeMediaProbe(), projectDirectory: workspace?.ProjectDirectory);
             }
-            Boundary = new(Host, KachincoMcpTools.Create(Session, () => new { headless = true, dirty = Dirty }, Changed)
+            Boundary = new(Host, KachincoMcpTools.Create(Session, () => new { headless = true, dirty = Dirty,
+                workspace = workspace is null ? null : new { workspace.ProjectName, workspace.ProjectPath, workspace.MediaDirectory, workspace.ExportDirectory } }, Changed)
                 .Append(capture.CreateTool(Session, () => ProjectPath, () => Host.Snapshot))
                 .Concat(Jobs?.Tools() ?? [])
                 .Concat(uploads is null ? [] : MediaUploadMcpTools.Create(Session, uploads, Changed))
@@ -48,8 +54,17 @@ public sealed class HeadlessSession : IDisposable
         }
         catch { Session.Dispose(); projectLock?.Dispose(); throw; }
     }
-    public async Task LoadAsync(CancellationToken token)
+    public async Task LoadAsync(CancellationToken token, bool createIfMissing = false)
     {
+        workspace?.VerifyAvailable();
+        if (workspace is not null && !File.Exists(ProjectPath))
+        {
+            if (!createIfMissing) throw new IOException("Configured project is absent; enable edit permission to create it.");
+            var created = Session.Execute(new([new CreateProject(Guid.NewGuid(), workspace.ProjectName),
+                new CreateSequence(Guid.NewGuid(), "Main", SequenceSettings.Landscape, 10 * TimelineTime.TicksPerSecond)]), token);
+            if (!created.Success) throw new InvalidDataException("Project initialization failed.");
+            Save(); return;
+        }
         var loaded = await new ProjectFileStore().LoadAsync(ProjectPath, token);
         if (!loaded.Success) throw new InvalidDataException(string.Join("; ", loaded.Diagnostics.Select(d => d.Code + ": " + d.Message)));
         var replace = Session.ReplaceProject(loaded.Value);
@@ -65,6 +80,7 @@ public sealed class HeadlessSession : IDisposable
     }
     public void Save()
     {
+        workspace?.VerifyAvailable();
         var snapshot = Session.GetProject();
         // Saving elsewhere must not change what project-relative media refers to.
         if (Path.GetDirectoryName(ProjectPath) != Path.GetDirectoryName(SavePath))

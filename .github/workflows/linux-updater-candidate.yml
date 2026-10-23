@@ -42,7 +42,8 @@ jobs:
           python test/cli/verify-hub-namespaces.py artifacts/hub-source dist/release/cli-tools.json
           cp product/packaging/create-linux-hub-descriptor.py dist/release/
           cp docs/linux-cli.md dist/release/
-          (cd dist/release && sha256sum catalog.json candidate.json linux-amd64--image.tar cli-tools.json create-linux-hub-descriptor.py linux-cli.md > SHA256SUMS)
+          cp product/packaging/workspace.example.json dist/release/
+          (cd dist/release && sha256sum catalog.json candidate.json linux-amd64--image.tar cli-tools.json create-linux-hub-descriptor.py linux-cli.md workspace.example.json > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: kachinco-updater-candidate

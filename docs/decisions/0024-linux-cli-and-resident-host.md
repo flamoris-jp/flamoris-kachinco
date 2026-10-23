@@ -31,6 +31,8 @@ their project; CLI mutations take the same lock. Saves are atomic via the existi
 store. Remote edits remain in shared Undo/Redo history; checkpoint saves preserve
 committed state and explicitly report save failures. A single resident session
 opens one operator-selected project; no remote open/arbitrary path tool.
+ADR 0026 adds an optional configured per-project workspace, selected at startup,
+with separate local scratch and durable MP4 publication.
 
 ## Linux text and images
 

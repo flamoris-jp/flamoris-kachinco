@@ -1,0 +1,6 @@
+{
+  "projectsRoot": "/data/projects/workspace/projects",
+  "projectName": "my-movie",
+  "temporaryExportRoot": "/data/exports",
+  "requiredMount": "/data/projects/workspace"
+}
