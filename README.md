@@ -101,6 +101,22 @@ Some capabilities have explicit boundaries:
 
 The full engineering status and outstanding acceptance evidence live in [PROGRESS.md](PROGRESS.md), [the roadmap](docs/roadmap.md), and [Windows creation-workflow acceptance](staging/windows-creation-workflow.md).
 
+## KineticTypo / キネタイ companion
+
+The Windows package now includes `kinetai/KineticTypo.App.exe`: a separate C# WPF
+text editor using native C++ DirectWrite/Direct2D/D3D11 drawing and seeded,
+cluster-based motion. Launch it from **KineticTypo / キネタイ** in Kachinco, or open
+it standalone. It supports editable `.ktproj` compositions, native Undo/Redo,
+SRT/legacy PONPON import, bounded Python motion scripts, and synchronized
+RGB-on-black + opacity-mask MP4 packages. Kachinco stores embedded editable text
+and imports mask pairs as one ordinary logical asset. Both editors expose guarded
+MCP operations over the same native document commands.
+
+初版実装です。C#の編集画面とC++のGPU文字描画を使い、カチンコへ編集可能な
+文字クリップを戻せます。GPU実機・日本語フォント・輪郭・書出品質の受入確認は
+[Windows checklist](staging/windows-kinetai.md)で別途記録します。
+[Usage and file contracts](docs/kinetai.md) · [ADR](docs/decisions/0028-kinetai-first-runtime.md).
+
 ## Getting started (Windows)
 
 **For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start `Kachinco.App.exe`. The destination machine does **not** need the .NET SDK, but media workflows require `ffmpeg` and `ffprobe` on `PATH`; restricted Recipes additionally require Python 3.

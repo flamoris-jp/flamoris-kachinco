@@ -1,4 +1,5 @@
 #include "editor_domain.hpp"
+#include "kinetic_text.hpp"
 #include "time_math.hpp"
 #include <algorithm>
 #include <cmath>
@@ -112,15 +113,23 @@ json validate(const json& p) {
         if(a.is_null()) { e("INVALID_ASSET","Null media asset."); continue; }
         const auto& id=a.at("id"); identity(id,field(a,"name"),"assets"); assets.emplace(guid(id),&a);
         auto kind=integer(a.at("kind"));
-        if(kind<0||kind>2) e("INVALID_MEDIA_KIND","Unknown media kind.",id);
+        if(kind<0||kind>4) e("INVALID_MEDIA_KIND","Unknown media kind.",id);
         if(!valid_range(0,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_MEDIA_DURATION","Media duration must be positive.",id);
+        const auto& composition=field(a,"textComposition");const auto& mask=field(a,"maskSourcePath");
+        if(kind==3) {
+            try { if(!composition.is_string()||composition.get_ref<const std::string&>().size()>16*1024*1024) throw std::invalid_argument("composition");
+                auto d=parse(composition.get<std::string>());kn_text::validate(d);if(std::stoll(d.at("durationTicks").get<std::string>())!=integer(a.at("durationTicks"))) throw std::invalid_argument("duration");
+            } catch(...) {e("INVALID_TEXT_COMPOSITION","Invalid native text composition or duration.",id);}
+        } else if(!composition.is_null()) e("INVALID_TEXT_COMPOSITION","Text state requires KineticText media.",id);
+        if(kind==4) {if(!text_ok(mask,32768))e("INVALID_MASK_PAIR","MaskedVideo requires a mask source.",id);}
+        else if(!mask.is_null())e("INVALID_MASK_PAIR","Mask source requires MaskedVideo media.",id);
         const auto& path=field(a,"sourcePath"); bool supported=false;
         if(text_ok(path,32768)) {
             const auto s=path.get<std::string>(); auto dot=s.find_last_of('.'); auto slash=s.find_last_of("/\\");
             std::string ext=dot!=std::string::npos&&(slash==std::string::npos||dot>slash)?s.substr(dot):"";
             for(char& c:ext) if(c>='A'&&c<='Z') c=static_cast<char>(c+32);
             supported=s.find('\0')==std::string::npos&&s.find('\r')==std::string::npos&&s.find('\n')==std::string::npos&&s.find("://")==std::string::npos&&
-                (kind==0?(ext==".mov"||ext==".mp4"):kind==1?(ext==".wav"||ext==".mp3"||ext==".m4a"):kind==2?(ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".webp"):false);
+                (kind==0?(ext==".mov"||ext==".mp4"):kind==1?(ext==".wav"||ext==".mp3"||ext==".m4a"):kind==2?(ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".webp"):kind==3?ext==".ktproj":kind==4?ext==".mp4":false);
         }
         if(!supported) e("UNSUPPORTED_MEDIA_SOURCE","Register a local MOV/MP4 video or WAV/MP3/M4A audio path matching its media kind.",id,"sourcePath");
         const auto& rate=field(a,"sampleRate"); const auto& channels=field(a,"channels");
@@ -216,7 +225,7 @@ json validate(const json& p) {
                 auto it=assets.find(guid(c.at("mediaAssetId")));
                 if(it==assets.end()) e("MEDIA_NOT_FOUND","Clip references missing media.",cid,"mediaAssetId");
                 else { const auto& a=*it->second; if(!valid_range(integer(c.at("sourceInTicks")),span,(integer(a.at("kind"))==2?INT64_MAX:integer(a.at("durationTicks"))))) e("INVALID_SOURCE_RANGE","Source range must fit inside the registered media.",cid);
-                    if((kind==0&&integer(a.at("kind"))!=0&&integer(a.at("kind"))!=2)||(kind==1&&integer(a.at("kind"))!=1)) e("TRACK_MEDIA_MISMATCH","Video tracks accept video assets; audio tracks accept audio assets.",cid); }
+                    if((kind==0&&integer(a.at("kind"))!=0&&integer(a.at("kind"))!=2&&integer(a.at("kind"))!=3&&integer(a.at("kind"))!=4)||(kind==1&&integer(a.at("kind"))!=1)) e("TRACK_MEDIA_MISMATCH","Video tracks accept video assets; audio tracks accept audio assets.",cid); }
                 const auto& a=field(c,"appearance"); const auto& tr=field(a,"transform");
                 bool good=a.is_object()&&tr.is_object()&&integer(a.at("blend"))>=0&&integer(a.at("blend"))<=1&&finite(field(a,"opacity"));
                 if(good) good=a.at("opacity").get<double>()>=0&&a.at("opacity").get<double>()<=1;
@@ -346,6 +355,14 @@ json apply(json p,const json& request) {
             // covered above. Generated provenance points to a Recipe, not another asset.
         }
         p["assets"].erase(p["assets"].begin()+static_cast<json::difference_type>(index)); return p;
+    }
+    if(type=="SetTextComposition") {
+        auto& a=p["assets"][find(p.at("assets"),c.at("mediaAssetId"),"MEDIA_NOT_FOUND","Text asset not found.")];
+        if(integer(a.at("kind"))!=3)reject("TEXT_MEDIA_REQUIRED","Choose a KineticText asset.");
+        a["textComposition"]=c.at("textComposition");
+        try{auto d=parse(c.at("textComposition").get<std::string>());kn_text::validate(d);a["durationTicks"]=std::stoll(d.at("durationTicks").get<std::string>());}
+        catch(...){reject("INVALID_TEXT_COMPOSITION","Invalid native text composition.");}
+        return p;
     }
     if(type=="RegisterMedia") { p["assets"].push_back(c.at("asset")); return p; }
     if(type=="RelinkMedia"||type=="SetGeneratedProvenance") {

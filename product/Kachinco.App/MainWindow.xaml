@@ -93,6 +93,10 @@
         <MenuItem Header="{DynamicResource Shell.ZoomoutO}" Click="ZoomOut_Click" />
       </MenuItem>
       <MenuItem Header="Clapper / Recipe"><MenuItem Header="{DynamicResource Shell.EditnamedrangesandRecipes}" Click="Authoring_Click" /></MenuItem>
+      <MenuItem Header="KineticTypo / キネタイ">
+        <MenuItem Header="文字演出を作る・編集 / Create or edit" Click="KineticEdit_Click"/>
+        <MenuItem Header="文字素材・RGBマスクを読込 / Import" Click="KineticImport_Click"/>
+      </MenuItem>
       <MenuItem x:Name="McpMenu" Header="MCP / AI" />
       <MenuItem Header="{DynamicResource Shell.Language}">
         <MenuItem x:Name="JapaneseMenu" Header="日本語" IsCheckable="True" IsChecked="True" Tag="ja" Click="Language_Click"/>

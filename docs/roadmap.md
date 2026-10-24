@@ -35,3 +35,7 @@ Use the final #36 portable bundle and [native checklist](../staging/windows-nati
 #28 remains open pending clip-boundary pause evidence; #29 Inspector and #30
 automation UI/domain/persistence are independent follow-up features. The native
 automation evaluation seam does not deliver editable/persisted animation curves.
+
+## KineticTypo first runtime (2026-10-24)
+
+Separate WPF companion, native GPU text, embedded editable state, host handoff, lyrics/scripts, paired mask interchange and native MCP commands are implemented. Physical hardware/quality/performance evidence remains open under #109; see [acceptance](../staging/windows-kinetai.md). PONPON/Analyzer remain StudioClient work.

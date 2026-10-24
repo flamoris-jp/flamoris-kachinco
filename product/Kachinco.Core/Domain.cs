@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace Kachinco.Core;
 
 // Persisted compatibility tokens: Mov is video (MOV/MP4), Wav is audio (WAV/MP3/M4A).
-public enum MediaKind { Mov, Wav, Image }
+public enum MediaKind { Mov, Wav, Image, KineticText, MaskedVideo }
 public enum TrackKind { Video, Audio, Subtitle }
 public enum BlendMode { Normal, Screen }
 
@@ -12,6 +12,8 @@ public sealed record Project(Guid Id, string Name, ImmutableArray<MediaAsset> As
 public sealed record MediaAsset(Guid Id, string Name, string SourcePath, MediaKind Kind,
     long DurationTicks, int? SampleRate = null, int? Channels = null)
 {
+    public string? TextComposition { get; init; }
+    public string? MaskSourcePath { get; init; }
     public GeneratedProvenance? Provenance { get; init; }
 }
 public sealed record TitleImageSelection(Guid MediaAssetId, long? SourceFrameTicks = null);

@@ -12,6 +12,7 @@ public interface ICaptionRasterizer
 public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPath = null, ICaptionRasterizer? captions = null,
     FlamorisLogger? logger = null, PreviewRenderBackend? previewBackend = null) : IFrameRenderer
 {
+    private static readonly Lazy<Kachinco.Native.NativeKineticRenderer> kinetic = new(() => new());
     public ValueTask<Result<RenderedVideoFrame>> RenderPreviewAsync(Project project, EvaluatedFrame frame, PreviewQuality quality, CancellationToken token)
     {
         int divisor = (int)quality;
@@ -38,9 +39,21 @@ public sealed class SharedFrameRenderer(IMediaDecoder decoder, string? projectPa
             foreach (var layer in frame.VideoLayers)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var asset = project.Assets.First(a => a.Id == layer.MediaAssetId);
+                if (asset.Kind == MediaKind.KineticText) {
+                    var rendered = kinetic.Value.Render(asset.TextComposition!, layer.SourceTicks, width, height);
+                    CompositeLayer(System.Collections.Immutable.ImmutableArray.CreateRange(rendered.Rgba), layer.Appearance);
+                    continue;
+                }
                 var path = paths[layer.MediaAssetId];
                 if (!path.IsAvailable || path.ResolvedPath is null) return Result<RenderedVideoFrame>.Fail(Diagnostic.Error("MEDIA_MISSING", "Video source is missing.", layer.MediaAssetId));
                 var pixels = await DecodeVideoAsync(path.ResolvedPath, layer, frame, width, height, cancellationToken);
+                if (asset.Kind == MediaKind.MaskedVideo) {
+                    string maskPath = Path.IsPathFullyQualified(asset.MaskSourcePath!) ? asset.MaskSourcePath! :
+                        Path.GetFullPath(asset.MaskSourcePath!, Path.GetDirectoryName(Path.GetFullPath(projectPath ?? path.ResolvedPath))!);
+                    var mask = await decoder.VideoAsync(maskPath, layer.SourceTicks, width, height, cancellationToken);
+                    pixels = System.Collections.Immutable.ImmutableArray.CreateRange(Kachinco.Native.NativeKineticRenderer.ApplyMask(pixels.ToArray(), mask.ToArray()));
+                }
                 CompositeLayer(pixels, layer.Appearance);
             }
             if (!frame.Captions.IsEmpty)

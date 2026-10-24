@@ -364,3 +364,26 @@ authorization; #82 remains open for measured Mango physical acceptance.
   workspace Unix-pipe failures remain CI gates. Real CPU codec/caption/cancellation
   smoke passes. Physical LIME VAAPI, Docker GPU access, A/V quality and speed remain
   separate deployment acceptance; Server Manager confirms only amdgpu/16-GB presence.
+
+
+## KineticTypo first implementation (2026-10-24, #109 / PR #111)
+
+- Separate packaged C# WPF companion with native C++ DirectWrite/D2D/D3D11 glyph
+  shaping/drawing, cluster motion, deterministic seed, actual backend/font status.
+- Native versioned document commands/history; `.ktproj` open/save; conditional v8
+  embedded KineticText and paired MaskedVideo assets, preserving v1-v7 migrations.
+- Package-local launch; explicit identity/revision-guarded return; one host Undo;
+  cancel/crash/conflict keeps the draft and does not overwrite the host project.
+- SRT/legacy PONPON import and bounded Python AST-to-IR scripts; editable presets.
+- RGB-on-black plus native-opacity mask export, paired manifest/checksums/CFR
+  validation, native mask conversion and shared clip source-time/trim/speed mapping.
+- Both UI and MCP use native commands. Matched Hub catalogs: Hub PR #58.
+- Validation before final packaging: Linux headless CI passed (including full
+  socket and sanitizer contracts); Windows C++/WARP text and alpha contracts,
+  managed parity and existing editor/raster acceptance passed. The first portable
+  publish caught the companion's additional trusted worker path; packaging now
+  explicitly includes only that worker as an additional source exception.
+- Available local headless tests: 386 passed / 1 Windows-only skip; two Unix-pipe
+  tests require CI's socket environment. Physical hardware/font/edge/performance,
+  full-song VRAM and file-size comparisons remain unchecked in
+  [Windows acceptance](staging/windows-kinetai.md). No live deployment/merge.
