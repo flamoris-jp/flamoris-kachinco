@@ -1,4 +1,5 @@
 #include "kinetic_text.hpp"
+#include "kinetic_program.hpp"
 #include "kachinco_native.h"
 #include "buffer.hpp"
 #include <algorithm>
@@ -50,7 +51,9 @@ void validate(const json& d) {
         number(c.at("fontSize"),1,2048);number(c.at("strokeWidth"),0,64);color(c.at("color"));color(c.at("strokeColor"));color(c.at("shadowColor"));
         for(auto k:{"x","y","shadowX","shadowY"}) number(c.at(k),-16384,16384);
         auto seed=kn_editor::integer(c.at("seed"));if(seed<0||seed>UINT32_MAX) throw std::invalid_argument("Kinetic seed");
-        const auto& p=c.at("program");fields(p,{"version","ops"});if(!p.at("version").is_number_integer()||p.at("version")!=1||!p.at("ops").is_array()||p.at("ops").size()>32) throw std::invalid_argument("Kinetic IR version/limit");
+        const auto& p=c.at("program");
+        if(p.is_object()&&p.contains("version")&&p.at("version").is_number_integer()&&p.at("version")==2) {validate_program_v2(p);continue;}
+        fields(p,{"version","ops"});if(!p.at("version").is_number_integer()||p.at("version")!=1||!p.at("ops").is_array()||p.at("ops").size()>32) throw std::invalid_argument("Kinetic IR version/limit");
         double cumulative_scale=1;
         for(const auto& op:p.at("ops")) {
             auto type=op.at("op").get<std::string>();
@@ -66,7 +69,8 @@ void validate(const json& d) {
     std::sort(events.begin(),events.end());int active=0;for(auto event:events) {active+=event.second;if(active>128) throw std::invalid_argument("128 active kinetic clips maximum");}
 }
 json initial() {return {{"version",1},{"id","11111111-1111-4111-8111-111111111111"},{"width",1280},{"height",720},{"fpsNumerator",30},{"fpsDenominator",1},{"durationTicks",std::to_string(5*KN_TICKS_PER_SECOND)},{"clips",json::array()}};}
-motion evaluate(const json& c,int64_t tick,uint32_t unit) {
+motion evaluate(const json& c,int64_t tick,uint32_t unit,uint32_t count,size_t* budget) {
+    if(c.at("program").at("version")==2)return evaluate_program_v2(c,tick,unit,count,budget);
     motion m;auto start=ticks(c.at("startTicks")),duration=ticks(c.at("durationTicks"));
     if(tick<start||tick-start>=duration) {m.opacity=0;return m;}auto local=tick-start;
     const auto& ops=c.at("program").at("ops");
@@ -112,7 +116,11 @@ int32_t KN_CALL kn_text_request(kn_text_session* s,const uint8_t* data,uint32_t 
 }
 int32_t KN_CALL kn_text_evaluate(const uint8_t* data,uint32_t size,int64_t tick,uint32_t unit,kn_text_motion* output) noexcept {
     if(!data||!size||size>16*1024*1024||!output)return KN_INVALID_ARGUMENT;
-    try{auto d=kn_editor::parse(std::string(reinterpret_cast<const char*>(data),size));kn_text::validate(d);if(d.at("clips").empty())return KN_INVALID_ARGUMENT;auto m=kn_text::evaluate(d.at("clips")[0],tick,unit);*output={m.x,m.y,m.scale,m.rotation,m.opacity};return KN_OK;}catch(...){return KN_INVALID_ARGUMENT;}
+    try{auto d=kn_editor::parse(std::string(reinterpret_cast<const char*>(data),size));kn_text::validate(d);if(d.at("clips").empty()||d.at("clips")[0].at("program").at("version")!=1)return KN_INVALID_ARGUMENT;auto m=kn_text::evaluate(d.at("clips")[0],tick,unit);*output={m.x,m.y,m.scale,m.rotation,m.opacity};return KN_OK;}catch(...){return KN_INVALID_ARGUMENT;}
+}
+int32_t KN_CALL kn_text_evaluate_unit(const uint8_t* data,uint32_t size,int64_t tick,uint32_t unit,uint32_t count,kn_text_motion* output) noexcept {
+    if(!data||!size||size>16*1024*1024||!output||tick<0||count<1||unit>=count)return KN_INVALID_ARGUMENT;
+    try{auto d=kn_editor::parse(std::string(reinterpret_cast<const char*>(data),size));kn_text::validate(d);if(d.at("clips").empty())return KN_INVALID_ARGUMENT;auto m=kn_text::evaluate(d.at("clips")[0],tick,unit,count);*output={m.x,m.y,m.scale,m.rotation,m.opacity};return KN_OK;}catch(...){return KN_INVALID_ARGUMENT;}
 }
 int32_t KN_CALL kn_text_convert(const uint8_t* bgra,uint8_t* rgba,uint8_t* rgb,uint8_t* mask,uint32_t pixels) noexcept {
     if(!bgra||!rgba||!rgb||!mask||pixels>4096u*4096u)return KN_INVALID_ARGUMENT;

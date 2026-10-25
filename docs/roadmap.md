@@ -39,3 +39,9 @@ automation evaluation seam does not deliver editable/persisted animation curves.
 ## KineticTypo first runtime (2026-10-24)
 
 Separate WPF companion, native GPU text, embedded editable state, host handoff, lyrics/scripts, paired mask interchange and native MCP commands are implemented. Physical hardware/quality/performance evidence remains open under #109; see [acceptance](../staging/windows-kinetai.md). PONPON/Analyzer remain StudioClient work.
+
+## Programmable kinetic scripts (2026-10-25, #114)
+
+See [ADR 0029](decisions/0029-kinetai-programmable-animation.md) and the
+[guide](kinetai.md) for native expression IR, source editing and pure MCP compilation.
+Windows GPU visual/full-song acceptance remains separate.

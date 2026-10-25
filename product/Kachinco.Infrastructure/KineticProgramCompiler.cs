@@ -9,9 +9,21 @@ namespace Kachinco.Infrastructure;
 /// Produces typed IR; native composition validation is required before commit.</summary>
 public sealed class KineticProgramCompiler
 {
+    public const string ExitExample = """
+        def animate(t, duration, i, n, seed):
+            span = min(0.35, duration)
+            p = clamp((t - duration + span) / span, 0, 1)
+            return {
+                'x': noise(seed, i, 0) * 100 * p,
+                'y': (30 + noise(seed, i, 1) * 50) * p,
+                'rotation': noise(seed, i, 2) * 35 * p,
+                'opacity': 1 - p,
+            }
+        """;
+
     public async Task<JsonObject> CompileAsync(string source, CancellationToken token = default)
     {
-        if (string.IsNullOrWhiteSpace(source) || source.Length > 65536) throw new InvalidDataException("Script source limit.");
+        if (string.IsNullOrWhiteSpace(source) || Encoding.UTF8.GetByteCount(source) > 65536) throw new InvalidDataException("Script source limit.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(5));
         using var process = new Process { StartInfo = MediaProcess.StartInfo(OperatingSystem.IsWindows() ? "python" : "python3", ["-I", "-S", Path.Combine(AppContext.BaseDirectory, "recipe-worker.py")]) };
         process.StartInfo.RedirectStandardInput = process.StartInfo.RedirectStandardOutput = true;

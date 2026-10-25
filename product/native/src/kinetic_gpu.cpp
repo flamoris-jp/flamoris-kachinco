@@ -64,7 +64,7 @@ struct kn_text_renderer {
     std::mutex gate;bool warp=false;std::string adapter;int width=0,height=0;
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;ComPtr<ID2D1Factory1> factory;ComPtr<ID2D1Device> d2d;ComPtr<ID2D1DeviceContext> draw;ComPtr<IDWriteFactory> write;
     ComPtr<ID3D11Texture2D> target,readback;ComPtr<ID2D1Bitmap1> bitmap;ComPtr<ID2D1SolidColorBrush> brush;
-    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0;std::string cached_source;kn_text::json document;
+    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0;std::string cached_source,last_error;kn_text::json document;
     explicit kn_text_renderer(bool use_warp):warp(use_warp) {
         D3D_FEATURE_LEVEL level;check(D3D11CreateDevice(nullptr,warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
         ComPtr<IDXGIDevice> dxgi;check(device.As(&dxgi));ComPtr<IDXGIAdapter> ad;check(dxgi->GetAdapter(&ad));DXGI_ADAPTER_DESC description{};check(ad->GetDesc(&description));adapter=utf8(description.Description);
@@ -97,14 +97,16 @@ void KN_CALL kn_text_renderer_destroy(kn_text_renderer* r) noexcept {delete r;}
 int32_t KN_CALL kn_text_render(kn_text_renderer* r,const uint8_t* data,uint32_t size,int64_t tick,int32_t width,int32_t height,uint8_t* bgra,uint32_t capacity,int32_t* error) noexcept {
     if(!r||!data||!size||size>16*1024*1024||!bgra||!error||tick<0||width<1||height<1||width>4096||height>4096||capacity!=static_cast<uint32_t>(width*height*4))return KN_INVALID_ARGUMENT;
     *error=0;try {
-        std::lock_guard<std::mutex> lock(r->gate);std::string source(reinterpret_cast<const char*>(data),size);if(source!=r->cached_source){auto next=kn_editor::parse(source);kn_text::validate(next);r->document=std::move(next);r->cached_source=std::move(source);}const auto& d=r->document;r->resize(width,height);r->faces.clear();r->warnings.clear();r->draw->BeginDraw();r->draw->SetTransform(D2D1::Matrix3x2F::Identity());r->draw->Clear(D2D1::ColorF(0,0,0,0));
+        std::lock_guard<std::mutex> lock(r->gate);std::string source(reinterpret_cast<const char*>(data),size);if(source!=r->cached_source){auto next=kn_editor::parse(source);kn_text::validate(next);r->document=std::move(next);r->cached_source=std::move(source);}const auto& d=r->document;r->resize(width,height);r->last_error.clear();r->faces.clear();r->warnings.clear();r->draw->BeginDraw();r->draw->SetTransform(D2D1::Matrix3x2F::Identity());r->draw->Clear(D2D1::ColorF(0,0,0,0));
         try {
             const float sx=static_cast<float>(width)/d.at("width").get<float>(),sy=static_cast<float>(height)/d.at("height").get<float>();
+            size_t expression_budget=2000000;
             for(const auto& clip:d.at("clips")) {
-                auto base=kn_text::evaluate(clip,tick,0);if(base.opacity<=0)continue;
+                auto start=std::stoll(clip.at("startTicks").get<std::string>()),duration=std::stoll(clip.at("durationTicks").get<std::string>());
+                if(tick<start||tick-start>=duration)continue;
                 auto& layout=r->get_layout(clip,d.at("width").get<int>(),d.at("height").get<int>());r->faces.insert(layout.faces.begin(),layout.faces.end());if(!layout.warning.empty())r->warnings.insert(layout.warning);
                 for(const auto& glyph:layout.shapes) {
-                    auto m=kn_text::evaluate(clip,tick,glyph.unit);if(m.opacity<=0)continue;
+                    auto m=kn_text::evaluate(clip,tick,glyph.unit,static_cast<uint32_t>(layout.starts.size()),&expression_budget);if(m.opacity<=0)continue;
                     r->draw->SetTransform(D2D1::Matrix3x2F::Identity());
                     const bool group_opacity=m.opacity<1;
                     if(group_opacity){auto parameters=D2D1::LayerParameters1();parameters.opacity=static_cast<float>(m.opacity);r->draw->PushLayer(parameters,nullptr);}
@@ -118,11 +120,11 @@ int32_t KN_CALL kn_text_render(kn_text_renderer* r,const uint8_t* data,uint32_t 
             }
         }catch(...){r->draw->EndDraw();throw;}
         check(r->draw->EndDraw());r->context->CopyResource(r->readback.Get(),r->target.Get());D3D11_MAPPED_SUBRESOURCE mapped{};check(r->context->Map(r->readback.Get(),0,D3D11_MAP_READ,0,&mapped));for(int y=0;y<height;++y)memcpy(bgra+static_cast<size_t>(y)*width*4,static_cast<const uint8_t*>(mapped.pData)+static_cast<size_t>(y)*mapped.RowPitch,static_cast<size_t>(width)*4);r->context->Unmap(r->readback.Get(),0);return KN_OK;
-    }catch(HRESULT hr){*error=static_cast<int32_t>(hr);return KN_GPU_FAILURE;}catch(const std::bad_alloc&){return KN_OUT_OF_MEMORY;}catch(...){return KN_INVALID_ARGUMENT;}
+    }catch(HRESULT hr){*error=static_cast<int32_t>(hr);return KN_GPU_FAILURE;}catch(const std::bad_alloc&){return KN_OUT_OF_MEMORY;}catch(const std::exception& e){try{std::lock_guard<std::mutex> lock(r->gate);r->last_error=e.what();}catch(...){}return KN_INVALID_ARGUMENT;}catch(...){return KN_INVALID_ARGUMENT;}
 }
 int32_t KN_CALL kn_text_renderer_info(kn_text_renderer* r,kn_buffer** output) noexcept {
     if(!r||!output)return KN_INVALID_ARGUMENT;
-    *output=nullptr;try{std::lock_guard<std::mutex> lock(r->gate);auto s=kn_text::json({{"backend",r->warp?"D3D11-WARP":"D3D11-Hardware"},{"adapter",r->adapter},{"resolvedFonts",r->faces},{"fontWarnings",r->warnings},{"layoutCacheCount",r->layouts.size()},{"surfaceBytes",static_cast<int64_t>(r->width)*r->height*8}}).dump();auto b=std::make_unique<kn_buffer>();b->data=std::make_shared<const std::vector<uint8_t>>(s.begin(),s.end());*output=b.release();return KN_OK;}catch(...){return KN_OUT_OF_MEMORY;}
+    *output=nullptr;try{std::lock_guard<std::mutex> lock(r->gate);auto s=kn_text::json({{"scriptError",r->last_error},{"backend",r->warp?"D3D11-WARP":"D3D11-Hardware"},{"adapter",r->adapter},{"resolvedFonts",r->faces},{"fontWarnings",r->warnings},{"layoutCacheCount",r->layouts.size()},{"surfaceBytes",static_cast<int64_t>(r->width)*r->height*8}}).dump();auto b=std::make_unique<kn_buffer>();b->data=std::make_shared<const std::vector<uint8_t>>(s.begin(),s.end());*output=b.release();return KN_OK;}catch(...){return KN_OUT_OF_MEMORY;}
 }
 #else
 struct kn_text_renderer {};

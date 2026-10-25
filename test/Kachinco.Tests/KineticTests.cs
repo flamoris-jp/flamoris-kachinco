@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flamoris.Mcp.Core;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
 using Kachinco.Native;
@@ -80,6 +82,52 @@ public sealed class KineticTests
         var doc = KineticComposition.New(); doc["clips"]![0]!["program"] = ir; KineticComposition.Validate(doc);
         foreach (string source in new[] { "import os", "__import__('os').system('x')", "shake(amplitude=1+2)", "while True: pass", "shake(**{})" })
             await Assert.ThrowsExactlyAsync<InvalidDataException>(() => compiler.CompileAsync(source));
+    }
+    [TestMethod]
+    public async Task ScriptCompilationIsReadOnlyAndDoesNotChangeHistory()
+    {
+        using var h = new McpCoreHarness(additional: [KineticScriptMcpTools.Create()]);
+        using var grant = await h.Boundary.EnableAsync(McpPermission.ReadOnly);
+        var before = h.Fixture.Session.GetProject();
+        var result = await h.Call(grant, "compile_script", new { source = KineticProgramCompiler.ExitExample });
+        Assert.IsFalse(result.IsError, result.Error);
+        Assert.AreEqual(2, result.Value!.Value.GetProperty("program").GetProperty("version").GetInt32());
+        Assert.AreEqual(before, h.Fixture.Session.GetProject());
+        Assert.AreEqual(McpErrors.InvalidRequest, (await h.Call(grant, "compile_script", new { source = "x", path = "file" })).Error);
+    }
+    [TestMethod]
+    public void ScriptCompilationCatalogMatchesProducer()
+    {
+        var describe = typeof(McpBoundary).Assembly.GetType("Flamoris.Mcp.Core.McpProtocol")!
+            .GetMethod("Describe", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var tool = (ModelContextProtocol.Protocol.Tool)describe.Invoke(null, [KineticScriptMcpTools.Create()])!;
+        var actual = JsonSerializer.SerializeToElement(new[] { new { name = tool.Name, description = tool.Description, inputSchema = tool.InputSchema } });
+        if (Environment.GetEnvironmentVariable("KINETAI_EXPORT_SCRIPT_CATALOG") is { } export)
+            File.WriteAllText(export, JsonSerializer.Serialize(actual, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        var expected = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "kinetai-script-tools.json"));
+        Assert.IsTrue(JsonNode.DeepEquals(JsonNode.Parse(expected), JsonNode.Parse(actual.GetRawText())));
+    }
+    [TestMethod]
+    public async Task ProgrammableSourceAndIrSurviveHostUndoAndProjectReopen()
+    {
+        var source = KineticProgramCompiler.ExitExample;
+        var ir = await new KineticProgramCompiler().CompileAsync(source);
+        Assert.AreEqual(2, ir["version"]!.GetValue<int>());
+        var doc = KineticComposition.New(); doc["clips"]![0]!["source"] = source;
+        doc["clips"]![0]!["program"] = ir; KineticComposition.Validate(doc);
+        var asset = new MediaAsset(Guid.NewGuid(), "Scripted", "absent.ktproj", MediaKind.KineticText,
+            KineticComposition.Duration(doc)) { TextComposition = doc.ToJsonString() };
+        using var session = new EditorSession(); Assert.IsTrue(session.ReplaceProject(ProjectWith(asset)).Success);
+        var saved = ProjectJson.Serialize(session.GetProject().Project!); Assert.IsTrue(saved.Success);
+        var reopened = ProjectJson.Deserialize(saved.Value!); Assert.IsTrue(reopened.Success);
+        var restored = KineticComposition.Parse(reopened.Value!.Assets[0].TextComposition!);
+        Assert.AreEqual(source, restored["clips"]![0]!["source"]!.GetValue<string>());
+        Assert.IsTrue(JsonNode.DeepEquals(doc, restored));
+        var old = asset.TextComposition;
+        doc["clips"]![0]!["program"] = KineticComposition.Preset("none");
+        Assert.IsTrue(session.Execute(new([new SetTextComposition(asset.Id, doc.ToJsonString())], session.GetProject().Revision)).Success);
+        Assert.IsTrue(session.Undo().Success); Assert.AreEqual(old, session.GetProject().Project!.Assets[0].TextComposition);
+        Assert.IsTrue(session.Redo().Success);
     }
     [TestMethod]
     public async Task MaskedVideoSharesTrimSpeedSourceMappingAndKeepsBlackForeground()

@@ -179,3 +179,8 @@ If FLAMORIS is useful to you, optional support helps pay for development. 🌱
 FLAMORIS character designs, artwork, logos, trademarks, music, voices and other creative assets are **not automatically licensed under Apache-2.0**; check their own rights statements.
 
 ソフトウェアのソースコードは原則 Apache-2.0 で公開しています。改造・組み込み・商用利用も可能です。映像・音楽・キャラクターなどの制作物はソフトウェアとは別の権利・ライセンスで扱います。
+
+KineticTypo also accepts programmable `animate(t, duration, i, n, seed)` scripts for
+end-relative fades, per-character motion and seeded effects. The bounded Python
+compiler produces IR evaluated by the same native GPU text path. Source, IR and
+Undo/Redo persist together. See [the guide](docs/kinetai.md).

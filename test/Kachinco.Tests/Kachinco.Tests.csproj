@@ -10,6 +10,7 @@
     <PackageReference Include="MSTest.TestFramework" Version="4.4.0" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="Fixtures/kinetai-script-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/clip-download-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/title-image-tools.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/media-upload-tools.json" CopyToOutputDirectory="PreserveNewest" />

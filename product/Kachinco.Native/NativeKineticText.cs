@@ -11,7 +11,7 @@ public sealed class NativeKineticDocument : IDisposable
     private readonly TextDocumentHandle handle;
     public NativeKineticDocument() {
         using var runtime = NativeRuntime.Create();
-        if ((runtime.GetInfo().Capabilities & 131072) == 0) throw new InvalidOperationException("Matching KineticTypo native runtime required.");
+        if ((runtime.GetInfo().Capabilities & 393216) != 393216) throw new InvalidOperationException("Matching KineticTypo native runtime required.");
         NativeMediaProcess.Check(TextMethods.Create(out handle));
     }
     public JsonObject Request(JsonObject request)
@@ -58,7 +58,7 @@ public sealed class NativeKineticRenderer : IDisposable
                 ++deviceResets;
                 status = TextMethods.Render(handle, data, checked((uint)data.Length), tick, width, height, bgra, (uint)bgra.Length, out error);
             }
-            if (status != 0) throw new InvalidOperationException($"Native text render failed ({status}, HRESULT 0x{error:X8}). Reset the text GPU device to retry.");
+            if (status != 0) throw new InvalidOperationException($"{Info["scriptError"]} Native text render failed ({status}, HRESULT 0x{error:X8}). Reset the text GPU device to retry.");
             byte[] rgba = new byte[count * 4], rgb = new byte[count * 3], mask = new byte[count * 3];
             NativeMediaProcess.Check(TextMethods.Convert(bgra, rgba, rgb, mask, (uint)count));
             return new(bgra, rgba, rgb, mask);

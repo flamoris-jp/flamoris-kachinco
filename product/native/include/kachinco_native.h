@@ -37,6 +37,7 @@ extern "C" {
 #define KN_CAP_TITLE_EDITING UINT64_C(32768)
 #define KN_CAP_CAPTION_STYLES UINT64_C(65536)
 #define KN_CAP_KINETIC_TEXT UINT64_C(131072)
+#define KN_CAP_KINETIC_PROGRAM_V2 UINT64_C(262144)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -217,6 +218,9 @@ KN_API int32_t KN_CALL kn_text_create(kn_text_session** output) KN_NOEXCEPT;
 KN_API void KN_CALL kn_text_destroy(kn_text_session* session) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_text_request(kn_text_session* session,const uint8_t* data,uint32_t size,kn_buffer** output) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_text_evaluate(const uint8_t* data,uint32_t size,int64_t tick,uint32_t unit,kn_text_motion* output) KN_NOEXCEPT;
+/* Optional v2 expression evaluation; shaping count comes from the renderer. */
+KN_API int32_t KN_CALL kn_text_evaluate_unit(const uint8_t* data, uint32_t size, int64_t tick,
+    uint32_t unit, uint32_t count, kn_text_motion* output) KN_NOEXCEPT;
 /* Premultiplied BGRA -> straight RGBA + associated RGB + full-range RGB gray mask. */
 KN_API int32_t KN_CALL kn_text_convert(const uint8_t* bgra,uint8_t* rgba,uint8_t* rgb,uint8_t* mask,uint32_t pixels) KN_NOEXCEPT;
 KN_API int32_t KN_CALL kn_text_apply_mask(const uint8_t* rgb,const uint8_t* mask,uint8_t* rgba,uint32_t pixels) KN_NOEXCEPT;
