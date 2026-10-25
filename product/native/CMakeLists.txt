@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-add_library(kachinco_native SHARED src/runtime.cpp src/process.cpp src/cache.cpp src/decoded_media.cpp src/compositor.cpp src/gpu_preview.cpp src/timeline.cpp src/playback.cpp src/editor_domain.cpp src/project_codec.cpp src/editor_session.cpp src/kinetic_text.cpp src/kinetic_gpu.cpp)
+add_library(kachinco_native SHARED src/runtime.cpp src/process.cpp src/cache.cpp src/decoded_media.cpp src/compositor.cpp src/gpu_preview.cpp src/timeline.cpp src/playback.cpp src/editor_domain.cpp src/project_codec.cpp src/editor_session.cpp src/kinetic_text.cpp src/kinetic_program.cpp src/kinetic_gpu.cpp)
 target_include_directories(kachinco_native PUBLIC include)
 target_compile_definitions(kachinco_native PRIVATE KN_BUILD)
 set_target_properties(kachinco_native PROPERTIES OUTPUT_NAME "Kachinco.Native.Runtime" CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -46,5 +46,18 @@ if(BUILD_TESTING)
   add_executable(native_kinetic_contracts tests/kinetic_contracts.cpp)
   target_link_libraries(native_kinetic_contracts PRIVATE kachinco_native)
   add_test(NAME native_kinetic_contracts COMMAND native_kinetic_contracts)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  # ctypes cannot load an ASan runtime into an unsanitized Python interpreter.
+  # Cross-language evaluation runs in the ordinary native/.NET build; C++ tests
+  # retain v2 evaluation coverage under sanitizers.
+  if(CMAKE_CXX_FLAGS MATCHES "sanitize=address")
+    add_test(NAME kinetic_script_contracts COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../test/python/kinetic_script_test.py)
+  else()
+    add_test(NAME kinetic_script_contracts COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../test/python/kinetic_script_test.py
+      --native-library $<TARGET_FILE:kachinco_native>)
+  endif()
+  set_tests_properties(kinetic_script_contracts PROPERTIES TIMEOUT 60)
   set_tests_properties(native_process_contracts PROPERTIES TIMEOUT 45)
 endif()

@@ -24,6 +24,9 @@ public sealed partial class EditorWindow : Window
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gainsboro, Margin = new(8) };
     private readonly Slider scrub = new() { Minimum = 0, Maximum = 5 };
     private readonly Dictionary<string, TextBox> inputs = [];
+    private readonly TextBox sourceEditor = new() { AcceptsReturn = true, AcceptsTab = true, FontFamily = new("Consolas"), Height = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private long fieldGeneration;
+    private bool sourceDirty, compilingScript;
     private readonly TextBox program = new() { AcceptsReturn = true, FontFamily = new("Consolas"), Height = 150, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly Stopwatch clock = new();
@@ -64,7 +67,7 @@ public sealed partial class EditorWindow : Window
         {
             inspector.Children.Add(new TextBlock { Text = field.Item2, Foreground = Brushes.Gainsboro, Margin = new(0, 5, 0, 2) });
             var box = new TextBox { Padding = new(4), AcceptsReturn = field.Item1 == "text", MinHeight = field.Item1 == "text" ? 55 : 24 };
-            box.TextChanged += (_, _) => { if (!showingClip) fieldsDirty = true; };
+            box.TextChanged += (_, _) => { if (!showingClip) { fieldsDirty = true; ++fieldGeneration; } };
             inputs[field.Item1] = box; inspector.Children.Add(box);
         }
         var presets = new WrapPanel(); inspector.Children.Add(presets);
@@ -72,8 +75,17 @@ public sealed partial class EditorWindow : Window
         {
             var b = new Button { Content = item.Item1, Margin = new(2) }; b.Click += (_, _) => program.Text = KineticComposition.Preset(item.Item2).ToJsonString(new() { WriteIndented = true }); presets.Children.Add(b);
         }
-        inspector.Children.Add(new TextBlock { Text = "動きのスクリプト (IR v1)", Foreground = Brushes.Gainsboro, Margin = new(0, 8, 0, 2) }); inspector.Children.Add(program);
-        program.TextChanged += (_, _) => { if (!showingClip) { fieldsDirty = true; pendingSource = null; } };
+        inspector.Children.Add(new TextBlock { Text = "Python: animate(t, duration, i, n, seed)", Foreground = Brushes.Gainsboro, Margin = new(0, 8, 0, 2) });
+        inspector.Children.Add(sourceEditor);
+        sourceEditor.TextChanged += (_, _) => { if (!showingClip) { sourceDirty = fieldsDirty = true; ++fieldGeneration; } };
+        var sourceButtons = new WrapPanel(); inspector.Children.Add(sourceButtons);
+        var compile = new Button { Content = "スクリプトを適用", Margin = new(2), Padding = new(6) };
+        compile.Click += (_, _) => _ = ApplyScriptAsync(); sourceButtons.Children.Add(compile);
+        var example = new Button { Content = "退場サンプル", Margin = new(2), Padding = new(6) };
+        example.Click += (_, _) => sourceEditor.Text = KineticProgramCompiler.ExitExample; sourceButtons.Children.Add(example);
+        inspector.Children.Add(new TextBlock { Text = "t: 経過秒 / duration: 長さ秒 / i: 文字番号 / n: 文字数。位置・回転・拡大率・透明度を返せます。", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gainsboro });
+        inspector.Children.Add(new TextBlock { Text = "動きのIR (v1 / v2)", Foreground = Brushes.Gainsboro, Margin = new(0, 8, 0, 2) }); inspector.Children.Add(program);
+        program.TextChanged += (_, _) => { if (!showingClip) { fieldsDirty = true; ++fieldGeneration; pendingSource = null; } };
         var apply = new Button { Content = "文字と動きを反映", Margin = new(0, 8, 0, 8), Padding = new(8) }; apply.Click += (_, _) => Guard(CommitFields); inspector.Children.Add(apply);
         timer.Tick += (_, _) => {
             var seconds = (double)playStart / TimelineTime.TicksPerSecond + clock.Elapsed.TotalSeconds;
@@ -135,18 +147,21 @@ public sealed partial class EditorWindow : Window
     private static string ColorText(JsonNode node) => "#" + string.Join("", node.AsArray().Select(n => ((byte)Math.Round(n!.GetValue<double>() * 255)).ToString("X2", CultureInfo.InvariantCulture)));
     private void ShowClip()
     {
+        ++fieldGeneration;
         if (Selected is not { } c) return;
         showingClip = true;
         foreach (var pair in inputs) pair.Value.Text = pair.Key switch {
             "startTicks" or "durationTicks" => ((decimal)KineticComposition.Tick(c, pair.Key) / TimelineTime.TicksPerSecond).ToString(CultureInfo.InvariantCulture),
             "color" or "strokeColor" => ColorText(c[pair.Key]!), _ => c[pair.Key]!.ToString()
         };
+        sourceEditor.Text = c["source"]!.GetValue<string>(); sourceDirty = false;
         program.Text = c["program"]!.ToJsonString(new() { WriteIndented = true });
         showingClip = false; fieldsDirty = false;
     }
     private void CommitFields()
     {
         if (Selected is null) return;
+        if (sourceDirty) throw new InvalidDataException("スクリプトを適用してから、保存・反映してください。");
         var next = (JsonObject)document.DeepClone(); var c = next["clips"]![clips.SelectedIndex]!.AsObject();
         foreach (var pair in inputs)
         {
@@ -161,7 +176,7 @@ public sealed partial class EditorWindow : Window
             else c[pair.Key] = double.Parse(text, CultureInfo.InvariantCulture);
         }
         var parsedProgram = JsonNode.Parse(program.Text)!.AsObject();
-        if (!JsonNode.DeepEquals(c["program"], parsedProgram)) c["source"] = pendingSource ?? "";
+        if (pendingSource is not null || !JsonNode.DeepEquals(c["program"], parsedProgram)) c["source"] = pendingSource ?? "";
         pendingSource = null; c["program"] = parsedProgram;
         next["durationTicks"] = Math.Max(KineticComposition.Duration(next), checked(KineticComposition.Tick(c, "startTicks") + KineticComposition.Tick(c, "durationTicks"))).ToString(CultureInfo.InvariantCulture); Commit(next);
     }
@@ -209,12 +224,29 @@ public sealed partial class EditorWindow : Window
         var picker = new OpenFileDialog { Filter = "Kinetic script|*.py" }; if (picker.ShowDialog(this) != true || Selected is null) return;
         try {
             if (new FileInfo(picker.FileName).Length > 65536) throw new InvalidDataException("Script too large.");
-            long expected = revision; string clipId = Selected["id"]!.GetValue<string>();
-            string source = await File.ReadAllTextAsync(picker.FileName);
-            var ir = await new KineticProgramCompiler().CompileAsync(source);
-            if (revision != expected || Selected?["id"]?.GetValue<string>() != clipId) throw new InvalidDataException("編集中の文字が変わりました。スクリプトをもう一度読み込んでください。");
-            program.Text = ir.ToJsonString(new() { WriteIndented = true }); pendingSource = source; CommitFields();
+            sourceEditor.Text = File.ReadAllText(picker.FileName);
+            await ApplyScriptAsync();
         } catch (Exception ex) { status.Text = ex.Message; }
+    }
+    private async Task ApplyScriptAsync()
+    {
+        if (compilingScript || Selected is null) return;
+        string source = sourceEditor.Text, identity = Snapshot.DocumentToken;
+        string clipId = Selected["id"]!.GetValue<string>(); long expected = revision, fields = fieldGeneration;
+        compilingScript = true; status.Text = "スクリプトをコンパイルしています…";
+        try {
+            var ir = await new KineticProgramCompiler().CompileAsync(source);
+            if (closed || Snapshot.DocumentToken != identity || revision != expected ||
+                fieldGeneration != fields || Selected?["id"]?.GetValue<string>() != clipId)
+                throw new InvalidDataException("編集中の内容が変わりました。スクリプトをもう一度適用してください。");
+            showingClip = true;
+            try { program.Text = ir.ToJsonString(new() { WriteIndented = true }); }
+            finally { showingClip = false; }
+            pendingSource = source; sourceDirty = false;
+            try { CommitFields(); } catch { sourceDirty = true; throw; }
+            status.Text = "スクリプトを適用しました。";
+        } catch (Exception ex) { status.Text = ex.Message; }
+        finally { compilingScript = false; }
     }
     private void ReturnToHost()
     {

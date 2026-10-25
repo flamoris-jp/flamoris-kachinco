@@ -18,8 +18,8 @@ public sealed partial class EditorWindow : IMcpHost
     private readonly string runtimeId = Guid.NewGuid().ToString("N");
     private long documentGeneration;
     public event Action? Invalidating;
-    public HostSnapshot Snapshot => new("flamoris.kinetai", "0.1.0", runtimeId,
-        runtimeId + ":" + documentGeneration, revision, !closed && document is not null, fieldsDirty || exporting);
+    public HostSnapshot Snapshot => new("flamoris.kinetai", "0.2.0", runtimeId,
+        runtimeId + ":" + documentGeneration, revision, !closed && document is not null, fieldsDirty || exporting || compilingScript);
     public async Task<T> InvokeAsync<T>(Func<T> action, CancellationToken token)
     {
         if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); return action(); }
@@ -44,6 +44,7 @@ public sealed partial class EditorWindow : IMcpHost
             new HostTool<bool>("get_composition", "Read the visible native text document, revision, selection, playhead and actual text backend.", EmptySchema, OperationKind.Query, Empty,
                 (context, _, token) => context.ReadAsync(() => Json(new { revision = revision.ToString(CultureInfo.InvariantCulture), composition = document,
                     selectedClipId = Selected?["id"]?.GetValue<string>(), playheadTicks = Tick.ToString(CultureInfo.InvariantCulture), backend = renderer?.Info }))),
+            KineticScriptMcpTools.Create(),
             new HostTool<string>("edit_composition", "Apply one validated text-document command with ordinary Undo/Redo. The request guard must match the current revision.",
                 Json(new { type = "object", additionalProperties = false, required = new[] { "compositionJson" }, properties = new { compositionJson = new { type = "string", maxLength = KineticComposition.MaximumBytes } } }),
                 OperationKind.Transaction, input => { if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Count() != 1) throw new JsonException(); return input.GetProperty("compositionJson").GetString() ?? throw new JsonException(); },

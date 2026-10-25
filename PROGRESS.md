@@ -387,3 +387,16 @@ authorization; #82 remains open for measured Mango physical acceptance.
   tests require CI's socket environment. Physical hardware/font/edge/performance,
   full-song VRAM and file-size comparisons remain unchecked in
   [Windows acceptance](staging/windows-kinetai.md). No live deployment/merge.
+
+## Programmable kinetic animation (2026-10-25, #114)
+
+- AST compiler: numeric expressions, local variables, conditions, helpers and bounded
+  literal loops compile to v2 expression IR. Legacy v1 calls/presets are retained.
+- Native evaluation uses canonical clip time and actual shaping-cluster indices;
+  seeded noise, lazy conditionals, native input/work/output limits, v2 capability
+  and optional explicit-unit-count ABI. No per-frame Python execution.
+- Source editor, explicit compile/apply, end-relative scatter example, stale async
+  result rejection and pure MCP compile_script query. Normal edits own history.
+- Compiler/native/host persistence/MCP tests and WPF cross-build checked locally;
+  Windows WARP/physical GPU and full-song quality/performance are separate gates.
+- Existing projects/MV session are not rewritten or deployed by this source change.

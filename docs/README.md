@@ -58,3 +58,5 @@
 ## KineticTypo companion
 
 - [User guide](kinetai.md), [runtime contracts](decisions/0028-kinetai-first-runtime.md), [original design](decisions/0027-kinetai-native-text-editor.md), [Windows acceptance](../staging/windows-kinetai.md).
+
+- [Programmable kinetic animation](decisions/0029-kinetai-programmable-animation.md): Python expressions, native evaluation, source editor and MCP compilation.

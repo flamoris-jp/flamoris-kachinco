@@ -31,3 +31,17 @@ CI: native contracts execute real DirectWrite/D2D via explicit WARP on Windows;
 managed tests protect schema migration/history/import/mask/source-time behavior;
 portable startup is automated. Physical visual/performance checks remain unchecked
 until actual measurements are attached.
+
+## Programmable script acceptance (#114)
+
+- [ ] Compile the source-editor exit example; verify immediate appearance and motion
+  only during the final 0.35 seconds on a short and long lyric.
+- [ ] Import both examples, scrub backward/forward and compare host/export same tick.
+- [ ] Test combining characters, surrogate pairs and ligatures; hiding cluster zero
+  must not hide later visible clusters (also protected by native WARP test).
+- [ ] Invalid source retains committed pixels and draft source. Editing fields,
+  switching selection, Undo/Redo or changing document during compile rejects stale results.
+- [ ] Save/reopen and handoff retain source/IR; old v1 songs remain editable.
+- [ ] Refresh companion catalog (six host tools plus Core context); compile_script
+  works ReadOnly while edit_composition still requires guarded Edit.
+- [ ] Record actual adapter, full-song preview/export latency and GPU/CPU memory.
