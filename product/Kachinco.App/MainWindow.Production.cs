@@ -203,20 +203,45 @@ public partial class MainWindow
         if (snapshot.Project is null || selectedSequenceId is not { } sequenceId) return null;
         playback.Pause();
         using var token = new CancellationTokenSource();
-        var status = new TextBlock { Text = "描画を準備しています…", Margin = new Thickness(16) };
+        var status = new TextBlock { Text = "描画を準備しています…", Margin = new Thickness(16), TextWrapping = TextWrapping.Wrap };
         var cancel = new Button { Content = "キャンセル", Margin = new Thickness(16) };
-        var panel = new StackPanel(); panel.Children.Add(status); panel.Children.Add(cancel);
-        var progressWindow = new Window { Owner = this, Title = "動画を書き出しています", Width = 380, SizeToContent = SizeToContent.Height,
+        var indicator = new ProgressBar { IsIndeterminate = true, Height = 6, Margin = new Thickness(16, 0, 16, 8) };
+        var elapsed = new TextBlock { Margin = new Thickness(16, 0, 16, 0) };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) => elapsed.Text = EditorText.Choose("経過時間: ", "Elapsed: ") + clock.Elapsed.ToString(@"hh\:mm\:ss");
+        var panel = new StackPanel(); panel.Children.Add(status); panel.Children.Add(indicator); panel.Children.Add(elapsed); panel.Children.Add(cancel);
+        var progressWindow = new Window { Owner = this, Title = "動画を書き出しています", Width = 460, SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
         bool done = false;
-        cancel.Click += (_, _) => { token.Cancel(); cancel.IsEnabled = false; };
+        cancel.Click += (_, _) =>
+        {
+            if (done) { progressWindow.Close(); return; }
+            token.Cancel(); cancel.IsEnabled = false;
+            status.Text = EditorText.Choose("キャンセルしています…", "Cancelling…");
+        };
         progressWindow.Closing += (_, e) => { if (!done) { token.Cancel(); e.Cancel = true; } };
-        var progress = new Progress<ExportProgress>(p => status.Text = $"{p.Stage}: {p.FramesCompleted} / {p.TotalFrames} フレーム\n{p.Detail}");
+        var progress = new Progress<ExportProgress>(p =>
+        {
+            if (done || token.IsCancellationRequested) return;
+            status.Text = p.Detail switch
+            {
+                "audio" => EditorText.Choose("音声を処理しています…", "Processing audio…"),
+                "mux" => EditorText.Choose("音声をエンコードし、映像との結合・MP4の最適化を行っています…", "Encoding audio, combining video and optimizing MP4…"),
+                "save" => EditorText.Choose("ファイルを保存しています…", "Saving file…"),
+                _ => p.Stage switch
+                {
+                    ExportStage.Planning => EditorText.Choose("描画を準備しています…", "Preparing render…"),
+                    ExportStage.Completed => EditorText.Choose("保存を確認しています…", "Checking saved output…"),
+                    _ => EditorText.Choose("映像を処理しています: ", "Processing video: ") + $"{p.FramesCompleted} / {p.TotalFrames} " + EditorText.Choose("フレーム", "frames")
+                }
+            };
+        });
         using var decoder = new FfmpegMediaDecoder();
         using var video = new ExportFrameRenderer(decoder, filename, new WindowsCaptionRasterizer(Dispatcher), exportComposition, logger);
         var service = new SnapshotExportService(video,
             new SharedAudioRenderer(decoder, filename), new FfmpegEncodingBackend(), new(null, exportEncoder), filename);
-        busy = true; IsEnabled = false; progressWindow.Show();
+        busy = true; IsEnabled = false; progressWindow.Show(); timer.Start();
         try
         {
             var result = await Task.Run(() => service.ExportAsync(snapshot,
@@ -234,6 +259,10 @@ public partial class MainWindow
                 }));
             Status.Text = result.Stage == ExportStage.Completed ? $"書き出しが完了しました。 {result.Metrics?.VideoEncoder} / D3D11: {result.Metrics?.Composition?.GpuFrames ?? 0} frames" : result.Stage == ExportStage.Cancelled ? "キャンセルしました。" :
                 string.Join(" / ", result.Diagnostics.Select(x => x.Message));
+            status.Text = result.Stage == ExportStage.Completed
+                ? EditorText.Choose("動画の書き出しが完了しました。\n", "Video export completed.\n") + result.OutputPath
+                : result.Stage == ExportStage.Cancelled ? EditorText.Choose("キャンセルしました。", "Export cancelled.")
+                : EditorText.Choose("書き出しに失敗しました。\n", "Export failed.\n") + string.Join(" / ", result.Diagnostics.Select(x => x.Message));
             return result;
         }
         catch (Exception exception)
@@ -242,10 +271,20 @@ public partial class MainWindow
             {
                 ["sequenceId"] = sequenceId,
             }));
-            Status.Text = EditorText.Choose("書き出しに失敗しました。ログを確認してください。", "Export failed. Check the log.");
+            status.Text = Status.Text = EditorText.Choose("書き出しに失敗しました。ログを確認してください。", "Export failed. Check the log.");
             return null;
         }
-        finally { done = true; progressWindow.Close(); busy = false; IsEnabled = true; }
+        finally
+        {
+            done = true; timer.Stop(); clock.Stop();
+            progressWindow.Title = EditorText.Choose("書き出し結果", "Export result");
+            elapsed.Text = EditorText.Choose("経過時間: ", "Elapsed: ") + clock.Elapsed.ToString(@"hh\:mm\:ss");
+            indicator.IsIndeterminate = false; indicator.Visibility = Visibility.Collapsed;
+            cancel.Content = EditorText.Choose("閉じる", "Close"); cancel.IsEnabled = true;
+            busy = false; IsEnabled = true;
+            // Keep the final result and saved path visible until acknowledged.
+            // This is modeless: the editor and automated callers remain usable.
+        }
     }
 
     private void RefreshClapperOverlay()

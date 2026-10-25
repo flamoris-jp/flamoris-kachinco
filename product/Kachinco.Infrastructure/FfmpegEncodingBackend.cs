@@ -68,11 +68,15 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (new FileInfo(videoPath).Length > ClipDownloadStore.MaximumFileBytes) throw new InvalidDataException("download_size_limit");
+                progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, 0, "save"));
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(videoPath, output, true);
+                progress?.Report(new(request.JobId, ExportStage.Completed, request.FrameCount, request.FrameCount, 0));
                 return Complete(output);
             }
             var audioClock = Stopwatch.StartNew();
             long samples = 0;
+            progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, 0, "audio"));
             await using (var stream = new FileStream(audioPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
             {
                 await foreach (var block in media.ReadAudioAsync(cancellationToken))
@@ -89,12 +93,13 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
                     }
                     await stream.WriteAsync(bytes, cancellationToken);
                     samples += block.Samples.Length / 2;
-                    progress?.Report(new(request.JobId, ExportStage.Rendering, request.FrameCount, request.FrameCount, samples));
+                    progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, samples, "audio"));
                 }
             }
             audioMs = audioClock.Elapsed.TotalMilliseconds;
             if (samples != request.AudioSampleCount) throw new InvalidDataException("Renderer returned too few audio samples.");
-            progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, samples));
+            progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, samples, "mux"));
+            cancellationToken.ThrowIfCancellationRequested();
             var muxClock = Stopwatch.StartNew();
             using (var process = new Process { StartInfo = MediaProcess.StartInfo(executable,
                 ["-v", "error", "-nostdin", "-y", "-i", videoPath, "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", audioPath,
@@ -112,6 +117,8 @@ public sealed class FfmpegEncodingBackend : IVideoEncodingBackend
             }
             cancellationToken.ThrowIfCancellationRequested();
             muxMs = muxClock.Elapsed.TotalMilliseconds;
+            progress?.Report(new(request.JobId, ExportStage.Encoding, request.FrameCount, request.FrameCount, samples, "save"));
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(finalPath, output, true);
             progress?.Report(new(request.JobId, ExportStage.Completed, request.FrameCount, request.FrameCount, samples));
             return Complete(output);

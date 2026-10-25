@@ -1,5 +1,13 @@
 # Delivery progress
 
+## Next-MV usability — 2026-10-25 (JST)
+
+- #113: embedded KineticText timeline clips show authoring text without probing the companion draft with FFmpeg. This is a text summary, not a rendered animation thumbnail. Decode errors remain visible for ordinary media.
+- #104: real audio/mux/save progress details, elapsed time and indeterminate activity; retained completion/cancellation/failure result. Success appears only after publication.
+- #116: track header enable switches use existing native SetTrackEnabled/history; disabled rows are dimmed, clip flags remain unchanged. Wider foreground trim handles force the horizontal resize cursor; KineticText context menus target the clicked clip.
+- Validation: native contracts 7/7; targeted managed contracts 40 passed / 1 Windows WARP case skipped; Windows-targeted shell/smoke cross-build clean. Full-suite MCP envelope cases are blocked locally by socket permission denial; live Windows CI/physical acceptance remain separate.
+- No schema, renderer, or MCP tool descriptor change. #112 remains deferred for Linux/font work. Windows physical interaction acceptance is recorded in staging/windows-next-mv.md.
+
 ## Physical Linux CLI smoke accepted — 2026-10-24 (JST)
 
 - CLI 0.1.1: external MCP project query, guarded dry-run/commit, styled Japanese

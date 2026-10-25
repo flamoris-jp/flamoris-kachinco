@@ -35,6 +35,7 @@ internal static class Program
                     throw new Exception("Windows audio position format conversion failed.");
                 var main = new MainWindow(); main.Show();
                 await TimelineLayoutChecks.Run(main);
+                await NextMvChecks.Run();
                 await TimelineRippleChecks.Run();
                 await CaptionTimingChecks.Run();
                 await CreationWorkflowChecks.Run();

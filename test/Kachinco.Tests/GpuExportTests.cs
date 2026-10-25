@@ -13,6 +13,53 @@ namespace Kachinco.Tests;
 public sealed class GpuExportTests
 {
     [TestMethod]
+    [DataRow("none")]
+    [DataRow("audio")]
+    [DataRow("mux")]
+    [DataRow("save")]
+    public async Task FinalizationReportsRealPhasesAndCancellationProtectsDestination(string cancelAt)
+    {
+        if (OperatingSystem.IsWindows()) { Assert.Inconclusive("POSIX encoder adapter."); return; }
+        using var fixture = new EncoderFixture("success");
+        using var cancellation = new CancellationTokenSource();
+        var request = fixture.Request with { Preset = ExportPreset.YoutubeH264AacMp4, VideoSettings = SequenceSettings.Landscape };
+        File.WriteAllText(request.OutputPath, "keep");
+        var reports = new List<ExportProgress>();
+        var result = await new FfmpegEncodingBackend().EncodeAsync(request, new FramesWithAudio(),
+            new(fixture.Executable, VideoEncoderPreference.Cpu), new OnProgress(p =>
+            {
+                reports.Add(p);
+                if (p.Detail == cancelAt) cancellation.Cancel();
+                if (p.Stage == ExportStage.Completed)
+                    Assert.AreNotEqual("keep", File.ReadAllText(request.OutputPath), "Completion follows publication.");
+            }), cancellation.Token);
+        Assert.AreEqual(cancelAt == "none" ? ExportStage.Completed : ExportStage.Cancelled, result.Stage, string.Join(";", result.Diagnostics.Select(d => d.Message)));
+        if (cancelAt == "none")
+        {
+            var phases = reports.Where(p => p.Detail is "audio" or "mux" or "save").Select(p => p.Detail).Distinct().ToArray();
+            CollectionAssert.AreEqual(new[] { "audio", "mux", "save" }, phases);
+            Assert.AreEqual(ExportStage.Completed, reports[^1].Stage);
+        }
+        else
+        {
+            Assert.AreEqual("keep", File.ReadAllText(request.OutputPath));
+            Assert.IsFalse(reports.Any(p => p.Stage == ExportStage.Completed));
+        }
+        Assert.AreEqual(0, Directory.GetDirectories(fixture.Directory).Length);
+    }
+
+    private sealed class FramesWithAudio : IRenderedMediaSource
+    {
+        public IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync(CancellationToken token) => new Frames(1920, 1080).ReadVideoAsync(token);
+        public async IAsyncEnumerable<RenderedAudioBlock> ReadAudioAsync([EnumeratorCancellation] CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            yield return new(0, 48000, 2, ImmutableArray.CreateRange(new float[9600]));
+            await Task.Yield();
+        }
+    }
+
+    [TestMethod]
     [DataRow("success", true)]
     [DataRow("initialize", true)]
     [DataRow("midstream", true)]
@@ -203,7 +250,7 @@ public sealed class GpuExportTests
         public void Dispose() => native.Dispose();
     }
 
-    private sealed class Frames : IRenderedMediaSource
+    private sealed class Frames(int width = 480, int height = 270) : IRenderedMediaSource
     {
         public int Enumerations, FramesProduced; public bool Invalid;
         public async IAsyncEnumerable<RenderedVideoFrame> ReadVideoAsync([EnumeratorCancellation] CancellationToken token)
@@ -212,8 +259,8 @@ public sealed class GpuExportTests
             for (int i = 0; i < 3; i++)
             {
                 token.ThrowIfCancellationRequested(); FramesProduced++;
-                var rgba = new byte[480 * 270 * 4]; for (int n = 0; n < rgba.Length; n += 4) { rgba[n] = 200; rgba[n + 3] = 255; }
-                yield return new(i, TimelineTime.FrameToTicks(i, new(30, 1)), 480, 270, Invalid ? [1] : [.. rgba]);
+                var rgba = new byte[width * height * 4]; for (int n = 0; n < rgba.Length; n += 4) { rgba[n] = 200; rgba[n + 3] = 255; }
+                yield return new(i, TimelineTime.FrameToTicks(i, new(30, 1)), width, height, Invalid ? [1] : [.. rgba]);
                 await Task.Yield();
             }
         }

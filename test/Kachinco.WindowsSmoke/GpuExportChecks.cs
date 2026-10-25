@@ -43,6 +43,11 @@ internal static class GpuExportChecks
                 .Invoke(main, [Path.Combine(directory, "output.mp4")])!;
             var result = await task;
             Check(result?.Stage == ExportStage.Completed && File.Exists(result.OutputPath), "ordinary UI export completes");
+            var completion = main.OwnedWindows.Cast<Window>().Single(w => w.Title == "書き出し結果");
+            var panel = (StackPanel)completion.Content;
+            Check(panel.Children.OfType<TextBlock>().Any(t => t.Text.Contains(result!.OutputPath!)), "completion retains saved path");
+            Check(!panel.Children.OfType<ProgressBar>().Single().IsIndeterminate && main.IsEnabled, "completion stops progress and restores editor");
+            panel.Children.OfType<Button>().Single().RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             Check(result!.Metrics?.VideoEncoder == "libx264" && result.Metrics.Composition?.CpuFrames == 3, "UI choices reach common export service");
             Check(session.GetProject().Revision == revision && preview.BackendPreference == originalPreview, "export leaves history and preview preference unchanged");
             Console.WriteLine("WPF export menu independence and real portrait H.264/AAC export: PASS");
