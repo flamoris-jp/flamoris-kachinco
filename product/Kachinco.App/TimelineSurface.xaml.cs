@@ -329,7 +329,9 @@ public partial class TimelineSurface : UserControl
             var sequenceId = sequence!.Id;
             var expectedRevision = revision;
             toggle.Click += (_, _) => Request(new([new SetTrackEnabled(sequenceId, track.Id, toggle.IsChecked == true)], expectedRevision));
-            ((StackPanel)header.Child).Children[0] = toggle;
+            var labelsPanel = (StackPanel)header.Child;
+            labelsPanel.Children.RemoveAt(0);
+            labelsPanel.Children.Insert(0, toggle);
         }
         Canvas.SetTop(header, geometry.Row(row).Top);
         header.Tag = track.Id == Guid.Empty ? $"new-{row}" : track.Id;
