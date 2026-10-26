@@ -42,6 +42,7 @@ public sealed partial class EditorWindow : Window
 
     public EditorWindow(string[] args)
     {
+        Icon = BitmapFrame.Create(new Uri("pack://application:,,,/KineticTypo.App;component/Assets/Kinetai.ico", UriKind.Absolute));
         Title = "KineticTypo / キネタイ"; Width = 1280; Height = 850; MinWidth = 950; MinHeight = 650; Background = new SolidColorBrush(Color.FromRgb(28, 30, 35));
         var root = new DockPanel(); Content = root;
         var bar = new WrapPanel { Background = new SolidColorBrush(Color.FromRgb(241, 239, 235)), Margin = new(0, 0, 0, 4) }; DockPanel.SetDock(bar, Dock.Top); root.Children.Add(bar);
