@@ -39,6 +39,12 @@ public partial class MainWindow : Window
         mediaProbe = new FfprobeMediaProbe();
         InitializeComponent();
         relink = new(mediaProbe);
+        Timeline.KineticEditRequested += (_, e) =>
+        {
+            // Use the clicked clip, never a stale Media bin selection.
+            selectedClipId = e.ClipId;
+            KineticEdit_Click(this, new RoutedEventArgs());
+        };
         InitializeWindowPlacement();
         InitializeEffects();
         InitializeMcp();

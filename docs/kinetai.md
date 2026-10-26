@@ -144,3 +144,19 @@ bytes/text, 32 v1 primitives/clip (v2 limits above), 4096px canvas, one-day dura
 bounded by entries and glyph shapes; native history uses reversible deltas with
 100-entry and 32 MiB bounds. Full-song resource and hardware quality measurements
 remain in [Windows acceptance](../staging/windows-kinetai.md).
+
+
+## Timeline editing and saved compositions
+
+Kachinco's embedded `KineticText` clips display a summary of the first three text
+entries in the timeline. This summary uses the saved composition, requires no
+`.ktproj` draft file and does not attempt video decoding. It is not a rendered
+frame: an intentionally transparent animation interval does not imply load failure.
+Use the clip's context menu **キネタイで編集… / Edit in KineticTypo…** to edit that
+specific asset. The toolbar can still create new text when no text asset is selected.
+Selecting the intended existing clip distinguishes editing from creation; the
+companion's normal timeline can also be transparent outside text ranges.
+
+The checkbox in each track header enables/disables the whole video, audio or
+subtitle track for preview and export. It preserves individual clip flags and
+shares native Undo/Redo and project persistence. Disabled clips remain editable.

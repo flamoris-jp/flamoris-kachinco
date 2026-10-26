@@ -16,6 +16,7 @@ public partial class TimelineSurface
         double width = ToDouble(viewport.TicksToPixels(caption.DurationTicks));
         var grid = new Grid { Width = width, Height = geometry.Row(row).ClipHeight,
             Background = Brushes.DarkMagenta, Tag = caption.Id, ClipToBounds = true,
+            Opacity = sequence!.Tracks.First(t => t.Captions.Any(c => c.Id == caption.Id)).Enabled ? 1 : .45,
             ToolTip = CaptionTooltip(caption.Text, caption.StartTicks, caption.DurationTicks) };
         grid.Children.Add(new Border { BorderBrush = caption.Id == selectedClipId ? Brushes.White : Brushes.Transparent,
             BorderThickness = new(2), IsHitTestVisible = false });
@@ -34,7 +35,9 @@ public partial class TimelineSurface
             thumb.Cursor = edge is null ? Cursors.SizeAll : Cursors.SizeWE;
             if (edge is not null)
             {
-                thumb.Width = Math.Min(7, width / 3);
+                thumb.Width = Math.Min(10, width / 3);
+                thumb.ForceCursor = true;
+                Panel.SetZIndex(thumb, 2);
                 var factory = new FrameworkElementFactory(typeof(Border));
                 factory.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
                 thumb.Template = new ControlTemplate(typeof(Thumb)) { VisualTree = factory };

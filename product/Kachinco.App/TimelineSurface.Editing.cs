@@ -41,6 +41,10 @@ public partial class TimelineSurface
                 return false;
             Select(clipId, rebuild: false);
             menu.Items.Clear();
+            var clip = sequence.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+            if (project.Assets.FirstOrDefault(a => a.Id == clip?.MediaAssetId)?.Kind == MediaKind.KineticText)
+                Add("キネタイで編集…", "Edit in KineticTypo…", true,
+                    () => KineticEditRequested?.Invoke(this, new(clipId)));
             var split = TimelineEditPlanner.Split(project, sequence.Id, clipId, playheadTicks, Guid.NewGuid());
             var splitBatch = new EditBatch(split.Success ? [split.Value!] : [], revision);
             Add("分割", "Split", split.Success, () => Request(splitBatch));

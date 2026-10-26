@@ -103,6 +103,31 @@ public partial class TimelineSurface
         var area = new Canvas { Margin = new Thickness(start + 3, 21, 0, 3), Width = Math.Max(0, end - start - 6),
             HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false, ClipToBounds = true };
         grid.Children.Insert(0, area);
+        if (asset.Kind == MediaKind.KineticText)
+        {
+            // An embedded composition is not a video file. Its source path can be a
+            // retained companion draft that no longer exists. Show authoring text,
+            // not an arbitrary frame that may intentionally be transparent.
+            try
+            {
+                var document = KineticComposition.Parse(asset.TextComposition ?? "");
+                var text = string.Join("  /  ", document["clips"]!.AsArray().Take(3)
+                    .Select(c => c!["text"]!.GetValue<string>()));
+                area.Children.Add(new TextBlock
+                {
+                    Text = "T  " + (string.IsNullOrWhiteSpace(text) ? EditorText.Choose("文字演出（空）", "Empty text composition") : text),
+                    Foreground = Brushes.White, FontSize = 11, Width = area.Width,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                });
+                grid.ToolTip += "\n" + EditorText.Choose("埋め込み文字演出。右クリックからキネタイで編集できます。", "Embedded text. Right-click to edit in KineticTypo.");
+            }
+            catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or System.Text.Json.JsonException)
+            {
+                area.Children.Add(new TextBlock { Text = EditorText.Choose("⚠ 文字演出を読み込めません", "⚠ Cannot read text composition"), Foreground = Brushes.White });
+                grid.ToolTip += "\n" + ex.Message;
+            }
+            return;
+        }
         if (asset.Kind != MediaKind.Wav)
         {
             foreach (var slot in ThumbnailStrip.Plan(clip, viewport, start, end - start))

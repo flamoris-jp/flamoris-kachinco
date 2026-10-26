@@ -90,6 +90,7 @@ public partial class TimelineSurface : UserControl
 
     public event EventHandler<TimelineCommandEventArgs>? CommandRequested;
     public event EventHandler<TimelineSelectionEventArgs>? ClipSelectionChanged;
+    public event EventHandler<TimelineSelectionEventArgs>? KineticEditRequested;
     public event EventHandler<TimelineDiagnosticsEventArgs>? InteractionFailed;
 
     public Guid? SelectedClipId => selectedClipId;
@@ -317,6 +318,21 @@ public partial class TimelineSurface : UserControl
         };
         if (track.Id == Guid.Empty)
             header.Child = new TextBlock { Text = label, Foreground = Brushes.LightGray, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = track.Name };
+        else
+        {
+            var toggle = new CheckBox
+            {
+                Content = label, IsChecked = track.Enabled, Foreground = Brushes.White,
+                FontWeight = FontWeights.SemiBold,
+                ToolTip = EditorText.Choose("トラック全体の有効／無効（プレビュー・書き出し共通）", "Enable/disable track in preview and export")
+            };
+            var sequenceId = sequence!.Id;
+            var expectedRevision = revision;
+            toggle.Click += (_, _) => Request(new([new SetTrackEnabled(sequenceId, track.Id, toggle.IsChecked == true)], expectedRevision));
+            var labelsPanel = (StackPanel)header.Child;
+            labelsPanel.Children.RemoveAt(0);
+            labelsPanel.Children.Insert(0, toggle);
+        }
         Canvas.SetTop(header, geometry.Row(row).Top);
         header.Tag = track.Id == Guid.Empty ? $"new-{row}" : track.Id;
         TrackHeaders.Children.Add(header);
@@ -351,6 +367,7 @@ public partial class TimelineSurface : UserControl
             Background = track.Kind == TrackKind.Video ? videoBrush : audioBrush,
             ToolTip = $"{AssetName(clip.MediaAssetId)}\n{FormatTime(clip.StartTicks)} ? {FormatTime(clip.EndTicks)}",
             Tag = clip.Id,
+            Opacity = track.Enabled && clip.Enabled ? 1 : .45,
             ClipToBounds = true
         };
         grid.Children.Add(new Border
@@ -383,14 +400,16 @@ public partial class TimelineSurface : UserControl
     private Thumb TrimThumb(ClipVisual state, HorizontalAlignment alignment, TrimEdge edge)
     {
         var thumb = GestureThumb();
-        thumb.Width = Math.Min(7, state.Width / 3); thumb.HorizontalAlignment = alignment;
+        thumb.Width = Math.Min(10, state.Width / 3); thumb.HorizontalAlignment = alignment;
         thumb.ToolTip = edge == TrimEdge.Start ? EditorText.Choose("開始位置をトリム", "Trim start") : EditorText.Choose("終了位置をトリム", "Trim end");
         var handle = new FrameworkElementFactory(typeof(Border));
         handle.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)));
         handle.SetValue(Border.BorderBrushProperty, Brushes.White);
         handle.SetValue(Border.BorderThicknessProperty, new Thickness(1, 0, 1, 0));
         thumb.Template = new ControlTemplate(typeof(Thumb)) { VisualTree = handle };
-        thumb.Cursor = Cursors.SizeWE; thumb.Tag = new TrimVisual(state, edge);
+        thumb.Cursor = Cursors.SizeWE; thumb.ForceCursor = true;
+        Panel.SetZIndex(thumb, 2);
+        thumb.Tag = new TrimVisual(state, edge);
         thumb.DragStarted += Trim_DragStarted;
         thumb.DragDelta += Trim_DragDelta;
         thumb.DragCompleted += Trim_DragCompleted;
