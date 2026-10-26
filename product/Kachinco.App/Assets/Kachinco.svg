@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512"><defs>
+ <linearGradient id="metal" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffffff"/><stop offset=".42" stop-color="#ced1d8"/><stop offset=".72" stop-color="#777d88"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+ <linearGradient id="red" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ff4a5a"/><stop offset=".42" stop-color="#dc1438"/><stop offset="1" stop-color="#890b2b"/></linearGradient>
+ <linearGradient id="dark" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#4b4c54"/><stop offset=".5" stop-color="#191b21"/><stop offset="1" stop-color="#050609"/></linearGradient>
+ </defs><g stroke-linejoin="round" stroke-linecap="round">
+<path d="M88 205 L390 205 Q408 205 408 222 L408 399 Q408 420 387 420 L106 420 Q88 420 88 400Z" fill="url(#dark)" stroke="url(#metal)" stroke-width="13"/>
+<path d="M92 206 H405 V259 H92Z" fill="url(#metal)" stroke="#15171c" stroke-width="7"/>
+<path d="M112 207h53l-32 52H92z M216 207h54l-32 52h-54z M323 207h54l-32 52h-54z" fill="#101117"/>
+<path d="M96 193 L367 90 Q389 83 397 104 L412 151 L118 255Z" fill="url(#metal)" stroke="#14151b" stroke-width="10"/>
+<path d="M133 179l50-19 10 47-50 19z M234 141l50-19 11 47-50 19z M332 106l34-13 15 49-39 14z" fill="#101116"/>
+<circle cx="103" cy="204" r="19" fill="url(#red)" stroke="url(#metal)" stroke-width="6"/>
+<path d="M127 343 H364" stroke="#ef2144" stroke-width="12"/>
+</g></svg>
