@@ -4,6 +4,10 @@
 
 **Windowsの画面でも、LinuxのCLI・MCPでも、同じ編集エンジンで動画を制作できます。**
 
+**Windows版には文字演出エディタ [KineticTypo / キネタイ](docs/kinetai.md)を同梱。歌詞やタイトルに動きを付け、編集可能な文字素材としてカチンコに保存できます。**
+
+**The Windows package includes [KineticTypo / Kinetai](docs/kinetai.md), an animated-text editor with editable compositions stored in Kachinco projects.**
+
 [Linux CLI setup and command reference](docs/linux-cli.md) · [Physical LIME/AMD smoke result](docs/linux-cli-acceptance.md)
 
 CLI 0.1.1 has passed an external MCP edit → Japanese-caption preview → save →
@@ -84,6 +88,7 @@ AI can also upload supported source media through guarded MCP operations, adjust
 | **Video / still images** | MOV/MP4 and PNG/JPEG/WebP import, layer transforms, opacity, Normal/Screen composition, image motion via property automation. |
 | **Audio / captions** | WAV/MP3/M4A audio clips, clip volume points and fades, transport monitoring level, caption editing and SRT import/export. |
 | **AI / MCP** | Same-session project queries and edits, guarded media upload, specified-time rendered frame capture, clip speed commands and bounded single-clip download. |
+| **KineticTypo / キネタイ (Windows)** | Bundled animated-text companion, standalone `.ktproj` editing, embedded editable text, SRT/legacy PONPON import, bounded motion scripts and RGB + mask interchange. [Guide](docs/kinetai.md). |
 | **Creative controls** | Clappers (named timeline/region references), reusable Effect Library, restricted Recipe-generated text/particle clips, editable visual automation. |
 | **Finishing** | Crossfades, navigation by frame, timeline follow during playback, title-image selection/export, [completed-MP4 first-frame replacement](docs/mp4-title-replacement.md), MP4 export for 16:9 or 9:16. |
 | **GPU options** | D3D11 preview composition and decoding fallback; independent CPU/D3D11 export composition and CPU/NVENC encoding paths, with CPU fallback. |
@@ -116,6 +121,28 @@ MCP operations over the same native document commands.
 文字クリップを戻せます。GPU実機・日本語フォント・輪郭・書出品質の受入確認は
 [Windows checklist](staging/windows-kinetai.md)で別途記録します。
 [Usage and file contracts](docs/kinetai.md) · [ADR](docs/decisions/0028-kinetai-first-runtime.md).
+
+KineticTypo also accepts programmable `animate(t, duration, i, n, seed)` scripts for
+end-relative fades, per-character motion and seeded effects. The bounded Python
+compiler produces IR evaluated by the same native GPU text path. Source, IR and
+Undo/Redo persist together. See [the guide](docs/kinetai.md).
+
+### PONPON・AudioAnalyzerとの役割分担 / Related lyric and audio tools
+
+| Tool | Role and owning repository |
+| --- | --- |
+| **KineticTypo / キネタイ** | 文字の見た目・動きの編集 / animated-text authoring. Included in this repository's Windows package; embedded compositions persist in the Kachinco `.fkproj`, standalone work in `.ktproj`. |
+| **PONPON / ポンポン** | 曲に合わせて歌詞の時間を記録し、ぐにぐにで微調整 / lyric timing capture and refinement. Part of [Studio Client](https://github.com/flamoris-jp/flamoris-studio-client). |
+| **AudioAnalyzer / オーディオアナライザ** | 歌詞不要の波形・強弱・推定BPM／拍・キー／コード解析 / local audio analysis. Part of [Studio Client](https://github.com/flamoris-jp/flamoris-studio-client). |
+
+PONPONからSRTまたは対応する従来形式のJSONを書き出し、キネタイの**歌詞読込**で
+文字演出の元にできます。AudioAnalyzerの解析は独立しており、キネタイの利用に必須ではありません。
+現時点の受け渡しはファイル経由です。Studio ClientのMCP／Studio連携は今後の開発範囲です。
+
+Export SRT or supported legacy PONPON JSON and use Kinetai's lyric import to begin
+text animation. Audio analysis is optional and independent. Exchange is currently
+file-based; Studio Client's MCP/Studio integration remains future work.
+See the [Studio Client user guide](https://github.com/flamoris-jp/flamoris-studio-client/blob/main/docs/windows-user-guide.md).
 
 ## Getting started (Windows)
 
@@ -179,8 +206,3 @@ If FLAMORIS is useful to you, optional support helps pay for development. 🌱
 FLAMORIS character designs, artwork, logos, trademarks, music, voices and other creative assets are **not automatically licensed under Apache-2.0**; check their own rights statements.
 
 ソフトウェアのソースコードは原則 Apache-2.0 で公開しています。改造・組み込み・商用利用も可能です。映像・音楽・キャラクターなどの制作物はソフトウェアとは別の権利・ライセンスで扱います。
-
-KineticTypo also accepts programmable `animate(t, duration, i, n, seed)` scripts for
-end-relative fades, per-character motion and seeded effects. The bounded Python
-compiler produces IR evaluated by the same native GPU text path. Source, IR and
-Undo/Redo persist together. See [the guide](docs/kinetai.md).
