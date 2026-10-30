@@ -22,11 +22,11 @@ public partial class MainWindow
             (action, token) => {
                 if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); action(); return Task.CompletedTask; }
                 return Dispatcher.InvokeAsync(action, DispatcherPriority.Background, token).Task;
-            });
+            }, applicationLifetime: true);
         mcpUi = new(this, McpMenu, "flamoris-kachinco",
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FLAMORIS", "Kachinco", "mcp-connection.json"),
             "FLAMORIS.Kachinco", Path.Combine(AppContext.BaseDirectory, "mcp", "Flamoris.Mcp.Bridge.exe"),
-            AttachMcp, () => session.GetProject().Project is not null, () => EditorText.Culture);
+            AttachMcp, () => true, () => EditorText.Culture);
         McpStatusPanel.Content = mcpUi.StatusIndicator;
         mcpHost.Invalidating += RevokeMcp;
     }
@@ -35,29 +35,37 @@ public partial class MainWindow
         var uploads = new MediaUploadStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "FLAMORIS", "Kachinco", "imported-media"), mediaProbe);
         var downloads = new ClipDownloadStore(downloadAdmission);
+        void ReplaceTransfers()
+        {
+            uploads.Dispose(); downloads.Dispose();
+            uploads = new MediaUploadStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FLAMORIS", "Kachinco", "imported-media"), mediaProbe);
+            downloads = new ClipDownloadStore(downloadAdmission);
+        }
+        session.DocumentReplacing += ReplaceTransfers;
         var boundary = new McpBoundary(mcpHost!, KachincoMcpTools.Create(session,
             () => new { sequenceId = selectedSequenceId, clipId = selectedClipId,
                 playheadTicks = Timeline.PlayheadTicks.ToString(CultureInfo.InvariantCulture) },
             () => Refresh(EditorText.Choose("MCPから編集しました。", "Edited through MCP."))).Append(previewCapture.CreateTool(session, () => filename, () => mcpHost!.Snapshot)).Concat(allowAiEffectLibrary && effectLibrary is not null
                 ? EffectLibraryMcpTools.Create(session, effectLibrary, () => Refresh(EditorText.Choose("エフェクトを適用しました。", "Effect applied."))) : [])
-            .Concat(MediaUploadMcpTools.Create(session, uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported."))))
-            .Concat(ClipDownloadMcpTools.Create(session, downloads, () => filename))
+            .Concat(MediaUploadMcpTools.Create(session, () => uploads, () => Refresh(EditorText.Choose("素材を読み込みました。", "Media imported."))))
+            .Concat(ClipDownloadMcpTools.Create(session, () => downloads, () => filename))
             .Concat(TitleImageMcpTools.Create(session, CreateTitleImageService(), new WindowsPreviewImageEncoder(), () => filename,
                 () => Refresh(EditorText.Choose("タイトル画像を設定しました。", "Title image selected.")))),
-            new McpOptions(), new McpDiagnostics(logger));
+            new McpOptions { ApplicationLifetime = true }, new McpDiagnostics(logger));
         try
         {
             var grant = await boundary.EnableAsync(permission);
-            grant.Revoked.Register(uploads.Dispose);
-            grant.Revoked.Register(downloads.Dispose);
-            return new(boundary, grant);
+            grant.Revoked.Register(() => uploads.Dispose());
+            grant.Revoked.Register(() => downloads.Dispose());
+            return new(boundary, grant, () => { session.DocumentReplacing -= ReplaceTransfers; uploads.Dispose(); downloads.Dispose(); return Task.CompletedTask; });
         }
         catch (Exception exception)
         {
             logger.Error("mcp.attach", "MCP attachment failed", exception,
                 new Dictionary<string, object?> { ["revision"] = session.GetProject().Revision,
                     ["hasProject"] = session.GetProject().Project is not null });
-            boundary.Dispose(); uploads.Dispose(); downloads.Dispose(); throw;
+            session.DocumentReplacing -= ReplaceTransfers; boundary.Dispose(); uploads.Dispose(); downloads.Dispose(); throw;
         }
     }
     private void UpdateMcpStatus() { mcpUi?.Refresh(); mcpUi?.NotifyHostReady(); }

@@ -69,7 +69,6 @@ public partial class MainWindow : Window
     {
         using var operation = BeginHumanOperation();
         if (!ConfirmDiscard()) return;
-        RevokeMcp();
         session.ReplaceProject(null);
         filename = savedJson = null;
         selectedSequenceId = Guid.NewGuid(); selectedMediaId = selectedClipId = null;
@@ -111,7 +110,6 @@ public partial class MainWindow : Window
         {
             var result = await files.LoadAsync(dialog.FileName);
             if (!result.Success) { LogFailure("document.open", "Project open failed", result.Diagnostics); ShowErrors(result.Diagnostics); return; }
-            RevokeMcp();
             var opened = session.ReplaceProject(result.Value!, revision);
             if (!opened.Success) { LogFailure("document.open", "Project switch failed", opened.Diagnostics); ShowErrors(opened.Diagnostics); return; }
             filename = dialog.FileName; savedJson = ProjectJson.Serialize(result.Value!).Value;

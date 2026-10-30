@@ -16,34 +16,36 @@ public static class MediaUploadMcpTools
     public sealed record WriteInput(Guid UploadId, long Offset, string DataBase64, string ChunkSha256);
     public sealed record IdInput(Guid UploadId);
 
-    public static IReadOnlyList<HostTool> Create(EditorSession session, MediaUploadStore uploads, Action changed)
+    public static IReadOnlyList<HostTool> Create(EditorSession session, MediaUploadStore uploads, Action changed) => Create(session, () => uploads, changed);
+
+    public static IReadOnlyList<HostTool> Create(EditorSession session, Func<MediaUploadStore> uploads, Action changed)
     {
         JsonElement Json(object value) => JsonSerializer.SerializeToElement(value, Wire);
         return [
             new HostTool<BeginInput>("media_upload_begin",
                 "Reserve a bounded media upload. Caller UUID becomes asset ID. Supported image/video/audio; max 512 MiB. Edit grant required; no path or URL.",
                 Schema<BeginInput>(), OperationKind.Mutation, Decode<BeginInput>,
-                (context, input, token) => context.CommitAsync(() => Json(uploads.Begin(
+                (context, input, token) => context.CommitAsync(() => Json(uploads().Begin(
                     input.UploadId, input.FileName, input.SizeBytes, input.Sha256, session.GetProject()))), foreground: false),
             new HostTool<WriteInput>("media_upload_write",
                 "Write the next media chunk (max 128 KiB decoded). Identical retries are accepted; offsets are decimal strings. Edit grant required.",
                 Schema<WriteInput>(), OperationKind.Mutation, Decode<WriteInput>,
-                (context, input, token) => context.CommitAsync(() => Json(uploads.Write(
+                (context, input, token) => context.CommitAsync(() => Json(uploads().Write(
                     input.UploadId, input.Offset, input.DataBase64, input.ChunkSha256))), foreground: false),
             new HostTool<IdInput>("media_upload_finish",
                 "Verify the complete upload and probe media, then register the asset in shared Undo/Redo. Does not insert a clip. Edit grant required.",
                 Schema<IdInput>(), OperationKind.Mutation, Decode<IdInput>, async (context, input, token) => {
                     await context.ReadAsync(() => Json(new { ready = true }));
-                    var prepared = await uploads.PrepareAsync(input.UploadId, token);
+                    var prepared = await uploads().PrepareAsync(input.UploadId, token);
                     return await context.CommitAsync(() => {
-                        var result = uploads.Finish(prepared, session, token);
+                        var result = uploads().Finish(prepared, session, token);
                         try { changed(); } catch { /* notification cannot undo a committed import */ }
                         return Json(result);
                     });
                 }),
             new HostTool<IdInput>("media_upload_cancel", "Discard only an unfinished owned upload. Imported files remain available for Undo/Redo. Edit grant required.",
                 Schema<IdInput>(), OperationKind.Mutation, Decode<IdInput>,
-                (context, input, token) => context.CommitAsync(() => Json(new { cancelled = uploads.Cancel(input.UploadId) })), foreground: false)
+                (context, input, token) => context.CommitAsync(() => Json(new { cancelled = uploads().Cancel(input.UploadId) })), foreground: false)
         ];
     }
     public static JsonElement Schema<T>()

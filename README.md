@@ -206,3 +206,8 @@ If FLAMORIS is useful to you, optional support helps pay for development. 🌱
 FLAMORIS character designs, artwork, logos, trademarks, music, voices and other creative assets are **not automatically licensed under Apache-2.0**; check their own rights statements.
 
 ソフトウェアのソースコードは原則 Apache-2.0 で公開しています。改造・組み込み・商用利用も可能です。映像・音楽・キャラクターなどの制作物はソフトウェアとは別の権利・ライセンスで扱います。
+
+
+## MCP startup and sharing
+
+See [startup/consent behavior and Windows acceptance](docs/mcp-startup.md). MCP can connect at application startup before opening a file; connection alone never enables screen sharing. Document changes preserve the connection and invalidate old target guards.

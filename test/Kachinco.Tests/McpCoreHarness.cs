@@ -18,7 +18,7 @@ internal sealed class McpCoreHarness : IDisposable
         Host = new(Fixture.Session, () => Busy, async (action, token) => {
             await lane.WaitAsync(token);
             try { token.ThrowIfCancellationRequested(); action(); } finally { lane.Release(); }
-        });
+        }, applicationLifetime: options?.ApplicationLifetime == true);
         Boundary = new(Host, KachincoMcpTools.Create(Fixture.Session, () => new { sequenceId = Fixture.SequenceId }, () => Changes++)
             .Concat(additional ?? []), options ?? new(), new McpDiagnostics(logger ?? KachincoLogging.Create().Logger));
     }

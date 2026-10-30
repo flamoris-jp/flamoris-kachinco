@@ -119,14 +119,14 @@ internal static partial class PackagedMcpChecks
                 try { var rejection = await Call(client, "undo", new() { ["expectedRevision"] = (await Query(client)).GetProperty("revision").GetString() }); denied = rejection.TryGetProperty("error", out var error) && error.GetProperty("code").GetString() == McpErrors.Forbidden; }
                 catch (Exception) { denied = true; }
                 Check(denied, "Read-only direct history call accepted.");
+                string beforeToken = (await Common(client)).GetProperty("documentToken").GetString()!;
                 // Exercise document replacement through the ordinary New menu and confirmation.
                 var replacing = Menu(processId, "FileMenu", "NewLandscapeMenu");
                 await ConfirmDiscard(process.Id);
                 await replacing;
-                await ExpectDisconnected(connection);
+                Check((await Common(client)).GetProperty("documentToken").GetString() != beforeToken, "New reused document token.");
             }
-            Console.WriteLine("Read-only direct-call rejection and New revocation: PASS");
-            await OldPipeRejected(readPipe);
+            Console.WriteLine("Read-only direct-call rejection and New keeps the same client with fresh token: PASS");
             await Menu(processId, "McpMenu", "McpEditMenu");
             string stoppedPipe = await Connection(process.Id);
             Guid reconnectId;
@@ -231,49 +231,24 @@ internal static partial class PackagedMcpChecks
         string pipe = await Connection(processId);
         await using var connection = new RevokedClient(await Connect(bridge, pipe));
         var state = await Query(connection.Client); var originalId = ProjectId(state);
-        if (mcpUndo)
-        {
-            // The commit succeeds, then revocation closes the pipe before its response.
-            try { await Call(connection.Client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() }); }
-            catch (IOException) { }
-            catch (ModelContextProtocol.McpException) { }
-        }
+        if (mcpUndo) await Call(connection.Client, "undo", new() { ["expectedRevision"] = state.GetProperty("revision").GetString() });
         else await Invoke(Find(main, "UndoButton"));
         await Until(() => HistoryIs(main, undo: false, redo: true));
-        await ExpectDisconnected(connection);
-        await OldPipeRejected(pipe);
-        var mcpMenu = (ExpandCollapsePattern)(await MainControl(processId, "McpMenu")).GetCurrentPattern(ExpandCollapsePattern.Pattern);
-        mcpMenu.Expand();
-        Check(!(await MainControl(processId, "McpConnectMenu")).Current.IsEnabled, "Document loss retained connect availability.");
-        mcpMenu.Collapse();
-        // Human Redo is preserved, without resurrecting the revoked client or address.
+        var context = await connection.Client.CallToolAsync("mcp.context", cancellationToken: Deadline());
+        Check(!context.StructuredContent!.Value.GetProperty("hasDocument").GetBoolean(), "Null project reported present.");
+        var absent = await connection.Client.CallToolAsync("get_project", new Dictionary<string, object?> { ["input"] = new { } }, cancellationToken: Deadline());
+        Check(absent.IsError == true && absent.StructuredContent!.Value.GetProperty("error").GetProperty("code").GetString() == McpErrors.NoDocument, "Missing target was not explicit.");
         await Invoke(Find(main, "RedoButton"));
         await Until(() => HistoryIs(main, undo: true, redo: false));
-        await ExpectDisconnected(connection); await OldPipeRejected(pipe);
+        Check(ProjectId(await Query(connection.Client)) == originalId, "Redo did not restore project on live connection.");
         await Invoke(Find(main, "UndoButton"));
         await Until(() => HistoryIs(main, undo: false, redo: true));
         await Invoke(Find(main, "AddLandscapeSequenceButton"));
         await Until(() => HistoryIs(main, undo: true, redo: false));
-        await ExpectDisconnected(connection); await OldPipeRejected(pipe);
-        await Menu(processId, "McpMenu", "McpEditMenu");
-        string freshPipe = await Connection(processId);
-        Check(freshPipe != pipe, "New document reused old grant address.");
-        await using (var fresh = new RevokedClient(await Connect(bridge, freshPipe)))
-        {
-            state = await Query(fresh.Client);
-            Check(ProjectId(state) != originalId, "AddSequence did not implicitly create a new Project.");
-            var sequenceId = state.GetProperty("project").GetProperty("project").GetProperty("sequences")[0].GetProperty("id").GetGuid();
-            var args = new Dictionary<string, object?> { ["expectedRevision"] = state.GetProperty("revision").GetString(),
-                ["commands"] = new object[] { new { type = "AddTrack", sequenceId, trackId = Guid.NewGuid(), name = "Reauthorized", kind = "Video" } } };
-            bool denied = false;
-            try { await Call(connection.Client, "edit_batch", args); }
-            catch (IOException) { denied = true; }
-            catch (ModelContextProtocol.McpException) { denied = true; }
-            Check(denied, "Old client edited the new document with its current revision.");
-            Check((await Call(fresh.Client, "edit_batch", args)).GetProperty("success").GetBoolean(), "Explicit re-enable did not allow B editing.");
-            await Menu(processId, "McpMenu", "McpStopMenu"); await ExpectDisconnected(fresh);
-        }
-        Console.WriteLine($"Project creation Undo ({(readOnly ? "Read only" : "Edit")}, {(mcpUndo ? "MCP" : "UI")}) -> null -> human Redo -> implicit B; old query/edit/address denied; fresh grant edits B: PASS");
+        Check(ProjectId(await Query(connection.Client)) != originalId, "Implicit new project missing.");
+        await Menu(processId, "McpMenu", "McpStopMenu"); await ExpectDisconnected(connection);
+        await OldPipeRejected(pipe);
+        Console.WriteLine("Project Undo -> no_document -> Redo -> implicit new project keeps client; explicit Stop revokes: PASS");
     }
     private static bool HistoryIs(AutomationElement main, bool undo, bool redo)
     {
@@ -300,23 +275,23 @@ internal static partial class PackagedMcpChecks
             {
                 var state = await Query(connection.Client); id = ProjectId(state);
                 await File.WriteAllTextAsync(path, state.GetProperty("project").GetRawText());
+                string oldToken = (await Common(connection.Client)).GetProperty("documentToken").GetString()!;
                 var opening = Menu(processId, "FileMenu", "OpenProjectMenu");
                 await ConfirmDiscard(processId); await ChooseProjectFile(processId, path); await opening;
-                await ExpectDisconnected(connection);
+                Check((await Common(connection.Client)).GetProperty("documentToken").GetString() != oldToken, "Open reused token.");
             }
-            await OldPipeRejected(pipe);
             // The file is now clean; opening the exact same file has no discard prompt.
             await Menu(processId, "McpMenu", "McpReadOnlyMenu");
             pipe = await Connection(processId);
             await using (var connection = new RevokedClient(await Connect(bridge, pipe)))
             {
                 Check(ProjectId(await Query(connection.Client)) == id, "Open changed persistent identity.");
+                string oldToken = (await Common(connection.Client)).GetProperty("documentToken").GetString()!;
                 var opening = Menu(processId, "FileMenu", "OpenProjectMenu");
                 await ChooseProjectFile(processId, path); await opening;
-                await ExpectDisconnected(connection);
+                Check((await Common(connection.Client)).GetProperty("documentToken").GetString() != oldToken, "Same-file reopen reused token.");
             }
-            await OldPipeRejected(pipe);
-            Console.WriteLine("Open and same-file reopen with the same persistent ID revoke the old client and address: PASS");
+            Console.WriteLine("Open and same-file reopen preserve the client and issue fresh document tokens: PASS");
         }
         finally { File.Delete(path); }
     }
@@ -357,6 +332,7 @@ internal static partial class PackagedMcpChecks
         using var json = JsonDocument.Parse(result.Content.OfType<TextContentBlock>().Single().Text);
         return json.RootElement.Clone();
     }
+    private static async Task<JsonElement> Common(McpClient client) => (await client.CallToolAsync("mcp.context", cancellationToken: Deadline())).StructuredContent!.Value;
     private static Task<JsonElement> Query(McpClient client) => Call(client, "get_project", []);
     private static int TrackCount(JsonElement state) => state.GetProperty("project").GetProperty("project").GetProperty("sequences").EnumerateArray()
         .Sum(s => s.GetProperty("tracks").GetArrayLength());

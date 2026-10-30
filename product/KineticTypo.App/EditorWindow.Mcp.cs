@@ -19,7 +19,7 @@ public sealed partial class EditorWindow : IMcpHost
     private long documentGeneration;
     public event Action? Invalidating;
     public HostSnapshot Snapshot => new("flamoris.kinetai", "0.2.0", runtimeId,
-        runtimeId + ":" + documentGeneration, revision, !closed && document is not null, fieldsDirty || exporting || compilingScript);
+        runtimeId + ":" + documentGeneration, revision, !closed, fieldsDirty || exporting || compilingScript) { HasDocument = document is not null };
     public async Task<T> InvokeAsync<T>(Func<T> action, CancellationToken token)
     {
         if (Dispatcher.CheckAccess()) { token.ThrowIfCancellationRequested(); return action(); }
@@ -31,7 +31,7 @@ public sealed partial class EditorWindow : IMcpHost
         mcp = new(this, item, "flamoris-kinetai",
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FLAMORIS", "KineticTypo", "mcp-connection.json"),
             "FLAMORIS.KineticTypo", Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "mcp", "Flamoris.Mcp.Bridge.exe")),
-            AttachMcp, () => document is not null, () => CultureInfo.GetCultureInfo("ja-JP"));
+            AttachMcp, () => !closed, () => CultureInfo.GetCultureInfo("ja-JP"));
         toolbar.Children.Add(mcp.StatusIndicator);
         Loaded += (_, _) => mcp.NotifyHostReady();
     }
@@ -74,11 +74,11 @@ public sealed partial class EditorWindow : IMcpHost
                     } finally { rendering.Release(); }
                 })
         };
-        var boundary = new McpBoundary(this, tools, new McpOptions(), new McpDiagnostics(KachincoLogging.Create("kinetai").Logger));
+        var boundary = new McpBoundary(this, tools, new McpOptions { ApplicationLifetime = true }, new McpDiagnostics(KachincoLogging.Create("kinetai").Logger));
         try { return new(boundary, await boundary.EnableAsync(permission)); } catch { boundary.Dispose(); throw; }
     }
     private void InvalidateMcp()
     {
-        ++documentGeneration; mcp?.Invalidate(); Invalidating?.Invoke(); mcp?.Refresh(); mcp?.NotifyHostReady();
+        ++documentGeneration; mcp?.Refresh(); mcp?.NotifyHostReady();
     }
 }
