@@ -1,5 +1,7 @@
 # ADR 0005: Live MCP through Flamoris.Mcp.Core 1.1.0
 
+> Historical Core migration decision. The Open/New/Undo-to-empty boundary invalidation below is superseded by [application-lifetime startup](../mcp-startup.md) in Core/Wpf 1.4.0: keep the runtime connection, rotate target guards and discard old document-scoped results/transfers. Stop, permission changes and shutdown still revoke.
+
 Status: proposed for Issue #19. Supersedes ADR 0003's transport/protocol/lease
 implementation, preserving its application permission and shared-session policy.
 
