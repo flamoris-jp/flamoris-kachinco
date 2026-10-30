@@ -49,6 +49,13 @@ internal static partial class PackagedMcpChecks
                 window = AutomationElement.FromHandle(process.MainWindowHandle); return window is not null; });
             var main = window!;
             int processId = process.Id;
+            await Menu(processId, "McpMenu", "McpReadOnlyMenu");
+            string startupPipe = await Connection(process.Id);
+            await using (var startup = await Connect(bridge, startupPipe))
+            {
+                Check(!(await Common(startup)).GetProperty("hasDocument").GetBoolean(), "Startup invented a project.");
+                Check((await startup.ListToolsAsync(cancellationToken: Deadline())).Any(t => t.Name == "get_project"), "Empty startup discovery unavailable.");
+            }
             await Menu(processId, "FileMenu", "NewLandscapeMenu");
             await Menu(processId, "McpMenu", "McpEditMenu");
             string pipe = await Connection(process.Id);
