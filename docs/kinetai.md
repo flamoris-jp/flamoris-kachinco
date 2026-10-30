@@ -1,5 +1,9 @@
 # KineticTypo / キネタイ
 
+Glyph bundle import and Linux headless drawing are documented in
+[Glyph / Linux Kinetai](kinetai-linux-and-glyph.md). Existing Windows text remains
+GPU rendered; Linux uses native Pango/Cairo CPU drawing and the shared motion IR.
+
 Build the normal complete Windows portable package:
 
 ```powershell

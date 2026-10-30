@@ -34,7 +34,14 @@ int main(){
     uint8_t masked[12]{};uint8_t mrgb[]={0,0,0,255,60,40,20,255,0,0,0,255};uint8_t mrgba[]={128,128,128,255,128,128,128,255,0,0,0,255};REQUIRE(kn_text_apply_mask(mrgb,mrgba,masked,3)==KN_OK);REQUIRE(masked[3]==128&&masked[0]==0&&masked[4]==120&&masked[11]==0);
     kn_text_renderer* renderer=nullptr;int32_t error=0;
 #ifdef _WIN32
-    REQUIRE(kn_text_renderer_create(1,&renderer,&error)==KN_OK);std::vector<uint8_t> pixels(1280*720*4),again(pixels.size());
+    REQUIRE(kn_text_renderer_create(1,&renderer,&error)==KN_OK);
+#else
+    // Avoid requiring production CJK/color fonts in sanitizer builds. Explicit
+    // outlined Japanese Glyph assets below need no installed font at all.
+    d["clips"][0]["text"]="Kinetai A\xCC\x81 black";source=d.dump();bytes=reinterpret_cast<const uint8_t*>(source.data());size=static_cast<uint32_t>(source.size());
+    REQUIRE(kn_text_renderer_create(0,&renderer,&error)==KN_OK);
+#endif
+    std::vector<uint8_t> pixels(1280*720*4),again(pixels.size());
     REQUIRE(kn_text_render(renderer,bytes,size,12345678,1280,720,pixels.data(),static_cast<uint32_t>(pixels.size()),&error)==KN_OK);
     REQUIRE(std::any_of(pixels.begin(),pixels.end(),[](uint8_t n){return n!=0;}));
     REQUIRE(kn_text_render(renderer,bytes,size,0,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);
@@ -52,9 +59,19 @@ int main(){
     REQUIRE(std::any_of(pixels.begin(),pixels.end(),[](uint8_t n){return n!=0;}));
     REQUIRE(kn_text_render(renderer,reinterpret_cast<const uint8_t*>(vs.data()),static_cast<uint32_t>(vs.size()),12345678,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);
     REQUIRE(pixels==again);
+    // Numeric Glyph geometry uses the same motion authority and opacity group.
+    auto vector=d;vector["version"]=2;auto& vc=vector["clips"][0];vc["text"]="赤赤";vc["color"]=json::array({1,1,1,1});vc["strokeWidth"]=0;vc["shadowColor"]=json::array({0,0,0,0});vc["program"]={{"version",1},{"ops",json::array()}};
+    json path={{"id","stroke001"},{"fill",json::array({1,0,0,1})},{"commands",json::array({json::array({"M",150,150}),json::array({"L",850,150}),json::array({"L",850,850}),json::array({"L",150,850}),json::array({"Z"})})}};
+    vc["glyphs"]={{"version",1},{"source",{{"song","Synthetic Glyph contract"},{"style","test"},{"sha256",std::string(64,'0')},{"license","Original Apache-2.0 test geometry"}}},{"units",json::array()}};
+    for(int i=0;i<2;++i)vc["glyphs"]["units"].push_back({{"occurrenceId","cue0001-char000"+std::to_string(i+1)},{"character","赤"},{"line",1},{"column",i+1},{"advance",1000},{"paths",json::array({path})}});
+    REQUIRE(request(session,{{"action","replace"},{"expectedRevision",4},{"document",vector}}).at("success")==true);
+    auto invalid=vector;invalid["clips"][0]["text"]="靴赤";REQUIRE(request(session,{{"action","edit"},{"expectedRevision",5},{"document",invalid}}).at("success")==false);
+    invalid=vector;invalid["clips"][0]["glyphs"]["units"][0]["paths"][0]["commands"][0][0]="URL";REQUIRE(request(session,{{"action","edit"},{"expectedRevision",5},{"document",invalid}}).at("success")==false);
+    auto vs2=vector.dump();REQUIRE(kn_text_render(renderer,reinterpret_cast<const uint8_t*>(vs2.data()),static_cast<uint32_t>(vs2.size()),0,1280,720,pixels.data(),static_cast<uint32_t>(pixels.size()),&error)==KN_OK);
+    REQUIRE(std::any_of(pixels.begin(),pixels.end(),[](uint8_t n){return n!=0;}));
+    vc["program"]["ops"].push_back({{"op","opacity"},{"value",0.5}});vs2=vector.dump();
+    REQUIRE(kn_text_render(renderer,reinterpret_cast<const uint8_t*>(vs2.data()),static_cast<uint32_t>(vs2.size()),0,1280,720,again.data(),static_cast<uint32_t>(again.size()),&error)==KN_OK);
+    uint8_t glyph_alpha=0;for(size_t i=3;i<again.size();i+=4)glyph_alpha=std::max(glyph_alpha,again[i]);REQUIRE(glyph_alpha>0&&glyph_alpha<=129);
     kn_text_renderer_destroy(renderer);
-#else
-    REQUIRE(kn_text_renderer_create(0,&renderer,&error)==KN_GPU_UNSUPPORTED&&renderer==nullptr);
-#endif
     kn_text_destroy(session);return 0;
 }

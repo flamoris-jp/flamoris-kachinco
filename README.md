@@ -8,6 +8,8 @@
 
 **The Windows package includes [KineticTypo / Kinetai](docs/kinetai.md), an animated-text editor with editable compositions stored in Kachinco projects.**
 
+**Glyph連携・Linuxキネタイ:** [Glyph読込とヘッドレス文字描画](docs/kinetai-linux-and-glyph.md)の実装候補を追加。Windowsは既存GPU描画、LinuxはPango/Cairo CPU描画で、保存した輪郭と動きの計算を共有します。Linux GUIは含みません。
+
 [Linux CLI setup and command reference](docs/linux-cli.md) · [Physical LIME/AMD smoke result](docs/linux-cli-acceptance.md)
 
 CLI 0.1.1 has passed an external MCP edit → Japanese-caption preview → save →

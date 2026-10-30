@@ -1,5 +1,6 @@
 #include "kinetic_text.hpp"
 #include "kinetic_program.hpp"
+#include "kinetic_vectors.hpp"
 #include "kachinco_native.h"
 #include "buffer.hpp"
 #include <algorithm>
@@ -31,7 +32,7 @@ double noise(uint32_t seed,uint32_t unit,int64_t frame,uint32_t axis) {return st
 void validate(const json& d) {
     if(d.dump().size()>16*1024*1024)throw std::invalid_argument("Text document limit");
     fields(d,{"version","id","width","height","fpsNumerator","fpsDenominator","durationTicks","clips"});
-    if(!d.at("version").is_number_integer()||d.at("version")!=1) throw std::invalid_argument("Unsupported kinetic document version");
+    if(!d.at("version").is_number_integer()||(d.at("version")!=1&&d.at("version")!=2)) throw std::invalid_argument("Unsupported kinetic document version");
     if(kn_editor::guid(d.at("id"))=="00000000-0000-0000-0000-000000000000") throw std::invalid_argument("Empty kinetic document ID");
     for(auto k:{"width","height"}) {auto n=kn_editor::integer(d.at(k));if(n<16||n>4096||n%2) throw std::invalid_argument("Even kinetic dimensions 16..4096 required");}
     kn_runtime* runtime=nullptr;kn_runtime_create(KN_ABI_VERSION,&runtime);int32_t valid=0;
@@ -40,9 +41,13 @@ void validate(const json& d) {
     if(status!=KN_OK||!valid) throw std::invalid_argument("Invalid kinetic FPS");
     auto duration=ticks(d.at("durationTicks"),true);if(duration>KN_TICKS_PER_SECOND*86400) throw std::invalid_argument("Kinetic duration exceeds one day");
     const auto& clips=d.at("clips");if(!clips.is_array()||clips.size()>10000) throw std::invalid_argument("Kinetic clip limit");
-    std::set<std::string> ids;std::vector<std::pair<int64_t,int>> events;
+    std::set<std::string> ids;std::vector<std::pair<int64_t,int>> events;size_t geometry_budget=1000000;
     for(const auto& c:clips) {
-        fields(c,{"id","text","startTicks","durationTicks","fontFamily","fontSize","color","strokeColor","strokeWidth","shadowColor","shadowX","shadowY","x","y","seed","program","source","provenance"});
+        if(c.contains("glyphs")) {
+            if(d.at("version")!=2)throw std::invalid_argument("Glyph clips require kinetic document version 2");
+            fields(c,{"id","text","startTicks","durationTicks","fontFamily","fontSize","color","strokeColor","strokeWidth","shadowColor","shadowX","shadowY","x","y","seed","program","source","provenance","glyphs"});
+            validate_vectors(c,geometry_budget);
+        }else fields(c,{"id","text","startTicks","durationTicks","fontFamily","fontSize","color","strokeColor","strokeWidth","shadowColor","shadowX","shadowY","x","y","seed","program","source","provenance"});
         auto id=kn_editor::guid(c.at("id"));if(id=="00000000-0000-0000-0000-000000000000"||!ids.insert(id).second) throw std::invalid_argument("Duplicate kinetic clip ID");
         text(c.at("text"),4096);text(c.at("fontFamily"),256);text(c.at("provenance"),2048);
         if(!c.at("source").is_string()||c.at("source").get_ref<const std::string&>().size()>65536)throw std::invalid_argument("Script source limit");

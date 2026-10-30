@@ -1,0 +1,821 @@
+{
+  "schema_version": 2,
+  "kind": "flamoris-glyph-bundle",
+  "song": "Red Shoes experiment",
+  "title": "",
+  "generator": {
+    "name": "flamoris-glyph",
+    "version": "0.2.0",
+    "fonttools": "4.61.1"
+  },
+  "seed": 42,
+  "reuse": "occurrence",
+  "style": {
+    "schema_version": 1,
+    "name": "red-shoes-tango",
+    "palette": [
+      "#C72F42",
+      "#222222"
+    ],
+    "variation": 0.65,
+    "stroke_width": 42,
+    "width": 1.0,
+    "height": 1.0,
+    "slant": 0.03,
+    "hane_length": 65,
+    "harai_taper": 0.08
+  },
+  "source": {
+    "kind": "authored-skeleton",
+    "sha256": "a8e9b084f2d391c4eae1e0d957fea89e3fd76b86f54a34396a6e14399ddbdba8",
+    "license_note": "Original experimental FLAMORIS centerlines, Apache-2.0; no third-party font/dataset."
+  },
+  "cues": [
+    {
+      "id": "cue0001",
+      "text": "赤い靴",
+      "start_ms": 1000,
+      "end_ms": 3000
+    },
+    {
+      "id": "cue0002",
+      "text": "赤い靴",
+      "start_ms": 4000,
+      "end_ms": 6000
+    },
+    {
+      "id": "cue0003",
+      "text": "赤い靴",
+      "start_ms": 7000,
+      "end_ms": 9000
+    }
+  ],
+  "occurrences": [
+    {
+      "occurrence_id": "cue0001-char0001",
+      "character": "赤",
+      "cue_id": "cue0001",
+      "line": 1,
+      "column": 1,
+      "glyph_variant_id": "gc0cd4dc729401a0a0babb2f8"
+    },
+    {
+      "occurrence_id": "cue0001-char0002",
+      "character": "い",
+      "cue_id": "cue0001",
+      "line": 1,
+      "column": 2,
+      "glyph_variant_id": "ge67708b0ac60d63a80d0276e"
+    },
+    {
+      "occurrence_id": "cue0001-char0003",
+      "character": "靴",
+      "cue_id": "cue0001",
+      "line": 1,
+      "column": 3,
+      "glyph_variant_id": "g82e7a268f586b9b3a5f3194a"
+    },
+    {
+      "occurrence_id": "cue0002-char0001",
+      "character": "赤",
+      "cue_id": "cue0002",
+      "line": 1,
+      "column": 1,
+      "glyph_variant_id": "g6b9f1de7c185db9e7021a709"
+    },
+    {
+      "occurrence_id": "cue0002-char0002",
+      "character": "い",
+      "cue_id": "cue0002",
+      "line": 1,
+      "column": 2,
+      "glyph_variant_id": "gb30e9b24c558bbf9e9d8f099"
+    },
+    {
+      "occurrence_id": "cue0002-char0003",
+      "character": "靴",
+      "cue_id": "cue0002",
+      "line": 1,
+      "column": 3,
+      "glyph_variant_id": "g187bab7a53f112a6f770f8f6"
+    },
+    {
+      "occurrence_id": "cue0003-char0001",
+      "character": "赤",
+      "cue_id": "cue0003",
+      "line": 1,
+      "column": 1,
+      "glyph_variant_id": "g98d94174862089e9ca8ad0ce"
+    },
+    {
+      "occurrence_id": "cue0003-char0002",
+      "character": "い",
+      "cue_id": "cue0003",
+      "line": 1,
+      "column": 2,
+      "glyph_variant_id": "g8ab2a978287834e172c10c4e"
+    },
+    {
+      "occurrence_id": "cue0003-char0003",
+      "character": "靴",
+      "cue_id": "cue0003",
+      "line": 1,
+      "column": 3,
+      "glyph_variant_id": "gc5a5e9e200e9411fbc6b0864"
+    }
+  ],
+  "glyphs": [
+    {
+      "variant_id": "gc0cd4dc729401a0a0babb2f8",
+      "character": "赤",
+      "asset": "glyphs/gc0cd4dc729401a0a0babb2f8.svg",
+      "sha256": "d97a113f3644cb1221a2e22b947b08527bc791776b4c83c7a8618d7002465ffc",
+      "parameters": {
+        "scale_x": 0.957161,
+        "scale_y": 0.980934,
+        "slant": 0.004277,
+        "bend": 11.631528,
+        "stroke_width": 42.492512,
+        "fill": "#222222"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          181.4628,
+          156.6731,
+          837.12,
+          824.3984
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "s3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "s4",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "s5",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "s6",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "s7",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "ge67708b0ac60d63a80d0276e",
+      "character": "い",
+      "asset": "glyphs/ge67708b0ac60d63a80d0276e.svg",
+      "sha256": "c7e147af1b45ca26b21b55ae59a9667b9e0a18b9da9db1b8211f9b6eeed51121",
+      "parameters": {
+        "scale_x": 0.987989,
+        "scale_y": 0.969949,
+        "slant": 0.008493,
+        "bend": -1.505939,
+        "stroke_width": 42.579533,
+        "fill": "#C72F42"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          199.0832,
+          252.2926,
+          798.3064,
+          710.1022
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "g82e7a268f586b9b3a5f3194a",
+      "character": "靴",
+      "asset": "glyphs/g82e7a268f586b9b3a5f3194a.svg",
+      "sha256": "d5b59a9465a489463dd922d23f31b79d2ce94192ff791361bcd8e411df969532",
+      "parameters": {
+        "scale_x": 0.952039,
+        "scale_y": 0.965749,
+        "slant": -0.00316,
+        "bend": 6.526888,
+        "stroke_width": 40.50022,
+        "fill": "#222222"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          153.4673,
+          161.9879,
+          875.544,
+          838.0122
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "k1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "k2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "k3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "k4",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "k5",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "k6",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "k7",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke008",
+          "source_id": "k8",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke009",
+          "source_id": "k9",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke010",
+          "source_id": "k10",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke011",
+          "source_id": "n1",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke012",
+          "source_id": "n2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke013",
+          "source_id": "n3",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke014",
+          "source_id": "n4",
+          "terminal": "hane"
+        }
+      ]
+    },
+    {
+      "variant_id": "g6b9f1de7c185db9e7021a709",
+      "character": "赤",
+      "asset": "glyphs/g6b9f1de7c185db9e7021a709.svg",
+      "sha256": "7eb51f6adf0bd7c7dc97c49473f970b2dc41f9c891a34becd227d8ab88b22f30",
+      "parameters": {
+        "scale_x": 0.981414,
+        "scale_y": 0.964533,
+        "slant": -0.000106,
+        "bend": -1.896061,
+        "stroke_width": 41.594962,
+        "fill": "#C72F42"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          163.7161,
+          162.4135,
+          833.5624,
+          818.7565
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "s3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "s4",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "s5",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "s6",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "s7",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "gb30e9b24c558bbf9e9d8f099",
+      "character": "い",
+      "asset": "glyphs/gb30e9b24c558bbf9e9d8f099.svg",
+      "sha256": "697dd32b08097cec4fc706e0b6581a10996ed8e6b757a97f21b4caf8364035b2",
+      "parameters": {
+        "scale_x": 1.0041,
+        "scale_y": 1.034591,
+        "slant": 0.053622,
+        "bend": -10.998615,
+        "stroke_width": 44.447654,
+        "fill": "#222222"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          187.9334,
+          235.086,
+          791.4736,
+          724.7835
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "g187bab7a53f112a6f770f8f6",
+      "character": "靴",
+      "asset": "glyphs/g187bab7a53f112a6f770f8f6.svg",
+      "sha256": "08120cd7e62b8dede521212dcbecbcfa03165de8b39ad0502312e484e03d145b",
+      "parameters": {
+        "scale_x": 0.95817,
+        "scale_y": 0.99299,
+        "slant": -0.005219,
+        "bend": 6.729014,
+        "stroke_width": 40.914761,
+        "fill": "#C72F42"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          151.8063,
+          152.4535,
+          878.0016,
+          847.5465
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "k1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "k2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "k3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "k4",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "k5",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "k6",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "k7",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke008",
+          "source_id": "k8",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke009",
+          "source_id": "k9",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke010",
+          "source_id": "k10",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke011",
+          "source_id": "n1",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke012",
+          "source_id": "n2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke013",
+          "source_id": "n3",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke014",
+          "source_id": "n4",
+          "terminal": "hane"
+        }
+      ]
+    },
+    {
+      "variant_id": "g98d94174862089e9ca8ad0ce",
+      "character": "赤",
+      "asset": "glyphs/g98d94174862089e9ca8ad0ce.svg",
+      "sha256": "6196dc7a44185dca6c4ebd882eb2b252b4c51b15468d7c24d225c897612685ef",
+      "parameters": {
+        "scale_x": 0.985455,
+        "scale_y": 1.014305,
+        "slant": 0.033245,
+        "bend": 10.206647,
+        "stroke_width": 40.987902,
+        "fill": "#C72F42"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          164.4089,
+          144.9932,
+          848.0978,
+          835.0499
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "s3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "s4",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "s5",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "s6",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "s7",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "g8ab2a978287834e172c10c4e",
+      "character": "い",
+      "asset": "glyphs/g8ab2a978287834e172c10c4e.svg",
+      "sha256": "1d4e3b0755924052416d60b3bab1344329135bfe1ef3e08d8a6e541a7b1b0c7d",
+      "parameters": {
+        "scale_x": 1.002103,
+        "scale_y": 1.010456,
+        "slant": 0.056607,
+        "bend": -1.691776,
+        "stroke_width": 45.251688,
+        "fill": "#222222"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          197.4766,
+          240.9725,
+          800.1035,
+          719.8252
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "s1",
+          "terminal": "hane"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "s2",
+          "terminal": "harai"
+        }
+      ]
+    },
+    {
+      "variant_id": "gc5a5e9e200e9411fbc6b0864",
+      "character": "靴",
+      "asset": "glyphs/gc5a5e9e200e9411fbc6b0864.svg",
+      "sha256": "0af5d9e8a6a7ac25ded5691669e36582dd2a7ed5d9b0e6ca5297dfd552ce3eab",
+      "parameters": {
+        "scale_x": 0.965923,
+        "scale_y": 1.024762,
+        "slant": 0.000933,
+        "bend": 11.080002,
+        "stroke_width": 42.490238,
+        "fill": "#C72F42"
+      },
+      "metrics": {
+        "view_box": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "bounds": [
+          150.9117,
+          141.3333,
+          886.5248,
+          858.6667
+        ],
+        "anchor": [
+          500,
+          500
+        ],
+        "advance": 1000
+      },
+      "stroke_model": "authored",
+      "strokes": [
+        {
+          "element_id": "stroke001",
+          "source_id": "k1",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke002",
+          "source_id": "k2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke003",
+          "source_id": "k3",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke004",
+          "source_id": "k4",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke005",
+          "source_id": "k5",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke006",
+          "source_id": "k6",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke007",
+          "source_id": "k7",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke008",
+          "source_id": "k8",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke009",
+          "source_id": "k9",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke010",
+          "source_id": "k10",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke011",
+          "source_id": "n1",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke012",
+          "source_id": "n2",
+          "terminal": "tome"
+        },
+        {
+          "element_id": "stroke013",
+          "source_id": "n3",
+          "terminal": "harai"
+        },
+        {
+          "element_id": "stroke014",
+          "source_id": "n4",
+          "terminal": "hane"
+        }
+      ]
+    }
+  ],
+  "inventory": [
+    {
+      "id": "u008D64",
+      "char": "赤",
+      "count": 3,
+      "in_title": false,
+      "codepoint": "U+8D64"
+    },
+    {
+      "id": "u003044",
+      "char": "い",
+      "count": 3,
+      "in_title": false,
+      "codepoint": "U+3044"
+    },
+    {
+      "id": "u009774",
+      "char": "靴",
+      "count": 3,
+      "in_title": false,
+      "codepoint": "U+9774"
+    }
+  ]
+}

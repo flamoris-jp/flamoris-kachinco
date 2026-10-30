@@ -1,4 +1,5 @@
 #include "kinetic_text.hpp"
+#include "kinetic_vectors.hpp"
 #include "kachinco_native.h"
 #include "buffer.hpp"
 #include <memory>
@@ -23,7 +24,8 @@ namespace {
 void check(HRESULT hr) {if(FAILED(hr)) throw hr;}
 std::wstring wide(const std::string& s) {int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),static_cast<int>(s.size()),nullptr,0);if(n<=0)throw std::invalid_argument("UTF-8 text");std::wstring w(static_cast<size_t>(n),L'\0');MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),static_cast<int>(s.size()),w.data(),n);return w;}
 std::string utf8(const wchar_t* w) {int n=WideCharToMultiByte(CP_UTF8,0,w,-1,nullptr,0,nullptr,nullptr);if(n<=1)return "";std::string s(static_cast<size_t>(n),0);WideCharToMultiByte(CP_UTF8,0,w,-1,s.data(),n,nullptr,nullptr);s.pop_back();return s;}
-struct shape {ComPtr<ID2D1PathGeometry> geometry;float x,y;uint32_t unit;};
+struct part {ComPtr<ID2D1PathGeometry> geometry;std::array<double,4> fill{1,1,1,1};};
+struct shape {std::vector<part> parts;float x,y;uint32_t unit;};
 struct layout {std::vector<shape> shapes;std::vector<uint32_t> starts;std::set<std::string> faces;std::string warning;};
 class collector final:public IDWriteTextRenderer {
     ULONG refs=1;ID2D1Factory1* factory;IDWriteFactory* write;layout& out;
@@ -49,7 +51,7 @@ public:
                 ComPtr<ID2D1PathGeometry> geometry;ComPtr<ID2D1GeometrySink> sink;check(factory->CreatePathGeometry(&geometry));check(geometry->Open(&sink));
                 check(run->fontFace->GetGlyphRunOutline(run->fontEmSize,run->glyphIndices+first,run->glyphAdvances?run->glyphAdvances+first:nullptr,run->glyphOffsets?run->glyphOffsets+first:nullptr,count,run->isSideways,rtl,sink.Get()));check(sink->Close());
                 auto unit=std::upper_bound(out.starts.begin(),out.starts.end(),it->second);uint32_t index=unit==out.starts.begin()?0:static_cast<uint32_t>(std::distance(out.starts.begin(),unit)-1);
-                out.shapes.push_back({geometry,x+(rtl?-advance:advance),y,index});
+                out.shapes.push_back({{{geometry,{1,1,1,1}}},x+(rtl?-advance:advance),y,index});
                 for(UINT32 i=first;i<first+count;++i)if(run->glyphAdvances)advance+=run->glyphAdvances[i];
             }
             return S_OK;
@@ -64,7 +66,7 @@ struct kn_text_renderer {
     std::mutex gate;bool warp=false;std::string adapter;int width=0,height=0;
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;ComPtr<ID2D1Factory1> factory;ComPtr<ID2D1Device> d2d;ComPtr<ID2D1DeviceContext> draw;ComPtr<IDWriteFactory> write;
     ComPtr<ID3D11Texture2D> target,readback;ComPtr<ID2D1Bitmap1> bitmap;ComPtr<ID2D1SolidColorBrush> brush;
-    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0;std::string cached_source,last_error;kn_text::json document;
+    std::map<std::string,layout> layouts;std::set<std::string> faces,warnings;size_t cached_shapes=0,cached_bytes=0;std::string cached_source,last_error;kn_text::json document;
     explicit kn_text_renderer(bool use_warp):warp(use_warp) {
         D3D_FEATURE_LEVEL level;check(D3D11CreateDevice(nullptr,warp?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
         ComPtr<IDXGIDevice> dxgi;check(device.As(&dxgi));ComPtr<IDXGIAdapter> ad;check(dxgi->GetAdapter(&ad));DXGI_ADAPTER_DESC description{};check(ad->GetDesc(&description));adapter=utf8(description.Description);
@@ -80,13 +82,34 @@ struct kn_text_renderer {
         desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;check(device->CreateTexture2D(&desc,nullptr,&readback));width=w;height=h;
     }
     layout& get_layout(const kn_text::json& clip,int w,int h) {
-        auto key=kn_text::json::array({clip.at("text"),clip.at("fontFamily"),clip.at("fontSize"),w,h}).dump();auto it=layouts.find(key);if(it!=layouts.end())return it->second;
-        if(layouts.size()>=128||cached_shapes>=16384){layouts.clear();cached_shapes=0;}
+        auto key=kn_text::json::array({clip.at("text"),clip.at("fontFamily"),clip.at("fontSize"),w,h,clip.contains("glyphs")?clip.at("glyphs"):kn_text::json(nullptr)}).dump();auto it=layouts.find(key);if(it!=layouts.end())return it->second;
+        size_t estimate=key.size();if(clip.contains("glyphs"))for(const auto& u:clip.at("glyphs").at("units"))for(const auto& p:u.at("paths"))estimate+=p.at("commands").size()*64;
+        if(estimate>32*1024*1024)throw std::invalid_argument("Kinetai layout exceeds 32 MiB");
+        if(layouts.size()>=128||cached_shapes>=16384||cached_bytes+estimate>32*1024*1024){layouts.clear();cached_shapes=0;cached_bytes=0;}
+        if(clip.contains("glyphs")) {
+            layout result;
+            for(const auto& unit:kn_text::vector_layout(clip)) {
+                shape glyph{{},static_cast<float>(unit.x),static_cast<float>(unit.y),unit.unit};result.starts.push_back(unit.unit);
+                for(const auto& path:unit.paths) {
+                    ComPtr<ID2D1PathGeometry> geometry;ComPtr<ID2D1GeometrySink> sink;check(factory->CreatePathGeometry(&geometry));check(geometry->Open(&sink));sink->SetFillMode(D2D1_FILL_MODE_WINDING);
+                    for(const auto& c:path.commands) {
+                        const auto& v=c.values;
+                        if(c.op=='M')sink->BeginFigure(D2D1::Point2F(static_cast<float>(v[0]),static_cast<float>(v[1])),D2D1_FIGURE_BEGIN_FILLED);
+                        else if(c.op=='L')sink->AddLine(D2D1::Point2F(static_cast<float>(v[0]),static_cast<float>(v[1])));
+                        else if(c.op=='C')sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(static_cast<float>(v[0]),static_cast<float>(v[1])),D2D1::Point2F(static_cast<float>(v[2]),static_cast<float>(v[3])),D2D1::Point2F(static_cast<float>(v[4]),static_cast<float>(v[5]))));
+                        else sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                    }
+                    check(sink->Close());glyph.parts.push_back({geometry,path.fill});
+                }
+                result.shapes.push_back(std::move(glyph));
+            }
+            cached_shapes+=result.shapes.size();cached_bytes+=estimate;return layouts.emplace(key,std::move(result)).first->second;
+        }
         ComPtr<IDWriteTextFormat> format;auto font=wide(clip.at("fontFamily").get<std::string>()),text=wide(clip.at("text").get<std::string>());check(write->CreateTextFormat(font.c_str(),nullptr,DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,clip.at("fontSize").get<float>(),L"ja-JP",&format));
         ComPtr<IDWriteTextLayout> text_layout;check(write->CreateTextLayout(text.c_str(),static_cast<UINT32>(text.size()),format.Get(),static_cast<float>(w),static_cast<float>(h),&text_layout));
         layout result;ComPtr<IDWriteFontCollection> fonts;check(write->GetSystemFontCollection(&fonts));UINT32 font_index=0;BOOL exists=FALSE;check(fonts->FindFamilyName(font.c_str(),&font_index,&exists));if(!exists)result.warning="Requested font missing: "+clip.at("fontFamily").get<std::string>();
         UINT32 count=0;text_layout->GetClusterMetrics(nullptr,0,&count);std::vector<DWRITE_CLUSTER_METRICS> metrics(count);check(text_layout->GetClusterMetrics(metrics.data(),count,&count));uint32_t source=0;for(auto metric:metrics){result.starts.push_back(source);source+=metric.length;}
-        ComPtr<collector> collect;collect.Attach(new collector(factory.Get(),write.Get(),result));check(text_layout->Draw(nullptr,collect.Get(),0,0));cached_shapes+=result.shapes.size();auto inserted=layouts.emplace(key,std::move(result));return inserted.first->second;
+        ComPtr<collector> collect;collect.Attach(new collector(factory.Get(),write.Get(),result));check(text_layout->Draw(nullptr,collect.Get(),0,0));cached_shapes+=result.shapes.size();cached_bytes+=estimate;auto inserted=layouts.emplace(key,std::move(result));return inserted.first->second;
     }
 };
 int32_t KN_CALL kn_text_renderer_create(int32_t warp,kn_text_renderer** out,int32_t* error) noexcept {
@@ -106,15 +129,19 @@ int32_t KN_CALL kn_text_render(kn_text_renderer* r,const uint8_t* data,uint32_t 
                 if(tick<start||tick-start>=duration)continue;
                 auto& layout=r->get_layout(clip,d.at("width").get<int>(),d.at("height").get<int>());r->faces.insert(layout.faces.begin(),layout.faces.end());if(!layout.warning.empty())r->warnings.insert(layout.warning);
                 for(const auto& glyph:layout.shapes) {
-                    auto m=kn_text::evaluate(clip,tick,glyph.unit,static_cast<uint32_t>(layout.starts.size()),&expression_budget);if(m.opacity<=0)continue;
+                    auto m=kn_text::evaluate(clip,tick,glyph.unit,static_cast<uint32_t>(layout.starts.size()),&expression_budget);if(m.opacity<=0||m.scale==0)continue;
                     r->draw->SetTransform(D2D1::Matrix3x2F::Identity());
                     const bool group_opacity=m.opacity<1;
                     if(group_opacity){auto parameters=D2D1::LayerParameters1();parameters.opacity=static_cast<float>(m.opacity);r->draw->PushLayer(parameters,nullptr);}
                     auto matrix=D2D1::Matrix3x2F::Scale(static_cast<float>(m.scale),static_cast<float>(m.scale))*D2D1::Matrix3x2F::Rotation(static_cast<float>(m.rotation))*D2D1::Matrix3x2F::Translation(glyph.x+clip.at("x").get<float>()+static_cast<float>(m.x),glyph.y+clip.at("y").get<float>()+static_cast<float>(m.y));
                     const auto color=[&](const kn_text::json& c){return D2D1::ColorF(c[0].get<float>(),c[1].get<float>(),c[2].get<float>(),c[3].get<float>());};
-                    auto shadow=clip.at("shadowColor");if(shadow[3].get<double>()>0){auto sm=matrix*D2D1::Matrix3x2F::Translation(clip.at("shadowX").get<float>(),clip.at("shadowY").get<float>())*D2D1::Matrix3x2F::Scale(sx,sy);r->draw->SetTransform(sm);r->brush->SetColor(color(shadow));r->draw->FillGeometry(glyph.geometry.Get(),r->brush.Get());}
-                    r->draw->SetTransform(matrix*D2D1::Matrix3x2F::Scale(sx,sy));float stroke=clip.at("strokeWidth").get<float>();if(stroke>0){r->brush->SetColor(color(clip.at("strokeColor")));r->draw->DrawGeometry(glyph.geometry.Get(),r->brush.Get(),stroke*2);}
-                    r->brush->SetColor(color(clip.at("color")));r->draw->FillGeometry(glyph.geometry.Get(),r->brush.Get());
+                    auto shadow=clip.at("shadowColor");if(shadow[3].get<double>()>0){auto sm=matrix*D2D1::Matrix3x2F::Translation(clip.at("shadowX").get<float>(),clip.at("shadowY").get<float>())*D2D1::Matrix3x2F::Scale(sx,sy);r->draw->SetTransform(sm);r->brush->SetColor(color(shadow));for(const auto& p:glyph.parts)r->draw->FillGeometry(p.geometry.Get(),r->brush.Get());}
+                    r->draw->SetTransform(matrix*D2D1::Matrix3x2F::Scale(sx,sy));float stroke=clip.at("strokeWidth").get<float>();
+                    for(const auto& p:glyph.parts) {
+                        if(stroke>0){r->brush->SetColor(color(clip.at("strokeColor")));r->draw->DrawGeometry(p.geometry.Get(),r->brush.Get(),stroke*2);}
+                        auto tint=color(clip.at("color"));tint.r*=static_cast<float>(p.fill[0]);tint.g*=static_cast<float>(p.fill[1]);tint.b*=static_cast<float>(p.fill[2]);tint.a*=static_cast<float>(p.fill[3]);
+                        r->brush->SetColor(tint);r->draw->FillGeometry(p.geometry.Get(),r->brush.Get());
+                    }
                     if(group_opacity)r->draw->PopLayer();
                 }
             }
@@ -126,10 +153,4 @@ int32_t KN_CALL kn_text_renderer_info(kn_text_renderer* r,kn_buffer** output) no
     if(!r||!output)return KN_INVALID_ARGUMENT;
     *output=nullptr;try{std::lock_guard<std::mutex> lock(r->gate);auto s=kn_text::json({{"scriptError",r->last_error},{"backend",r->warp?"D3D11-WARP":"D3D11-Hardware"},{"adapter",r->adapter},{"resolvedFonts",r->faces},{"fontWarnings",r->warnings},{"layoutCacheCount",r->layouts.size()},{"surfaceBytes",static_cast<int64_t>(r->width)*r->height*8}}).dump();auto b=std::make_unique<kn_buffer>();b->data=std::make_shared<const std::vector<uint8_t>>(s.begin(),s.end());*output=b.release();return KN_OK;}catch(...){return KN_OUT_OF_MEMORY;}
 }
-#else
-struct kn_text_renderer {};
-int32_t KN_CALL kn_text_renderer_create(int32_t warp,kn_text_renderer** output,int32_t* error) noexcept {if(!output||!error||(warp!=0&&warp!=1))return KN_INVALID_ARGUMENT;*output=nullptr;*error=0;return KN_GPU_UNSUPPORTED;}
-void KN_CALL kn_text_renderer_destroy(kn_text_renderer* r) noexcept {delete r;}
-int32_t KN_CALL kn_text_render(kn_text_renderer*,const uint8_t*,uint32_t,int64_t,int32_t,int32_t,uint8_t*,uint32_t,int32_t*) noexcept {return KN_GPU_UNSUPPORTED;}
-int32_t KN_CALL kn_text_renderer_info(kn_text_renderer*,kn_buffer**) noexcept {return KN_GPU_UNSUPPORTED;}
 #endif

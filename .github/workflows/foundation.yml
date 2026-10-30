@@ -20,6 +20,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Linux native text build and font dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libcairo2-dev libpango1.0-dev fonts-noto-cjk fonts-noto-color-emoji
       - name: Native memory and undefined-behavior contracts
         run: |
           cmake -S product/native -B artifacts/native-sanitized -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_C_FLAGS="-fsanitize=address,undefined" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
@@ -36,6 +40,7 @@ jobs:
         run: |
           dotnet publish product/Kachinco.Cli/Kachinco.Cli.csproj -c Release -r linux-x64 --self-contained true -o artifacts/linux-cli
           python3 test/cli/smoke.py artifacts/linux-cli/kachinco
+          python3 test/cli/kinetai-smoke.py artifacts/linux-cli/kachinco
           cp product/packaging/install-linux-user.sh product/packaging/create-linux-hub-descriptor.py artifacts/linux-cli/
           cp docs/linux-cli.md LICENSE artifacts/linux-cli/
           artifacts/linux-cli/kachinco catalog > artifacts/linux-cli/kachinco-lime-tools.json

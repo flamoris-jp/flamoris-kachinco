@@ -42,9 +42,17 @@ public static class Program
                 serve --workspace-config workspace.json --hub-endpoint wss://host/desktop/kachinco-lime --credential-file token --permission edit|readOnly
                 catalog
                 gpu check [--vaapi-device /dev/dri/renderD128]
+                kinetai new --text "Lyrics" --output text.ktproj [--duration 5 --width 1280 --height 720]
+                kinetai import-glyph bundle/manifest.json --output text.ktproj [--untimed-duration 5 --width 1280 --height 720]
+                kinetai validate text.ktproj
+                kinetai script text.ktproj --script motion.py --output animated.ktproj
+                kinetai frame text.ktproj --time 1 --output frame.png
+                kinetai export text.ktproj --output new-rgb-mask-folder
+                kinetai add movie.fkproj --composition text.ktproj --output edited.fkproj [--time 0 --sequence UUID]
                 JSON results on stdout; diagnostics/progress on stderr. Outputs must be new files.
                 """); return 0;
         }
+        if (args[0] == "kinetai") return await KineticCli.RunAsync(args[1..], token);
         if (args is ["catalog"])
         {
             using var catalog = new HeadlessSession(Path.Combine(Path.GetTempPath(), "catalog.fkproj"), outputRoot: Path.GetTempPath());
@@ -234,7 +242,7 @@ public static class Program
         public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) =>
             writer.WriteStringValue(value.ToString(CultureInfo.InvariantCulture));
     }
-    private sealed class Options
+    internal sealed class Options
     {
         private readonly Dictionary<string, string> values = new(StringComparer.Ordinal);
         public string? Get(string key) => values.GetValueOrDefault(key);
