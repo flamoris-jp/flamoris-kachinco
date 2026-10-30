@@ -1,5 +1,7 @@
 # Kachinco production slice — Windows acceptance
 
+> The MCP startup/connection steps below are historical production-slice acceptance. Use [the current shared connection guide](../docs/shared-mcp-connection.md) and [startup policy](../docs/mcp-startup.md): connect before opening a file, preserve the connection through New/Open, refresh guards, and keep file/content permissions separate. Existing dated results do not certify the new physical test matrix.
+
 ## Start
 
 1. Extract the portable ZIP into a writable folder; launch `Kachinco.App.exe`.

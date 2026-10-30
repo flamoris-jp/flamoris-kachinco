@@ -1,5 +1,7 @@
 # Live editor MCP adapter
 
+> The document-replacement grant/connection lifecycle below describes the original implementation. Current Core/Wpf 1.4.0 uses [application-lifetime startup](../mcp-startup.md): document changes preserve MCP, rotate target guards and cancel old document-scoped results/resources. Explicit Stop, permission changes and runtime loss/shutdown still revoke. Original test evidence remains historical.
+
 Historical implementation decision. [ADR 0005](0005-mcp-core-migration.md)
 supersedes transport, capability, protocol, framing and lease details below.
 The application file-access and shared-authority policy remains in force.

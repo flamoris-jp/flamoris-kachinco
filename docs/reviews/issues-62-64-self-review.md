@@ -1,5 +1,7 @@
 # Issues #62–#64 — Still images and reusable AI-authored effects
 
+> The document-replacement grant/connection lifecycle below describes the original implementation. Current Core/Wpf 1.4.0 uses [application-lifetime startup](../mcp-startup.md): document changes preserve MCP, rotate target guards and cancel old document-scoped results/resources. Explicit Stop, permission changes and runtime loss/shutdown still revoke. Original test evidence remains historical.
+
 Date: 2026-10-05. Implementation-author self-review; this is not independent
 human review or physical Windows/DPI acceptance. Exact-head CI and merge evidence
 are retained on [PR #65](https://github.com/flamoris-jp/flamoris-kachinco/pull/65)

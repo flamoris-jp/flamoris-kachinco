@@ -1,5 +1,7 @@
 # ADR 0010: one native editing session and project codec
 
+> The document-replacement grant/connection lifecycle below describes the original implementation. Current Core/Wpf 1.4.0 uses [application-lifetime startup](../mcp-startup.md): document changes preserve MCP, rotate target guards and cancel old document-scoped results/resources. Explicit Stop, permission changes and runtime loss/shutdown still revoke. Original test evidence remains historical.
+
 Accepted for #35. The #34 physical A/V gate is deferred until migration completion
 by owner direction on 2026-09-30 JST; no physical result is inferred from CI.
 
