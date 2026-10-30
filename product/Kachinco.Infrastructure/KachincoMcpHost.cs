@@ -11,14 +11,16 @@ public sealed class KachincoMcpHost : IMcpHost, IDisposable
     private readonly Func<Action, CancellationToken, Task> dispatch;
     private readonly string runtimeId = Guid.NewGuid().ToString("N");
     private bool shuttingDown;
+    private readonly bool applicationLifetime;
 
     public KachincoMcpHost(EditorSession session, Func<bool> humanBusy,
-        Func<Action, CancellationToken, Task> dispatch)
+        Func<Action, CancellationToken, Task> dispatch, bool applicationLifetime = false)
     {
-        this.session = session;
+        this.session = session; this.applicationLifetime = applicationLifetime;
         this.humanBusy = humanBusy;
         this.dispatch = dispatch;
-        session.DocumentReplacing += Invalidate;
+        if (!applicationLifetime) session.DocumentReplacing += Invalidate;
+
     }
 
     public HostSnapshot Snapshot
@@ -27,7 +29,7 @@ public sealed class KachincoMcpHost : IMcpHost, IDisposable
         {
             var current = session.GetProject();
             return new("flamoris.kachinco", "0.2.0", runtimeId, session.DocumentToken,
-                current.Revision, !shuttingDown && current.Project is not null, humanBusy());
+                current.Revision, !shuttingDown && (applicationLifetime || current.Project is not null), humanBusy()) { HasDocument = current.Project is not null };
         }
     }
 
@@ -53,5 +55,6 @@ public sealed class KachincoMcpHost : IMcpHost, IDisposable
     {
         Shutdown();
         session.DocumentReplacing -= Invalidate;
+
     }
 }
