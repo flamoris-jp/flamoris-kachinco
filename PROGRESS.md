@@ -1,5 +1,21 @@
 # Delivery progress
 
+## Glyph and Linux Kinetai — 2026-10-30 (implementation candidate)
+
+- Glyph schema-2 local import embeds normalized closed numeric paths, fills,
+  occurrence/variant/stroke IDs and source provenance in native text document v2.
+  Existing text v1, host schema 8, native history and command/handoff remain.
+- Windows companion import/detach and native D3D11 drawing; Linux headless
+  Pango/Cairo CPU text/Glyph drawing uses the same motion evaluator and alpha path.
+- CLI new/import-glyph/validate/script/frame/export/add supports standalone work
+  and one-transaction insertion into the ordinary Kachinco timeline.
+- Strict local C++ syntax checks pass; Windows/Linux full CI and isolated font
+  cache cleanup verification are in progress in PR #123. Physical GPU/UI,
+  production-server rollout, production fonts and codec performance remain
+  separate acceptance work. No deployment or Linux GUI is claimed.
+- [Guide and limits](docs/kinetai-linux-and-glyph.md),
+  [ADR 0030](docs/decisions/0030-glyph-and-linux-kinetai.md).
+
 ## Next-MV usability — 2026-10-25 (JST)
 
 - #113: embedded KineticText timeline clips show authoring text without probing the companion draft with FFmpeg. This is a text summary, not a rendered animation thumbnail. Decode errors remain visible for ordinary media.

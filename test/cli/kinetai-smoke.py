@@ -43,7 +43,7 @@ def main():
         rgba = subprocess.check_output(["ffmpeg", "-v", "error", "-i", str(root / "glyph.png"), "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"])
         assert any(rgba[3::4]), "Outlined Japanese Glyph frame is empty"
         project = root / "movie.fkproj"
-        run("project", "new", "--width", 320, "--height", 180, "--duration", "10", "--output", project)
+        run("project", "new", "--duration", "10", "--output", project)
         edited = root / "edited.fkproj"
         run("kinetai", "add", project, "--composition", animated, "--output", edited)
         run("project", "validate", edited)

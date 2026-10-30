@@ -18,7 +18,9 @@ surrogate pairs remain attached. Native D2D/D3D11 draws premultiplied BGRA; nati
 conversion supplies straight RGBA to the existing compositor and associated RGB
 plus grayscale opacity to paired exports. Grayscale text antialiasing is used.
 Hardware creation never silently selects WARP; WARP is explicit test-only evidence.
-Linux rejects native text rendering with an unsupported-backend diagnostic.
+This first slice rejected native text rendering on Linux. That boundary is
+superseded by [ADR 0030](0030-glyph-and-linux-kinetai.md): Linux now has native
+Pango/Cairo CPU text and Glyph drawing, with the same motion evaluator.
 
 Conditional project schema v8 adds `textComposition` and `maskSourcePath` to
 assets and media kinds KineticText / MaskedVideo. Plain v1-v7 projects continue

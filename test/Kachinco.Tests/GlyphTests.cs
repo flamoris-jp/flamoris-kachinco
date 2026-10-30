@@ -33,7 +33,7 @@ public sealed class GlyphTests
         long duration = KineticComposition.Duration(document);
         var asset = new MediaAsset(Guid.NewGuid(), "Glyph", "absent.ktproj", MediaKind.KineticText, duration) { TextComposition = document.ToJsonString() };
         var clip = new Clip(Guid.NewGuid(), asset.Id, 0, 0, duration, true, ClipAppearance.Default, AudioProperties.Default);
-        return new(Guid.NewGuid(), "Glyph", [asset], [new(Guid.NewGuid(), "Main", new(320, 180, new(30, 1)), duration,
+        return new(Guid.NewGuid(), "Glyph", [asset], [new(Guid.NewGuid(), "Main", SequenceSettings.Landscape, duration,
             [new(Guid.NewGuid(), "Glyph", TrackKind.Video, true, [clip], [])])]);
     }
     [TestMethod]
@@ -64,7 +64,8 @@ public sealed class GlyphTests
         Assert.IsTrue(JsonNode.DeepEquals(document, text.Request(new() { ["action"] = "undo", ["expectedRevision"] = 2 })["document"]));
         Assert.IsTrue(JsonNode.DeepEquals(changed, text.Request(new() { ["action"] = "redo", ["expectedRevision"] = 3 })["document"]));
         var project = ProjectWith(document); string encoded = ProjectJson.Serialize(project).Value!;
-        using var host = new EditorSession(); Assert.IsTrue(host.ReplaceProject(project).Success);
+        using var host = new EditorSession(); var loaded = host.ReplaceProject(project);
+        Assert.IsTrue(loaded.Success, string.Join("; ", loaded.Diagnostics.Select(d => d.Code + ": " + d.Message)));
         Assert.IsTrue(host.Execute(new([new SetTextComposition(project.Assets[0].Id, changed.ToJsonString())], host.GetProject().Revision)).Success);
         Assert.IsTrue(host.Undo().Success); Assert.AreEqual(document.ToJsonString(), host.GetProject().Project!.Assets[0].TextComposition);
         Assert.IsTrue(host.Redo().Success); Assert.AreEqual(changed.ToJsonString(), host.GetProject().Project!.Assets[0].TextComposition);
@@ -142,8 +143,10 @@ public sealed class GlyphTests
     {
         if (!OperatingSystem.IsLinux()) return;
         using var fixture = new Fixture(); var project = ProjectWith(fixture.Import());
-        using var evaluator = TimelineEvaluator.Create(project, project.Sequences[0].Id).Value!;
-        var evaluated = evaluator.Evaluate(TimelineTime.SecondsToTicks(1.5m)).Value!;
+        var evaluation = TimelineEvaluator.Create(project, project.Sequences[0].Id);
+        Assert.IsTrue(evaluation.Success, string.Join("; ", evaluation.Diagnostics.Select(d => d.Code + ": " + d.Message)));
+        using var evaluator = evaluation.Value!;
+        var evaluated = evaluator.Evaluate(TimelineTime.SecondsToTicks(1.5m)).Value! with { Settings = new(320, 180, new(30, 1)) };
         using var decoder = new FfmpegMediaDecoder();
         var rendered = await new SharedFrameRenderer(decoder).RenderAsync(project, evaluated, 45, default);
         Assert.IsTrue(rendered.Success, string.Join("; ", rendered.Diagnostics.Select(d => d.Message)));
