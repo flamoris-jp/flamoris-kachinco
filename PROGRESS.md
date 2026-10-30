@@ -9,10 +9,20 @@
   Pango/Cairo CPU text/Glyph drawing uses the same motion evaluator and alpha path.
 - CLI new/import-glyph/validate/script/frame/export/add supports standalone work
   and one-transaction insertion into the ordinary Kachinco timeline.
-- Strict local C++ syntax checks pass; Windows/Linux full CI and isolated font
-  cache cleanup verification are in progress in PR #123. Physical GPU/UI,
-  production-server rollout, production fonts and codec performance remain
-  separate acceptance work. No deployment or Linux GUI is claimed.
+- Code commit `5013a4b8e16a7683c67efd924007e66d74a097ef` passed
+  [Product CI](https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/41061075531):
+  Linux 405 managed tests passed / one Windows-only skip, native ASan/UBSan 7/7,
+  real Kinetai CLI text/Glyph/script/PNG/RGB-mask/native-timeline smoke; Windows
+  build, Glyph WARP/import/history tests, existing raster/worker/MCP checks,
+  portable package integrity and both executable startups passed.
+- [Linux Updater candidate](https://github.com/flamoris-jp/flamoris-kachinco/actions/runs/41061083219)
+  also passed, including Docker/Updater CPU install/start/export and Hub namespace
+  compatibility. Branch CI does not publish a release or deploy a server.
+- A downloaded accepted Linux CLI binary also produced a real 9-second,
+  1920x1080/30fps H.264/AAC timeline sample with animated outlined Japanese Glyphs
+  over a still-image background. No system font was used for those Glyphs.
+- Physical GPU/UI, production-server rollout, production fonts and codec
+  performance remain separate acceptance work. No deployment or Linux GUI is claimed.
 - [Guide and limits](docs/kinetai-linux-and-glyph.md),
   [ADR 0030](docs/decisions/0030-glyph-and-linux-kinetai.md).
 
