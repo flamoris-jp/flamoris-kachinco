@@ -1,5 +1,5 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
-RUN apt-get update && apt-get install -y --no-install-recommends cmake g++ make && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends cmake g++ make pkg-config libcairo2-dev libpango1.0-dev fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
 RUN dotnet publish product/Kachinco.Cli/Kachinco.Cli.csproj -c Release -r linux-x64 --self-contained true -m:1 -o /publish

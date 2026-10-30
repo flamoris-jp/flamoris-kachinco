@@ -49,6 +49,7 @@ public sealed partial class EditorWindow : Window
         void Command(string label, Action action) { var b = new Button { Content = label, Margin = new(3), Padding = new(8, 5, 8, 5) }; b.Click += (_, _) => Guard(action); bar.Children.Add(b); }
         Command("新規", () => { if (handoff is null && ConfirmDiscard()) Load(KineticComposition.New(), null); });
         Command("開く", Open); Command("保存", Save); Command("歌詞読込 SRT / PONPON", Import);
+        Command("Glyph読込", ImportGlyph); Command("選択文字のGlyphを解除", DetachGlyph);
         Command("Undo", () => History("undo")); Command("Redo", () => History("redo"));
         Command("＋文字", Add); Command("削除", Delete);
         Command("▶ / ❚❚", TogglePlay); Command("先頭", () => { Stop(); scrub.Value = 0; });
@@ -188,6 +189,16 @@ public sealed partial class EditorWindow : Window
     private void Save() { if (fieldsDirty) CommitFields(); if (filePath is null) { var dialog = new SaveFileDialog { Filter = "KineticTypo|*.ktproj", DefaultExt = ".ktproj" }; if (dialog.ShowDialog(this) != true) return; filePath = dialog.FileName; } KineticComposition.Save(filePath, document); saved = document.ToJsonString(); status.Text = "保存しました。"; }
     private bool ConfirmDiscard() { if (document is null || document.ToJsonString() == saved && !fieldsDirty) return true; var answer = MessageBox.Show(this, "変更を保存しますか？", "KineticTypo", MessageBoxButton.YesNoCancel); if (answer == MessageBoxResult.Cancel) return false; if (answer == MessageBoxResult.Yes) { try { Save(); } catch (Exception ex) { status.Text = ex.Message; return false; } return document.ToJsonString() == saved; } return true; }
     private void Import() { var picker = new OpenFileDialog { Filter = "歌詞|*.srt;*.json" }; if (picker.ShowDialog(this) != true) return; if (new FileInfo(picker.FileName).Length > 4 * 1024 * 1024) throw new InvalidDataException("Lyrics too large."); Commit(KineticComposition.ImportLyrics(File.ReadAllText(picker.FileName), Path.GetExtension(picker.FileName).Equals(".srt", StringComparison.OrdinalIgnoreCase), document)); }
+    private void ImportGlyph()
+    {
+        var picker = new OpenFileDialog { Title = "Glyphのmanifest.jsonを選択（時刻なしは現在の全体の長さで配置）", Filter = "FLAMORIS Glyph manifest|manifest.json" };
+        if (picker.ShowDialog(this) == true) Commit(GlyphBundleImporter.Read(picker.FileName, document, KineticComposition.Duration(document)));
+    }
+    private void DetachGlyph()
+    {
+        if (Selected is null || !Selected.AsObject().ContainsKey("glyphs")) return;
+        var next = (JsonObject)document.DeepClone(); next["clips"]![clips.SelectedIndex]!.AsObject().Remove("glyphs"); Commit(next);
+    }
     private void TogglePlay() { if (clock.IsRunning) Stop(); else { if (scrub.Value >= scrub.Maximum) scrub.Value = 0; playStart = Tick; clock.Restart(); timer.Start(); } }
     private void Stop() { clock.Stop(); timer.Stop(); }
     private async Task ResetRendererAsync() { await rendering.WaitAsync(); try { renderer?.Dispose(); renderer = null; } finally { rendering.Release(); } Render(); }

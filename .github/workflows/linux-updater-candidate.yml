@@ -5,7 +5,7 @@ on:
     paths: ['release/**', '.github/workflows/linux-updater-candidate.yml']
   workflow_dispatch:
   pull_request:
-    paths: ['product/Kachinco.Cli/**', 'product/packaging/**', 'release/**', 'test/cli/**', '.dockerignore', '.github/workflows/linux-updater-candidate.yml']
+    paths: ['product/Kachinco.Cli/**', 'product/packaging/**', 'release/**', 'test/cli/**', '.gitattributes', '.dockerignore', '.github/workflows/linux-updater-candidate.yml']
 permissions:
   contents: read
 jobs:

@@ -11,7 +11,7 @@ public sealed class NativeKineticDocument : IDisposable
     private readonly TextDocumentHandle handle;
     public NativeKineticDocument() {
         using var runtime = NativeRuntime.Create();
-        if ((runtime.GetInfo().Capabilities & 393216) != 393216) throw new InvalidOperationException("Matching KineticTypo native runtime required.");
+        if ((runtime.GetInfo().Capabilities & 917504) != 917504) throw new InvalidOperationException("Matching KineticTypo/Glyph native runtime required.");
         NativeMediaProcess.Check(TextMethods.Create(out handle));
     }
     public JsonObject Request(JsonObject request)
@@ -28,7 +28,7 @@ public sealed class NativeKineticDocument : IDisposable
 
 public sealed record KineticPixels(byte[] BgraPremultiplied, byte[] Rgba, byte[] Rgb, byte[] Mask);
 
-/// <summary>Hardware DirectWrite/Direct2D/D3D11 text, never WPF glyph rasterization.
+/// <summary>Native D3D11 text on Windows, Pango/Cairo CPU text on Linux.
 /// Requests are serialized; the native device and bounded layout cache are reused.</summary>
 public sealed class NativeKineticRenderer : IDisposable
 {
@@ -40,7 +40,7 @@ public sealed class NativeKineticRenderer : IDisposable
     {
         warp = forceWarp;
         int status = TextMethods.RendererCreate(forceWarp ? 1 : 0, out handle, out int error);
-        if (status != 0) { handle.Dispose(); throw new InvalidOperationException($"Native text GPU unavailable ({status}, HRESULT 0x{error:X8})."); }
+        if (status != 0) { handle.Dispose(); throw new InvalidOperationException($"Native text renderer unavailable ({status}, backend error 0x{error:X8})."); }
     }
     public KineticPixels Render(string document, long tick, int width, int height)
     {
@@ -58,7 +58,7 @@ public sealed class NativeKineticRenderer : IDisposable
                 ++deviceResets;
                 status = TextMethods.Render(handle, data, checked((uint)data.Length), tick, width, height, bgra, (uint)bgra.Length, out error);
             }
-            if (status != 0) throw new InvalidOperationException($"{Info["scriptError"]} Native text render failed ({status}, HRESULT 0x{error:X8}). Reset the text GPU device to retry.");
+            if (status != 0) throw new InvalidOperationException($"{Info["scriptError"]} Native text render failed ({status}, backend error 0x{error:X8}).");
             byte[] rgba = new byte[count * 4], rgb = new byte[count * 3], mask = new byte[count * 3];
             NativeMediaProcess.Check(TextMethods.Convert(bgra, rgba, rgb, mask, (uint)count));
             return new(bgra, rgba, rgb, mask);

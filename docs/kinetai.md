@@ -1,5 +1,9 @@
 # KineticTypo / キネタイ
 
+Glyph bundle import and Linux headless drawing are documented in
+[Glyph / Linux Kinetai](kinetai-linux-and-glyph.md). Existing Windows text remains
+GPU rendered; Linux uses native Pango/Cairo CPU drawing and the shared motion IR.
+
 Build the normal complete Windows portable package:
 
 ```powershell
@@ -139,8 +143,9 @@ not silently switch to software. WARP is explicit native test evidence. Device
 loss attempts one same-tick hardware reinitialization and reports reset count;
 ordinary Kachinco CPU composition recovery is unaffected. Internal surfaces are
 premultiplied BGRA, existing composition receives straight RGBA. Preview includes
-CPU readback; this is not a zero-copy claim. Linux still supports ordinary projects
-and masked video; rendering embedded KineticText reports unsupported backend.
+CPU readback; this is not a zero-copy claim. Linux now renders embedded KineticText
+and Glyph outlines using native Pango/Cairo CPU drawing. See
+[Linux/Glyph commands and boundaries](kinetai-linux-and-glyph.md).
 
 Limits: 16 MiB/document, 10000 clips, 128 simultaneously active clips, 4096 UTF-8
 bytes/text, 32 v1 primitives/clip (v2 limits above), 4096px canvas, one-day duration. Layout caches are

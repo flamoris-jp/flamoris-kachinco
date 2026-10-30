@@ -2,7 +2,7 @@ name: Product
 on:
   push:
     branches-ignore: [main]
-    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', 'staging/windows-production.md', 'docs/windows-packaging.md', '.github/workflows/windows-package.yml', '.github/workflows/foundation.yml']
+    paths: ['product/**', 'test/**', '.gitattributes', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', 'staging/windows-production.md', 'docs/windows-packaging.md', '.github/workflows/windows-package.yml', '.github/workflows/foundation.yml']
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -20,6 +20,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Linux native text build and font dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libcairo2-dev libpango1.0-dev fonts-noto-cjk fonts-noto-color-emoji
       - name: Native memory and undefined-behavior contracts
         run: |
           cmake -S product/native -B artifacts/native-sanitized -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_C_FLAGS="-fsanitize=address,undefined" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
@@ -36,6 +40,7 @@ jobs:
         run: |
           dotnet publish product/Kachinco.Cli/Kachinco.Cli.csproj -c Release -r linux-x64 --self-contained true -o artifacts/linux-cli
           python3 test/cli/smoke.py artifacts/linux-cli/kachinco
+          python3 test/cli/kinetai-smoke.py artifacts/linux-cli/kachinco
           cp product/packaging/install-linux-user.sh product/packaging/create-linux-hub-descriptor.py artifacts/linux-cli/
           cp docs/linux-cli.md LICENSE artifacts/linux-cli/
           artifacts/linux-cli/kachinco catalog > artifacts/linux-cli/kachinco-lime-tools.json
@@ -96,6 +101,8 @@ jobs:
         run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~KineticTests|FullyQualifiedName~NativeRuntimeTests|FullyQualifiedName~NativeMediaTests|FullyQualifiedName~NativeRenderingTests|FullyQualifiedName~NativeTimelineTests|FullyQualifiedName~NativeEditingTests|FullyQualifiedName~GpuDecodeTests|FullyQualifiedName~PreviewBackendTests|FullyQualifiedName~NativeGpuTests|FullyQualifiedName~ClipSpeedTests|FullyQualifiedName~ClipDownloadTests|FullyQualifiedName~GpuExportTests|FullyQualifiedName~RealExportTests|FullyQualifiedName~Mp4TitleReplacementTests|FullyQualifiedName~CreationWorkflowTests|FullyQualifiedName~TitleImageTests|FullyQualifiedName~StillImageTests"
       - name: Windows worker and raster acceptance
         run: dotnet run --project test/Kachinco.WindowsSmoke/Kachinco.WindowsSmoke.csproj -c Release --no-build
+      - name: Windows Glyph import, persistence and WARP drawing
+        run: dotnet test test/Kachinco.Tests/Kachinco.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~GlyphTests"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

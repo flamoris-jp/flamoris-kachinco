@@ -1,5 +1,8 @@
 # Linux CLI and LIME resident editor (Issue #100)
 
+For native animated text, Glyph import, standalone `.ktproj` rendering and
+RGB/mask export, see [Linux Kinetai / Glyph](kinetai-linux-and-glyph.md).
+
 The Linux CLI uses Kachinco's shared native editing/evaluation/composition and
 FFmpeg export engine. It adds a Pango/Cairo caption adapter and Linux VAAPI H.264
 encoding. Native composition, captions, decoding and audio remain CPU work.
@@ -131,10 +134,10 @@ catalog and configuration are available to Updater.
 
 ## Developer build on Ubuntu x64
 
-Install .NET 10 SDK, CMake >=3.20 and a C++17 compiler. Runtime prerequisites:
+Install .NET 10 SDK, CMake >=3.20 and a C++17 compiler. Build/runtime prerequisites:
 
 ```bash
-sudo apt-get install build-essential cmake ffmpeg libpango-1.0-0 libpangocairo-1.0-0 libcairo2 fonts-noto-cjk python3
+sudo apt-get install build-essential cmake pkg-config libcairo2-dev libpango1.0-dev ffmpeg libpango-1.0-0 libpangocairo-1.0-0 libcairo2 fonts-noto-cjk python3
 gh auth status
 gh repo clone flamoris-jp/flamoris-kachinco
 cd flamoris-kachinco
