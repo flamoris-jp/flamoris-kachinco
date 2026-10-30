@@ -44,7 +44,8 @@ public sealed class GlyphTests
         Assert.AreEqual(3, document["clips"]!.AsArray().Count);
         Assert.AreEqual(TimelineTime.TicksPerSecond, KineticComposition.Tick(document["clips"]![0]!, "startTicks"));
         Assert.AreEqual(3, document["clips"]![0]!["glyphs"]!["units"]!.AsArray().Count);
-        var first = document["clips"]![0]!["glyphs"]!["units"]![0]!, repeated = document["clips"]![1]!["glyphs"]!["units"]![0]!;
+        var first = document["clips"]![0]!["glyphs"]!["units"]![0]!;
+        var repeated = document["clips"]![1]!["glyphs"]!["units"]![0]!;
         Assert.AreEqual("赤", first["character"]!.GetValue<string>());
         Assert.IsFalse(JsonNode.DeepEquals(first["paths"], repeated["paths"]));
         Assert.IsTrue(first["paths"]![0]!["commands"]![0]![0]!.GetValue<string>() == "M");
@@ -63,6 +64,10 @@ public sealed class GlyphTests
         Assert.IsTrue(JsonNode.DeepEquals(document, text.Request(new() { ["action"] = "undo", ["expectedRevision"] = 2 })["document"]));
         Assert.IsTrue(JsonNode.DeepEquals(changed, text.Request(new() { ["action"] = "redo", ["expectedRevision"] = 3 })["document"]));
         var project = ProjectWith(document); string encoded = ProjectJson.Serialize(project).Value!;
+        using var host = new EditorSession(); Assert.IsTrue(host.ReplaceProject(project).Success);
+        Assert.IsTrue(host.Execute(new([new SetTextComposition(project.Assets[0].Id, changed.ToJsonString())], host.GetProject().Revision)).Success);
+        Assert.IsTrue(host.Undo().Success); Assert.AreEqual(document.ToJsonString(), host.GetProject().Project!.Assets[0].TextComposition);
+        Assert.IsTrue(host.Redo().Success); Assert.AreEqual(changed.ToJsonString(), host.GetProject().Project!.Assets[0].TextComposition);
         var restored = ProjectJson.Deserialize(encoded); Assert.IsTrue(restored.Success);
         Assert.IsTrue(JsonNode.DeepEquals(document, KineticComposition.Parse(restored.Value!.Assets[0].TextComposition!)));
         using var renderer = new NativeKineticRenderer(OperatingSystem.IsWindows());
@@ -110,6 +115,16 @@ public sealed class GlyphTests
         var document = GlyphBundleImporter.Read(fixture.Manifest, KineticComposition.New(), TimelineTime.TicksPerSecond);
         document["clips"]![0]!["text"] = "別の文字";
         Assert.ThrowsExactly<InvalidDataException>(() => KineticComposition.Validate(document));
+    }
+    [TestMethod]
+    public void SymlinkAssetsCannotBeImportedFromOutsideTheBundle()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var fixture = new Fixture(); var data = fixture.Data;
+        string path = Path.Combine(fixture.Root, data["glyphs"]![0]!["asset"]!.GetValue<string>());
+        string outside = Path.Combine(Path.GetTempPath(), "outside-glyph-" + Guid.NewGuid().ToString("N") + ".svg");
+        try { File.Move(path, outside); File.CreateSymbolicLink(path, outside); Assert.ThrowsExactly<InvalidDataException>(() => fixture.Import()); }
+        finally { File.Delete(outside); }
     }
     [TestMethod]
     public void NumericSvgCommandsNormalizeForBothNativeBackends()

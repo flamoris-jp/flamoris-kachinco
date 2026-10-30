@@ -42,7 +42,8 @@ void validate_vectors(const json& clip,size_t& budget) {
     if(visible.size()!=units.size())throw std::invalid_argument("Glyph text changed; regenerate or detach Glyph geometry");
     std::set<std::string> ids;size_t index=0;
     for(const auto& u:units) {
-        fields(u,{"occurrenceId","character","line","column","advance","paths"});label(u.at("occurrenceId"),128);label(u.at("character"),4);
+        fields(u,{"occurrenceId","variantId","character","line","column","advance","paths"});label(u.at("occurrenceId"),128);label(u.at("character"),4);
+        auto variant=u.at("variantId").get<std::string>();if(variant.size()!=25||variant[0]!='g'||variant.substr(1).find_first_not_of("0123456789abcdef")!=std::string::npos)throw std::invalid_argument("Glyph variant identity");
         if(!ids.insert(u.at("occurrenceId").get<std::string>()).second)throw std::invalid_argument("Duplicate Glyph occurrence");
         auto chars=codepoints(u.at("character").get<std::string>());auto expected=visible[index++];
         if(chars.size()!=1||chars[0]!=std::get<2>(expected)||kn_editor::integer(u.at("line"))!=std::get<0>(expected)||kn_editor::integer(u.at("column"))!=std::get<1>(expected))throw std::invalid_argument("Glyph occurrence/text mismatch");

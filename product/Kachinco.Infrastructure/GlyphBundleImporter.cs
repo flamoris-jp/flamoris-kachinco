@@ -96,7 +96,7 @@ public static class GlyphBundleImporter
                         item["character"]!.GetValue<string>() != rune.ToString() || item["line"]!.GetValue<int>() != line || item["column"]!.GetValue<int>() != column ||
                         !glyphs.TryGetValue(variant, out var glyph) || glyph.Character != rune.ToString()) throw new InvalidDataException("Glyph occurrence/text mapping mismatch.");
                     used.Add(variant);
-                    units.Add(new JsonObject { ["occurrenceId"] = item["occurrence_id"]!.DeepClone(), ["character"] = rune.ToString(), ["line"] = line,
+                    units.Add(new JsonObject { ["occurrenceId"] = item["occurrence_id"]!.DeepClone(), ["variantId"] = variant, ["character"] = rune.ToString(), ["line"] = line,
                         ["column"] = column, ["advance"] = glyph.Advance, ["paths"] = glyph.Paths.DeepClone() });
                 }
                 if (rune.Value == 10) { ++line; column = 1; } else ++column;

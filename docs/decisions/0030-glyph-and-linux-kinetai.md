@@ -18,7 +18,7 @@ Status: implementation candidate; accepted owner requirement 2026-10-30.
 - The new native capability 524288 identifies Glyph document support. Never load
   vectors into an older matching-ABI runtime without checking this capability.
 - `glyphs` has version, source (song, style, sha256, license), and units. Units
-  carry occurrenceId, character, line, column, advance and paths; each path has
+  carry occurrenceId, variantId, character, line, column, advance and paths; each path has
   id, RGBA fill, commands (absolute M/L/C/Z). Import converts quadratic/H/V/relative
   SVG into this normalized typed geometry. Native revalidates all persisted data.
 - Preserve cue timing exactly using canonical 35,280,000 ticks/second. Untimed
