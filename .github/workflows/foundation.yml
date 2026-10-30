@@ -2,7 +2,7 @@ name: Product
 on:
   push:
     branches-ignore: [main]
-    paths: ['product/**', 'test/**', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', 'staging/windows-production.md', 'docs/windows-packaging.md', '.github/workflows/windows-package.yml', '.github/workflows/foundation.yml']
+    paths: ['product/**', 'test/**', '.gitattributes', 'Directory.Build.props', 'global.json', 'Kachinco.slnx', 'NuGet.config', 'appsettings.json', 'staging/windows-production.md', 'docs/windows-packaging.md', '.github/workflows/windows-package.yml', '.github/workflows/foundation.yml']
   workflow_dispatch:
   workflow_call:
 permissions:

@@ -1,0 +1,4 @@
+# These exported SVGs are bound to exact SHA-256 bytes in their manifest.
+# Windows checkout must not rewrite them to CRLF.
+/test/Kachinco.Tests/Fixtures/glyph-demo/*.json text eol=lf
+/test/Kachinco.Tests/Fixtures/glyph-demo/glyphs/*.svg text eol=lf
