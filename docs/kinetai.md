@@ -119,7 +119,10 @@ importing its validated manifest again. Generic single-file relink is rejected.
 
 ## MCP and rendering status
 
-Each editor uses the shared user-enabled MCP connection UI. The companion exposes
+Each editor uses the shared MCP connection UI. New preferences auto-connect locally
+read-only at startup, before a file is opened; saved OFF remains OFF. Composition
+replacement keeps the connection and rotates its target token. See
+[startup lifetime](mcp-startup.md). The companion exposes
 `get_composition`, `compile_script`, `edit_composition`, `undo`, `redo`, `preview_frame`.
 `compile_script` is a bounded ReadOnly query accepting `{source: "..."}` and
 returning `{program, source}` without editing. Copy both into explicit target

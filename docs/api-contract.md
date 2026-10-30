@@ -151,7 +151,7 @@ for Undo. Paths refer to the machine running Kachinco, not the MCP client's host
 
 ## Scoped live access (Issues #13 / #19)
 
-`Flamoris.Mcp.Core` 1.3.1 supplies official SDK 2.2.0 protocol handling, a
+`Flamoris.Mcp.Core` 1.4.0 supplies official SDK 2.2.0 protocol handling, a
 same-user/local-only named pipe, transient 256-bit capability, Read only / Edit
 permissions, request limits, cancellation, diagnostics and status projection.
 `KachincoMcpHost` marshals onto the WPF dispatcher. There is one EditorSession,
@@ -200,7 +200,7 @@ Clients must check domain `success` as well as MCP `isError`: Core's `isError`
 represents boundary failures, whose structured/text content contains
 `{ "error": { "code": "stale_revision" } }` (or other Core error codes).
 No application-local JSON-RPC error mapping or protocol negotiation remains.
-Core 1.2.0 uses official C# SDK 2.2.0's modern 2026-07-28 and legacy initialization.
+Core 1.4.0 uses official C# SDK 2.2.0's modern 2026-07-28 and legacy initialization.
 
 ### Permission and lifetime
 
@@ -217,18 +217,20 @@ provides transient client-launch JSON (`command`, `args`, `env`). Pass the capab
 only in `FLAMORIS_MCP_CAPABILITY`, never argv, persistent client settings, Project
 or logs. The bridge removes its inherited environment variable at startup.
 
-Stop, permission rotation, valid-load replacement admission, New, document loss
-and shutdown revoke before further access and close active/waiting connections.
-Session document-instance identity changes even on same-ID replacement. Human
-Redo cannot resurrect old access after Undo to null. Failed/cancelled file loading
-preserves access; the existing UI revokes before attempting valid-load replacement.
+Stop, permission rotation and shutdown revoke the application grant and close
+active/waiting connections. New/Open, replacement and Undo-to-no-document keep
+the connection and update document-instance identity, even on same-ID reopen.
+Old guards, pending results and document-scoped uploads/downloads cannot follow a
+replacement or be resurrected by Redo. Failed/cancelled loading preserves the target.
+`mcp.context`/discovery work without a project; document tools return `no_document`.
+See [startup lifetime](mcp-startup.md).
 
 Every mutation enters `RequestContext.CommitAsync` once and uses the ordinary
 session operation. Core checks guard/permission/busy/cancellation immediately before
 that callback; EditorSession checks cancellation before history changes. Prepared
 work cannot commit after a cancelled/expired/revoked request. A commit itself may
-remove the document and revoke its own connection: a lost/cancelled response then
-requires reauthorization and inspection, not automatic retry. No hidden rebase or
+remove the document while keeping its application connection: a lost/cancelled
+response requires fresh context and inspection, not automatic retry. No hidden rebase or
 request deduplication exists.
 
 Healthy idle has no deadline. Started-frame deadline: 2 minutes; request: 15 seconds;
@@ -295,7 +297,8 @@ strings), width/height, mimeType, encodedBytes, JPEG quality or null for PNG. By
 are never embedded in the metadata. It captures fully composed project content;
 no selection/Clapper overlay, UI screenshot, file export or playback movement.
 Concurrent capture returns busy. Mid-render edit or Save As returns stale_revision;
-document replacement revokes the grant. Missing media returns MEDIA_MISSING;
+document replacement invalidates the captured target and rejects the old result
+without revoking the application grant. Missing media returns MEDIA_MISSING;
 ordinary renderer diagnostics, authorization, cancellation and timeout stay intact.
 See [ADR 0017](decisions/0017-mcp-preview-frame.md) and
 [Windows/Hub acceptance](../staging/windows-issue72.md).
