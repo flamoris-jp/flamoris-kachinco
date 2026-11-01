@@ -45,3 +45,7 @@ Separate WPF companion, native GPU text, embedded editable state, host handoff, 
 See [ADR 0029](decisions/0029-kinetai-programmable-animation.md) and the
 [guide](kinetai.md) for native expression IR, source editing and pure MCP compilation.
 Windows GPU visual/full-song acceptance remains separate.
+
+## External CG integration scope (2026-11-01)
+
+[#124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124) now tracks the receiving-side boundary and preserves the old Scene Engine proposal. Production/physics research belongs to [CG #8](https://github.com/flamoris-jp/flamoris-CG/issues/8). See [ADR 0031](decisions/0031-external-cg-clip-boundary.md). This adds no implemented phase or delivery commitment; new engine creation, shared schema completion and Cinema resumption are not prerequisites.
