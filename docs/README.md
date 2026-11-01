@@ -64,3 +64,7 @@
 - [User guide](kinetai.md), [runtime contracts](decisions/0028-kinetai-first-runtime.md), [original design](decisions/0027-kinetai-native-text-editor.md), [Windows acceptance](../staging/windows-kinetai.md).
 
 - [Programmable kinetic animation](decisions/0029-kinetai-programmable-animation.md): Python expressions, native evaluation, source editor and MCP compilation.
+
+## External CG clip boundary
+
+- [ADR 0031: external CG clips / legacy Scene Engine](decisions/0031-external-cg-clip-boundary.md): #124 tracks the receiving side; CG owns clip production research, Glyph owns shapes, and Cinema stays paused. No independent engine or universal scene schema is required.

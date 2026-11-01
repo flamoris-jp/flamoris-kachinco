@@ -146,6 +146,10 @@ text animation. Audio analysis is optional and independent. Exchange is currentl
 file-based; Studio Client's MCP/Studio integration remains future work.
 See the [Studio Client user guide](https://github.com/flamoris-jp/flamoris-studio-client/blob/main/docs/windows-user-guide.md).
 
+## CG素材クリップとの境界
+
+[FLAMORIS-CG](https://github.com/flamoris-jp/flamoris-CG)が単体オブジェクトの動作・シーン・素材クリップを扱い、Kachincoが素材登録・配置・音・編集・最終出力を扱います。旧Scene Engine案の[#124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)は受け取り側の追跡と経緯を保持します。CGの物理・Glyph取込・動画encode・自動handoffは未実装で、独立エンジン新設や休眠中のCinema再開は前提にしません。詳しくは[ADR 0031](docs/decisions/0031-external-cg-clip-boundary.md)。
+
 ## Getting started (Windows)
 
 **For viewers and creators:** Kachinco is a Windows x64 desktop application. A self-contained portable distribution is built by the repository's Windows package pipeline; unpack the complete package and start `Kachinco.App.exe`. The destination machine does **not** need the .NET SDK, but media workflows require `ffmpeg` and `ffprobe` on `PATH`; restricted Recipes additionally require Python 3.
