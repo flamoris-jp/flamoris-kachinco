@@ -128,5 +128,7 @@
   <system:String x:Key="Shell.TitleReserve">先頭1フレームを確保 / 適用</system:String>
   <system:String x:Key="Shell.TitleRelease">先頭1フレームの確保を解除</system:String>
   <system:String x:Key="Shell.ReplaceMp4Title">完成MP4の先頭フレームを差し替え…</system:String>
+  <system:String x:Key="Shell.ImportSRTAtPlayhead">SRTを赤棒の位置に読み込む…</system:String>
+  <system:String x:Key="Shell.StyleAllCaptions">全字幕のスタイルを一括変更…</system:String>
 </ResourceDictionary>
 

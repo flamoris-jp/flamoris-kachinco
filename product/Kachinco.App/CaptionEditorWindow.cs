@@ -14,13 +14,16 @@ public sealed class CaptionEditorWindow : Window
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly CaptionStyleEditor styles = new();
     private readonly Action? onChanged;
-    public CaptionEditorWindow(EditorSession session, Guid sequenceId, Action? onChanged = null)
+    public CaptionEditorWindow(EditorSession session, Guid sequenceId, Action? onChanged = null, bool selectAll = false)
     {
         this.session = session; this.sequenceId = sequenceId; this.onChanged = onChanged;
         list.SelectionMode = SelectionMode.Extended;
         Title = "字幕を編集"; Width = 600; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var panel = new StackPanel { Margin = new Thickness(16) }; Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         panel.Children.Add(list);
+        var selectAllButton = new Button { Content = EditorText.Choose("全字幕を選択してスタイルを一括変更", "Select all captions to change style"), Margin = new Thickness(0,4,0,8) };
+        selectAllButton.Click += (_, _) => list.SelectAll();
+        panel.Children.Add(selectAllButton);
         panel.Children.Add(new TextBlock { Text = "開始（秒）" }); panel.Children.Add(start);
         panel.Children.Add(new TextBlock { Text = "長さ（秒）" }); panel.Children.Add(duration);
         panel.Children.Add(new TextBlock { Text = "字幕" }); panel.Children.Add(text);
@@ -34,7 +37,8 @@ public sealed class CaptionEditorWindow : Window
             if (list.SelectedItem is not Caption caption) return;
             start.Text = Seconds(caption.StartTicks); duration.Text = Seconds(caption.DurationTicks); text.Text = caption.Text;
         };
-        Refresh(); New(this, new());
+        Refresh();
+        if (selectAll) list.SelectAll(); else New(this, new());
     }
     private void RefreshStyles() => styles.Configure(session,sequenceId,list.SelectedItems.Cast<Caption>().Select(c=>c.Id),result=>
     {

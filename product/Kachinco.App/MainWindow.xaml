@@ -59,7 +59,9 @@
       </MenuItem>
       <MenuItem Header="{DynamicResource Shell.CaptionsT}">
         <MenuItem Header="{DynamicResource Shell.Editcaptions}" Click="EditCaptions_Click" />
+        <MenuItem Header="{DynamicResource Shell.StyleAllCaptions}" Click="StyleAllCaptions_Click" />
         <MenuItem Header="{DynamicResource Shell.ImportSRT}" Click="ImportSrt_Click" />
+        <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
         <MenuItem Header="{DynamicResource Shell.ExportSRT}" Click="ExportSrt_Click" />
       </MenuItem>
       <MenuItem Header="{DynamicResource Shell.EffectLibrary}" Click="EffectLibrary_Click"/>
@@ -170,6 +172,9 @@
           </StackPanel>
           <ListBox Background="#202124" Foreground="#E7E7E7" BorderBrush="#484B50" x:Name="MediaList" AllowDrop="True" PreviewDragOver="MediaFiles_DragOver" PreviewDrop="MediaFiles_Drop" Margin="0,8,0,0" SelectionChanged="Media_Changed"
                    PreviewMouseLeftButtonDown="Media_MouseDown" PreviewMouseMove="Media_MouseMove" MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
+            <ListBox.ContextMenu>
+              <ContextMenu><MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" /></ContextMenu>
+            </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid Margin="3">
@@ -304,7 +309,14 @@
           </Border>
           <local:TimelineSurface x:Name="Timeline" CommandRequested="Timeline_CommandRequested"
                                  ClipSelectionChanged="Timeline_ClipSelectionChanged" MediaPlacementRequested="Timeline_MediaPlacementRequested" PlayheadChanged="Timeline_PlayheadChanged"
-                                 InteractionFailed="Timeline_InteractionFailed" />
+                                 InteractionFailed="Timeline_InteractionFailed">
+            <local:TimelineSurface.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
+                <MenuItem Header="{DynamicResource Shell.StyleAllCaptions}" Click="StyleAllCaptions_Click" />
+              </ContextMenu>
+            </local:TimelineSurface.ContextMenu>
+          </local:TimelineSurface>
         </DockPanel>
       </Border>
     </Grid>

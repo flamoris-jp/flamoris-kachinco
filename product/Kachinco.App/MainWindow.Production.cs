@@ -314,30 +314,29 @@ public partial class MainWindow
         Refresh("Clapper / Recipe 編集を終了しました。");
     }
 
-    private async void ImportSrt_Click(object sender, RoutedEventArgs e)
+    private async void ImportSrt_Click(object sender, RoutedEventArgs e) => await ImportSrtAsync(0);
+
+    private async void ImportSrtAtPlayhead_Click(object sender, RoutedEventArgs e) => await ImportSrtAsync(Timeline.PlayheadTicks);
+
+    private async Task ImportSrtAsync(long offsetTicks)
     {
+        if (busy) return;
         using var operation = BeginHumanOperation();
         var snapshot = session.GetProject();
         var sequence = snapshot.Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         var picker = new OpenFileDialog { Filter = "SRT (*.srt)|*.srt" };
         if (picker.ShowDialog(this) != true) return;
+        SetBusy(true);
         try
         {
             if (new FileInfo(picker.FileName).Length > 4 * 1024 * 1024) { Status.Text = "SRTが大きすぎます。"; return; }
             var parsed = SrtCodec.Parse(await File.ReadAllTextAsync(picker.FileName));
             if (!parsed.Success) { ShowErrors(parsed.Diagnostics); return; }
             if (parsed.Value.IsEmpty) return;
-            var track = sequence.Tracks.FirstOrDefault(x => x.Kind == TrackKind.Subtitle);
-            var trackId = track?.Id ?? Guid.NewGuid();
-            var commands = new List<EditCommand>();
-            long end = parsed.Value.Max(x => checked(x.StartTicks + x.DurationTicks));
-            if (end > sequence.DurationTicks) commands.Add(new SetSequenceDuration(sequence.Id, end));
-            if (track is null) commands.Add(new AddTrack(sequence.Id, trackId, "字幕", TrackKind.Subtitle));
-            commands.AddRange(parsed.Value.Select(c => new AddCaption(sequence.Id, trackId, c)));
-            Show(session.Execute(new([.. commands], snapshot.Revision)), "SRTを読み込みました。");
+            Show(session.Execute(CaptionImport.Plan(sequence, parsed.Value, offsetTicks, snapshot.Revision)), "SRTを読み込みました。");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException)
         {
             logger.Error("document", "SRT import failed", properties: ProjectContext(new Dictionary<string, object?>
             {
@@ -347,6 +346,7 @@ public partial class MainWindow
             }));
             Status.Text = ex.Message;
         }
+        finally { SetBusy(false); }
     }
     private async void ExportSrt_Click(object sender, RoutedEventArgs e)
     {
@@ -375,6 +375,13 @@ public partial class MainWindow
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         new CaptionEditorWindow(session, sequence.Id, () => Refresh()) { Owner = this }.ShowDialog();
+        Refresh("字幕編集を終了しました。");
+    }
+    private void StyleAllCaptions_Click(object sender, RoutedEventArgs e)
+    {
+        using var operation = BeginHumanOperation();
+        if (CurrentSequence() is not { } sequence) return;
+        new CaptionEditorWindow(session, sequence.Id, () => Refresh(), selectAll: true) { Owner = this }.ShowDialog();
         Refresh("字幕編集を終了しました。");
     }
 }
