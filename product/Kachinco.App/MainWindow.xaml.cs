@@ -128,6 +128,7 @@ public partial class MainWindow : Window
     {
         if (busy) return;
         using var operation = BeginHumanOperation();
+        if (!CaptionTextInspector.TryApply()) return;
         var snapshot = session.GetProject();
         if (snapshot.Project is null) { Refresh(EditorText.SequenceGuidance); return; }
         string? target = filename;
@@ -353,7 +354,9 @@ public partial class MainWindow : Window
     private void Sequence_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (refreshing) return;
-        selectedSequenceId = (SequenceList.SelectedItem as Sequence)?.Id;
+        var nextSequence = (SequenceList.SelectedItem as Sequence)?.Id;
+        if (!CaptionTextInspector.TryApply(notify: false)) { Refresh(); return; }
+        selectedSequenceId = nextSequence;
         selectedClipId = null;
         Refresh();
     }
@@ -361,6 +364,7 @@ public partial class MainWindow : Window
     private void Media_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (refreshing) return;
+        if (!CaptionTextInspector.TryApply(notify: false)) { Refresh(); return; }
         selectedMediaId = (MediaList.SelectedItem as MediaAssetRow)?.Asset.Id;
         if (selectedMediaId is not null)
         {
@@ -376,13 +380,15 @@ public partial class MainWindow : Window
         Show(session.Execute(e.Batch), "タイムラインを編集しました。");
     private void Timeline_ClipSelectionChanged(object sender, TimelineSelectionEventArgs e)
     {
+        bool appliedText = CaptionTextInspector.HasChanges;
+        if (!CaptionTextInspector.TryApply(notify: false)) { Refresh(); return; }
         selectedClipId = e.ClipId;
         if (selectedClipId is not null)
         {
             refreshing = true; MediaList.SelectedItem = null; refreshing = false;
             selectedMediaId = null;
         }
-        RefreshInspector(); RefreshTimelineStatus();
+        if (appliedText) Refresh(); else { RefreshInspector(); RefreshTimelineStatus(); }
     }
     private void Timeline_InteractionFailed(object sender, TimelineDiagnosticsEventArgs e) => ShowErrors(e.Diagnostics);
 
@@ -505,8 +511,13 @@ public partial class MainWindow : Window
         var selected = FindSelectedClip(project);
         var caption = project?.Sequences.FirstOrDefault(s=>s.Id==selectedSequenceId)?.Tracks.SelectMany(t=>t.Captions).FirstOrDefault(c=>c.Id==selectedClipId);
         CaptionInspector.Visibility = caption is null ? Visibility.Collapsed : Visibility.Visible;
+        CaptionTextInspector.Visibility = CaptionInspector.Visibility;
         if(caption is not null && selectedSequenceId is { } captionSequence)
+        {
+            CaptionTextInspector.Configure(session, captionSequence, caption.Id, result => Show(result, EditorText.Choose("字幕を変更しました。", "Caption updated.")));
             CaptionInspector.Configure(session,captionSequence,[caption.Id],result=>Show(result,EditorText.Choose("字幕スタイルを変更しました。", "Caption style updated.")));
+        }
+        else CaptionTextInspector.Clear();
         ClipContext.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         ContextClipName.Text = selected is { } chosen ? project?.Assets.FirstOrDefault(a => a.Id == chosen.Clip.MediaAssetId)?.Name : "";
         InspectorEmpty.Visibility = caption is null && selected is null && SelectedAsset(project) is null ? Visibility.Visible : Visibility.Collapsed;
@@ -565,7 +576,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private bool IsDirty() => session.GetProject().Project is { } p && ProjectJson.Serialize(p).Value != savedJson;
+    private bool IsDirty() => CaptionTextInspector.HasChanges || session.GetProject().Project is { } p && ProjectJson.Serialize(p).Value != savedJson;
     private bool ConfirmDiscard() => !IsDirty() || MessageBox.Show(this, "未保存の変更を破棄しますか？", "Kachinco", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
     private void Window_Closing(object? sender, CancelEventArgs e)
     {

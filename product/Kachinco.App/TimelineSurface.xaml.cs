@@ -439,6 +439,7 @@ public partial class TimelineSurface : UserControl
         var state = (ClipVisual)thumb.Tag;
         followSuspended = true;
         Select(state.Clip.Id, rebuild: false);
+        if (!thumb.IsDescendantOf(TimelineCanvas)) { thumb.CancelDrag(); return; }
         drag = new(state, thumb, thumb.Parent as FrameworkElement ?? thumb, null, Mouse.GetPosition(TimelineViewportHost));
         Panel.SetZIndex(drag.Element, 2);
         Focus();
@@ -475,6 +476,7 @@ public partial class TimelineSurface : UserControl
         var thumb = (Thumb)sender;
         var value = (TrimVisual)thumb.Tag;
         Select(value.Visual.Clip.Id, rebuild: false);
+        if (!thumb.IsDescendantOf(TimelineCanvas)) { thumb.CancelDrag(); return; }
         drag = new(value.Visual, thumb, thumb.Parent as FrameworkElement ?? thumb, value.Edge, Mouse.GetPosition(TimelineViewportHost));
         Panel.SetZIndex(drag.Element, 2);
         Focus();

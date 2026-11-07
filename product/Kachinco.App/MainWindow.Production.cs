@@ -320,7 +320,7 @@ public partial class MainWindow
 
     private async Task ImportSrtAsync(long offsetTicks)
     {
-        if (busy) return;
+        if (busy || !CaptionTextInspector.TryApply()) return;
         using var operation = BeginHumanOperation();
         var snapshot = session.GetProject();
         var sequence = snapshot.Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
@@ -334,7 +334,7 @@ public partial class MainWindow
             var parsed = SrtCodec.Parse(await File.ReadAllTextAsync(picker.FileName));
             if (!parsed.Success) { ShowErrors(parsed.Diagnostics); return; }
             if (parsed.Value.IsEmpty) return;
-            Show(session.Execute(CaptionImport.Plan(sequence, parsed.Value, offsetTicks, snapshot.Revision)), "SRTを読み込みました。");
+            Show(session.Execute(CaptionImport.Plan(sequence, parsed.Value, offsetTicks, snapshot.Revision)), EditorText.Choose("SRTから字幕クリップを作成しました。", "Created caption clips from SRT."));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OverflowException)
         {
@@ -351,6 +351,7 @@ public partial class MainWindow
     private async void ExportSrt_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
+        if (!CaptionTextInspector.TryApply()) return;
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         var result = SrtCodec.Write(sequence.Tracks.Where(t => t.Enabled).SelectMany(t => t.Captions));
@@ -372,6 +373,7 @@ public partial class MainWindow
     private void EditCaptions_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
+        if (!CaptionTextInspector.TryApply()) return;
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
         new CaptionEditorWindow(session, sequence.Id, () => Refresh()) { Owner = this }.ShowDialog();
@@ -380,8 +382,23 @@ public partial class MainWindow
     private void StyleAllCaptions_Click(object sender, RoutedEventArgs e)
     {
         using var operation = BeginHumanOperation();
+        if (!CaptionTextInspector.TryApply()) return;
         if (CurrentSequence() is not { } sequence) return;
         new CaptionEditorWindow(session, sequence.Id, () => Refresh(), selectAll: true) { Owner = this }.ShowDialog();
         Refresh("字幕編集を終了しました。");
+    }
+    private void CreateCaptionAtPlayhead_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || !CaptionTextInspector.TryApply() || CurrentSequence() is not { } sequence) return;
+        using var operation = BeginHumanOperation();
+        var snapshot = session.GetProject();
+        var caption = new Caption(Guid.NewGuid(), 0, 3 * TimelineTime.TicksPerSecond, EditorText.Choose("字幕", "Caption"));
+        try
+        {
+            var result = session.Execute(CaptionImport.Plan(sequence, [caption], Timeline.PlayheadTicks, snapshot.Revision));
+            if (result.Success) { selectedClipId = caption.Id; selectedMediaId = null; }
+            Show(result, EditorText.Choose("再生ヘッド位置に字幕クリップを作成しました。", "Created caption clip at playhead."));
+        }
+        catch (OverflowException) { Status.Text = EditorText.Choose("時間が大きすぎます。", "Time is too large."); }
     }
 }

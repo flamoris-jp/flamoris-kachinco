@@ -40,6 +40,7 @@ internal static class Program
                 await CaptionTimingChecks.Run();
                 await CreationWorkflowChecks.Run();
                 await InspectorChecks.Run(main);
+                await CaptionTextChecks.Run(main);
                 await CaptionStyleChecks.Run();
                 await VolumeChecks.Run(main);
                 await EffectChecks.Run(main);
