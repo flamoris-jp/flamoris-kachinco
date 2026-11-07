@@ -1,6 +1,9 @@
 {
   "application_id": "flamoris-kachinco-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "platform": "linux/amd64",
-  "compatible_from": ["0.1.0"]
+  "compatible_from": [
+    "0.1.0",
+    "0.1.1"
+  ]
 }
