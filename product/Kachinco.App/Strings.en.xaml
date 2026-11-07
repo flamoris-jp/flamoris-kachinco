@@ -128,5 +128,7 @@
   <system:String x:Key="Shell.TitleReserve">Reserve / apply first frame</system:String>
   <system:String x:Key="Shell.TitleRelease">Release first frame</system:String>
   <system:String x:Key="Shell.ReplaceMp4Title">Replace first frame in completed MP4…</system:String>
+  <system:String x:Key="Shell.ImportSRTAtPlayhead">Import SRT at playhead…</system:String>
+  <system:String x:Key="Shell.StyleAllCaptions">Style all captions…</system:String>
 </ResourceDictionary>
 

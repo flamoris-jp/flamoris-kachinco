@@ -88,7 +88,7 @@ AI can also upload supported source media through guarded MCP operations, adjust
 | **Linux CLI / resident MCP** | Headless project inspection, typed editing, frame capture, explicit save and sequence export/download; CPU composition with CPU/VAAPI encoding. [Guide](docs/linux-cli.md). |
 | **Windows editing** | Media bin, multitrack timeline, playback/scrubbing, move/trim/split/delete, Undo/Redo, save/reopen and overwrite save. |
 | **Video / still images** | MOV/MP4 and PNG/JPEG/WebP import, layer transforms, opacity, Normal/Screen composition, image motion via property automation. |
-| **Audio / captions** | WAV/MP3/M4A audio clips, clip volume points and fades, transport monitoring level, caption editing and SRT import/export. |
+| **Audio / captions** | WAV/MP3/M4A audio clips, MP4 audio extraction on Windows import, clip volume points and fades, monitoring level, playhead SRT import and all-caption styling. |
 | **AI / MCP** | Same-session project queries and edits, guarded media upload, specified-time rendered frame capture, clip speed commands and bounded single-clip download. |
 | **KineticTypo / キネタイ (Windows)** | Bundled animated-text companion, standalone `.ktproj` editing, embedded editable text, SRT/legacy PONPON import, bounded motion scripts and RGB + mask interchange. [Guide](docs/kinetai.md). |
 | **Creative controls** | Clappers (named timeline/region references), reusable Effect Library, restricted Recipe-generated text/particle clips, editable visual automation. |

@@ -75,6 +75,25 @@ internal static class CaptionStyleChecks
         dialogSize.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,dialogSize,null) {RoutedEvent=Keyboard.LostKeyboardFocusEvent});
         if(dialogList.SelectedItems.Count!=2 || dialogScope.SelectedIndex!=1) throw new Exception("Caption list styling lost selection or bulk scope.");
         dialog.Close();
+        var bulk = new CaptionEditorWindow(session, sequence, selectAll:true);
+        var bulkList = (ListBox)typeof(CaptionEditorWindow).GetField("list",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(bulk)!;
+        if (bulkList.SelectedItems.Count != 3) throw new Exception("All-caption entry did not select every subtitle track.");
+        var bulkStyle = (CaptionStyleEditor)typeof(CaptionEditorWindow).GetField("styles",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(bulk)!;
+        var bulkFields = (Dictionary<string,Control>)typeof(CaptionStyleEditor).GetField("fields",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(bulkStyle)!;
+        var bulkColor = (TextBox)bulkFields["color"];
+        bulkColor.Text = "#FF4400";
+        bulkColor.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,bulkColor,null) {RoutedEvent=Keyboard.LostKeyboardFocusEvent});
+        var all = session.GetProject().Project!.Sequences[0].Tracks.SelectMany(t=>t.Captions).ToArray();
+        if (all.Any(c=>c.Style!.Color!="#FF4400") || all.First(c=>c.Id==second).Style!.X!=.25)
+            throw new Exception("All-caption color edit missed captions or replaced individual positioning.");
+        var bulkFont = (ComboBox)bulkFields["fontFamily"];
+        bulkFont.Text = "Arial";
+        bulkFont.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,0,bulkFont,null) {RoutedEvent=Keyboard.LostKeyboardFocusEvent});
+        if (session.GetProject().Project!.Sequences[0].Tracks.SelectMany(t=>t.Captions).Any(c=>c.Style!.FontFamily!="Arial" || c.Style.Color!="#FF4400"))
+            throw new Exception("All-caption font edit lost color or missed a track.");
+        if (!session.Undo().Success || session.GetProject().Project!.Sequences[0].Tracks.SelectMany(t=>t.Captions).Any(c=>c.Style!.Color!="#FF4400"))
+            throw new Exception("Bulk font undo did not preserve the previous color edit.");
+        bulk.Close();
         if(screenshot is not null)
         {
             var host=new Border {Background=new SolidColorBrush(Color.FromRgb(43,45,49)),Padding=new(12),Child=editor,Width=360};

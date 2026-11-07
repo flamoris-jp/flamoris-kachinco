@@ -171,15 +171,28 @@ public partial class MainWindow : Window
             var probed = await mediaProbe.ProbeAsync(path);
             if (!probed.Success) { LogFailure("media", "Media probe failed", probed.Diagnostics); ShowErrors(probed.Diagnostics); return; }
             var asset = probed.Value!.ToMediaAsset(Guid.NewGuid());
-            var imported = session.Execute(EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト"));
+            var audioImporter = new Mp4AudioImport(System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FLAMORIS", "Kachinco", "imported-audio"), mediaProbe);
+            using var audio = await audioImporter.PrepareAsync(probed.Value);
+            var batch = EditorStartup.Import(snapshot, asset, Guid.NewGuid(), "新しいプロジェクト");
+            if (audio is not null) batch = batch with { Commands = batch.Commands.Add(new RegisterMedia(audio.Asset)) };
+            var imported = session.Execute(batch);
+            if (imported.Success) audio?.Keep();
             if (imported.Success) { selectedMediaId = asset.Id; selectedClipId = null; }
-            Show(imported, $"{asset.Name} を読み込みました。");
+            Show(imported, audio is null ? $"{asset.Name} を読み込みました。" :
+                EditorText.Choose($"{asset.Name} と分離したWAV音声を素材に登録しました。", $"Imported {asset.Name} and extracted WAV audio."));
             if (imported.Success) logger.Info("document", "Media imported", ProjectContext(new Dictionary<string, object?>
             {
                 ["mediaAssetId"] = asset.Id,
                 ["mediaKind"] = asset.Kind.ToString(),
                 ["durationTicks"] = asset.DurationTicks,
             }));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or OperationCanceledException)
+        {
+            logger.Error("media", "Media import preparation failed", properties: ProjectContext(new Dictionary<string, object?>
+            { ["diagnosticCode"] = "MEDIA_IMPORT_PREPARATION_FAILED", ["errorType"] = ex.GetType().Name }));
+            Status.Text = EditorText.Choose("素材を読み込めませんでした：", "Media import failed: ") + ex.Message;
         }
         finally { SetBusy(false); }
     }
