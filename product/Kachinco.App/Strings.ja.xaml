@@ -8,7 +8,7 @@
   <system:String x:Key="Shell.Exportvideo">動画を書き出す…</system:String>
   <system:String x:Key="Shell.CaptionsT">字幕(_T)</system:String>
   <system:String x:Key="Shell.Editcaptions">字幕を編集…</system:String>
-  <system:String x:Key="Shell.ImportSRT">SRTを読み込む…</system:String>
+  <system:String x:Key="Shell.ImportSRT">SRTから字幕クリップを作成…</system:String>
   <system:String x:Key="Shell.ExportSRT">SRTを書き出す…</system:String>
   <system:String x:Key="Shell.EditE">編集(_E)</system:String>
   <system:String x:Key="Shell.UndoU">元に戻す(_U)</system:String>
@@ -128,7 +128,8 @@
   <system:String x:Key="Shell.TitleReserve">先頭1フレームを確保 / 適用</system:String>
   <system:String x:Key="Shell.TitleRelease">先頭1フレームの確保を解除</system:String>
   <system:String x:Key="Shell.ReplaceMp4Title">完成MP4の先頭フレームを差し替え…</system:String>
-  <system:String x:Key="Shell.ImportSRTAtPlayhead">SRTを赤棒の位置に読み込む…</system:String>
+  <system:String x:Key="Shell.ImportSRTAtPlayhead">SRTから字幕クリップを作成（再生ヘッド位置）…</system:String>
   <system:String x:Key="Shell.StyleAllCaptions">全字幕のスタイルを一括変更…</system:String>
+  <system:String x:Key="Shell.CreateCaptionAtPlayhead">再生ヘッド位置に字幕クリップを作成</system:String>
 </ResourceDictionary>
 

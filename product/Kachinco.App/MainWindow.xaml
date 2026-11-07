@@ -58,6 +58,7 @@
         </MenuItem>
       </MenuItem>
       <MenuItem Header="{DynamicResource Shell.CaptionsT}">
+        <MenuItem Header="{DynamicResource Shell.CreateCaptionAtPlayhead}" Click="CreateCaptionAtPlayhead_Click" />
         <MenuItem Header="{DynamicResource Shell.Editcaptions}" Click="EditCaptions_Click" />
         <MenuItem Header="{DynamicResource Shell.StyleAllCaptions}" Click="StyleAllCaptions_Click" />
         <MenuItem Header="{DynamicResource Shell.ImportSRT}" Click="ImportSrt_Click" />
@@ -173,7 +174,10 @@
           <ListBox Background="#202124" Foreground="#E7E7E7" BorderBrush="#484B50" x:Name="MediaList" AllowDrop="True" PreviewDragOver="MediaFiles_DragOver" PreviewDrop="MediaFiles_Drop" Margin="0,8,0,0" SelectionChanged="Media_Changed"
                    PreviewMouseLeftButtonDown="Media_MouseDown" PreviewMouseMove="Media_MouseMove" MouseDoubleClick="Media_DoubleClick" HorizontalContentAlignment="Stretch">
             <ListBox.ContextMenu>
-              <ContextMenu><MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" /></ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="{DynamicResource Shell.CreateCaptionAtPlayhead}" Click="CreateCaptionAtPlayhead_Click" />
+                <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
+              </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
               <DataTemplate>
@@ -227,6 +231,7 @@
               <TextBlock x:Name="AssetMetadataText" TextWrapping="Wrap" />
               <Button x:Name="RelinkButton" Content="{DynamicResource Shell.Relinkmedia}" Click="Relink_Click" Margin="0,8,0,0" />
             </StackPanel>
+            <local:CaptionTextEditor x:Name="CaptionTextInspector" Visibility="Collapsed"/>
             <local:CaptionStyleEditor x:Name="CaptionInspector" Visibility="Collapsed"/>
             <StackPanel x:Name="ClipInspector" Visibility="Collapsed">
               <TextBlock Text="{DynamicResource Shell.Clip}" Foreground="#B5BAC2" />
@@ -312,6 +317,7 @@
                                  InteractionFailed="Timeline_InteractionFailed">
             <local:TimelineSurface.ContextMenu>
               <ContextMenu>
+                <MenuItem Header="{DynamicResource Shell.CreateCaptionAtPlayhead}" Click="CreateCaptionAtPlayhead_Click" />
                 <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
                 <MenuItem Header="{DynamicResource Shell.StyleAllCaptions}" Click="StyleAllCaptions_Click" />
               </ContextMenu>

@@ -8,7 +8,7 @@
   <system:String x:Key="Shell.Exportvideo">Export video…</system:String>
   <system:String x:Key="Shell.CaptionsT">Captions (_T)</system:String>
   <system:String x:Key="Shell.Editcaptions">Edit captions…</system:String>
-  <system:String x:Key="Shell.ImportSRT">Import SRT…</system:String>
+  <system:String x:Key="Shell.ImportSRT">Create caption clips from SRT…</system:String>
   <system:String x:Key="Shell.ExportSRT">Export SRT…</system:String>
   <system:String x:Key="Shell.EditE">Edit (_E)</system:String>
   <system:String x:Key="Shell.UndoU">Undo (_U)</system:String>
@@ -128,7 +128,8 @@
   <system:String x:Key="Shell.TitleReserve">Reserve / apply first frame</system:String>
   <system:String x:Key="Shell.TitleRelease">Release first frame</system:String>
   <system:String x:Key="Shell.ReplaceMp4Title">Replace first frame in completed MP4…</system:String>
-  <system:String x:Key="Shell.ImportSRTAtPlayhead">Import SRT at playhead…</system:String>
+  <system:String x:Key="Shell.ImportSRTAtPlayhead">Create caption clips from SRT at playhead…</system:String>
   <system:String x:Key="Shell.StyleAllCaptions">Style all captions…</system:String>
+  <system:String x:Key="Shell.CreateCaptionAtPlayhead">Create caption clip at playhead</system:String>
 </ResourceDictionary>
 
