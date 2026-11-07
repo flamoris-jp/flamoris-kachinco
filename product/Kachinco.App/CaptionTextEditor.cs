@@ -28,6 +28,7 @@ public sealed class CaptionTextEditor : StackPanel
         Children.Add(apply);
         Children.Add(new TextBlock { Text = T("Ctrl+Enterで適用。Ctrl+Sでプロジェクト保存。", "Ctrl+Enter applies. Ctrl+S saves the project."), TextWrapping = TextWrapping.Wrap });
         Children.Add(status);
+        text.LostKeyboardFocus += (_, _) => TryApply();
         text.PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control) { TryApply(); e.Handled = true; }
@@ -44,8 +45,7 @@ public sealed class CaptionTextEditor : StackPanel
             var current = editor.GetProject();
             var latest = current.Project?.Sequences.FirstOrDefault(s => s.Id == sequence)?.Tracks.SelectMany(t => t.Captions).FirstOrDefault(c => c.Id == captionId);
             // Unrelated/style edits can refresh the revision without overwriting a text draft.
-            if (latest is not null && caption is not null && latest.Text == caption.Text && latest.StartTicks == caption.StartTicks &&
-                latest.DurationTicks == caption.DurationTicks && latest.Enabled == caption.Enabled)
+            if (latest is not null && caption is not null && latest.Text == caption.Text)
             { baseline = current; caption = latest; }
             return;
         }

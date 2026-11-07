@@ -53,6 +53,8 @@ public partial class TimelineSurface
                 if (sequence is null || captionDrag is not null || drag is not null) { thumb.CancelDrag(); return; }
                 followSuspended = true;
                 Select(caption.Id, rebuild: false);
+                // Selection may apply inspector text and replace the presentation tree.
+                if (!thumb.IsDescendantOf(TimelineCanvas)) { thumb.CancelDrag(); return; }
                 captionDrag = new(sequence, caption, revision, grid, thumb, edge);
                 Panel.SetZIndex(grid, 2); Focus();
             };

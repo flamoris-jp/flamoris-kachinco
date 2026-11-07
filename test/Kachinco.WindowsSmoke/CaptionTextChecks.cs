@@ -2,6 +2,8 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using Kachinco.App;
 using Kachinco.Core;
 using Kachinco.Infrastructure;
@@ -20,7 +22,7 @@ internal static class CaptionTextChecks
         var timeline = (TimelineSurface)main.FindName("Timeline");
         typeof(TimelineSurface).GetField("playheadTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(timeline, 2 * t);
         Invoke("CreateCaptionAtPlayhead_Click", main, new RoutedEventArgs());
-        var original = Caption();
+        var original = session.GetProject().Project!.Sequences[0].Tracks.SelectMany(track => track.Captions).Single();
         Check(original.StartTicks == 2 * t && original.DurationTicks == 3 * t, "create at playhead");
         Check((Guid?)Get("selectedClipId") == original.Id, "new clip selection");
         Check(session.Execute(new([new SetCaptionStyle(sequence, original.Id, new(Color: "#FFCC00", FontSize: 64)),
@@ -53,6 +55,22 @@ internal static class CaptionTextChecks
             var srt = SrtCodec.Write([Caption() with { Enabled = true }]);
             Check(srt.Success && SrtCodec.Parse(srt.Value!).Value[0].Text == Caption().Text, "edited SRT roundtrip");
 
+            // Selecting another caption can commit text and rebuild the timeline during DragStarted.
+            // A detached old gesture must never write its old text back into the project.
+            var imported = SrtCodec.Parse("1\n00:00:00,000 --> 00:00:01,000\nImported clip\n").Value;
+            Check(session.Execute(CaptionImport.Plan(session.GetProject().Project!.Sequences[0], imported, 0, session.GetProject().Revision)).Success, "imported caption fixture");
+            Refresh();
+            box.Text = "Draft before selecting imported caption";
+            var canvas = (Canvas)timeline.FindName("TimelineCanvas");
+            var importedGrid = canvas.Children.OfType<Grid>().Single(g => Equals(g.Tag, imported[0].Id));
+            var oldThumb = importedGrid.Children.OfType<Thumb>().First();
+            oldThumb.RaiseEvent(new DragStartedEventArgs(0, 0));
+            oldThumb.RaiseEvent(new DragDeltaEventArgs(40, 0));
+            oldThumb.RaiseEvent(new DragCompletedEventArgs(40, 0, false));
+            Check(!timeline.HasActiveGesture && Caption().Text == "Draft before selecting imported caption", "selection-time apply cancels detached gesture");
+            Check((Guid?)Get("selectedClipId") == imported[0].Id && box.Text == "Imported clip", "SRT caption selection populates inspector");
+            Set("selectedClipId", original.Id); Refresh();
+
             box.Text = "Concurrent draft";
             Check(session.Execute(new([new UpdateCaption(sequence, original.Id, 2*t, 3*t, "Other writer", false)])).Success, "concurrent text edit");
             Check(!editor.TryApply() && Caption().Text == "Other writer", "stale text cannot overwrite");
@@ -72,7 +90,7 @@ internal static class CaptionTextChecks
             Set("selectedSequenceId", null); Set("selectedClipId", null); Set("filename", null); Set("savedJson", null); Refresh();
             File.Delete(path);
         }
-        Caption Caption() => session.GetProject().Project!.Sequences[0].Tracks.SelectMany(track => track.Captions).Single();
+        Caption Caption() => session.GetProject().Project!.Sequences[0].Tracks.SelectMany(track => track.Captions).Single(c => c.Id == original.Id);
         object? Get(string name) => typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(main);
         void Set(string name, object? value) => typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(main, value);
         object? Invoke(string name, params object?[] args) => typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, args);
