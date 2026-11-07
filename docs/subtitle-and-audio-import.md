@@ -30,3 +30,13 @@ audio behavior for Windows MP4 imports.
 Validation: shifted SRT batch/history/overflow tests, real MP4/WAV extraction,
 silent/corrupt input and prepared-file lifetime tests, Windows all-caption UI
 checks. Physical Windows right-click, listening and font appearance remain manual.
+
+## Windowsでの操作
+
+- 素材欄またはタイムラインの空白を右クリック → **SRTを赤棒の位置に読み込む…**
+  → SRTを選択。SRTの0秒が赤棒に一致するため、最初の字幕までの待ち時間も残る。
+- **字幕 → 全字幕のスタイルを一括変更…** → フォント・文字色を変更。
+  通常の字幕編集画面の **全字幕を選択してスタイルを一括変更** からも操作できる。
+- 音声付きMP4をファイル選択または素材欄へのドロップで読み込むと、映像素材と
+  `元の名前 — audio.wav` が登録される。音声素材をAトラックへ置いて使用する。
+  WAVの実体は `%LOCALAPPDATA%\FLAMORIS\Kachinco\imported-audio` に保持される。

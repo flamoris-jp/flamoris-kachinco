@@ -27,6 +27,7 @@ public sealed class Mp4AudioImportTests
             Assert.AreEqual(MediaKind.Wav, prepared.Asset.Kind);
             Assert.AreEqual(48000, prepared.Asset.SampleRate);
             Assert.AreEqual(2, prepared.Asset.Channels);
+            Assert.IsTrue(prepared.Asset.DurationTicks > video.Value!.DurationTicks, "Audio tail must not be truncated to the video duration.");
             CollectionAssert.AreEqual(original, await File.ReadAllBytesAsync(source));
             using var decoder = new FfmpegMediaDecoder();
             var pcm = await decoder.AudioAsync(prepared.Asset.SourcePath, 0, 4800, 48000, 2, default);
@@ -52,6 +53,13 @@ public sealed class Mp4AudioImportTests
             var failing = new Mp4AudioImport(Path.Combine(root, "failed"), probe, "kachinco-missing-ffmpeg");
             await Assert.ThrowsExactlyAsync<System.ComponentModel.Win32Exception>(() => failing.PrepareAsync(video.Value!));
             Assert.AreEqual(0, Directory.GetFiles(Path.Combine(root, "failed")).Length);
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => importer.PrepareAsync(video.Value!, cancelled.Token));
+            await File.WriteAllTextAsync(source, "corrupt MP4 after probe");
+            var corrupt = new Mp4AudioImport(Path.Combine(root, "corrupt"), probe);
+            await Assert.ThrowsExactlyAsync<InvalidDataException>(() => corrupt.PrepareAsync(video.Value!));
+            Assert.AreEqual(0, Directory.GetFiles(Path.Combine(root, "corrupt")).Length);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -78,7 +86,7 @@ public sealed class Mp4AudioImportTests
     {
         var start = new ProcessStartInfo("ffmpeg") { UseShellExecute = false, RedirectStandardError = true };
         var args = new List<string> { "-v", "error", "-nostdin", "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=24:d=1" };
-        if (audio) args.AddRange(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1", "-ac", "2", "-c:a", "aac"]);
+        if (audio) args.AddRange(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1.25", "-ac", "2", "-c:a", "aac"]);
         args.AddRange(["-c:v", "mpeg4", "-y", path]);
         foreach (var arg in args) start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!;
