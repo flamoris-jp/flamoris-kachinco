@@ -8,6 +8,9 @@ namespace Kachinco.Infrastructure;
 
 public static class SrtCodec
 {
+    // Project-level subtitle export must never publish editing instructions.
+    public static Result<string> Write(Sequence sequence) =>
+        Write(sequence.Tracks.Where(t => t.Enabled && t.Kind == TrackKind.Subtitle).SelectMany(t => t.Captions));
     private static readonly Regex Timing = new(@"^(\d{2,}):([0-5]\d):([0-5]\d),(\d{3}) --> (\d{2,}):([0-5]\d):([0-5]\d),(\d{3})$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     public static Result<ImmutableArray<Caption>> Parse(string text)
     {

@@ -4,7 +4,7 @@ namespace Kachinco.Core;
 
 // Persisted compatibility tokens: Mov is video (MOV/MP4), Wav is audio (WAV/MP3/M4A).
 public enum MediaKind { Mov, Wav, Image, KineticText, MaskedVideo }
-public enum TrackKind { Video, Audio, Subtitle }
+public enum TrackKind { Video, Audio, Subtitle, EditNote }
 public enum BlendMode { Normal, Screen }
 
 public sealed record Project(Guid Id, string Name, ImmutableArray<MediaAsset> Assets,

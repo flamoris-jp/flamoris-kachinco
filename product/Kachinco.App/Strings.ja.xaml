@@ -131,5 +131,10 @@
   <system:String x:Key="Shell.ImportSRTAtPlayhead">SRTから字幕クリップを作成（再生ヘッド位置）…</system:String>
   <system:String x:Key="Shell.StyleAllCaptions">全字幕のスタイルを一括変更…</system:String>
   <system:String x:Key="Shell.CreateCaptionAtPlayhead">再生ヘッド位置に字幕クリップを作成</system:String>
+  <system:String x:Key="Shell.EditNotes">編集メモ</system:String>
+  <system:String x:Key="Shell.CreateEditNote">再生ヘッド位置に編集メモを作成</system:String>
+  <system:String x:Key="Shell.EditEditNotes">編集メモを一覧で編集…</system:String>
+  <system:String x:Key="Shell.ShowEditNotes">プレビューに編集メモを表示</system:String>
+  <system:String x:Key="Shell.EditNoteOverlayLabel">編集メモ · 書出し対象外</system:String>
 </ResourceDictionary>
 

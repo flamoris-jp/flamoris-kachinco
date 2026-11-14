@@ -271,7 +271,7 @@ public partial class MainWindow : Window
         DragDrop.DoDragDrop(MediaList, new DataObject(TimelineSurface.MediaDragFormat, id), DragDropEffects.Copy);
     }
     private void Timeline_MediaPlacementRequested(object sender, MediaPlacementEventArgs e) => PlaceMedia(e.MediaId, e.TrackId, e.StartTicks);
-    private void Timeline_PlayheadChanged(object? sender, EventArgs e) { RefreshTimelineStatus(); SeekPreview(); }
+    private void Timeline_PlayheadChanged(object? sender, EventArgs e) { RefreshTimelineStatus(); SeekPreview(); RefreshEditNoteOverlay(); }
     private void FitTimeline_Click(object sender, RoutedEventArgs e) { Timeline.FitSequence(); RefreshTimelineStatus(); }
     private void SequenceDuration_Click(object sender, RoutedEventArgs e)
     {
@@ -495,6 +495,7 @@ public partial class MainWindow : Window
     private void RefreshTimelineStatus()
     {
         RefreshClapperOverlay();
+        RefreshEditNoteOverlay();
         PlayheadText.Text = $"{EditorText.Choose("再生ヘッド", "Playhead")} {Seconds(Timeline.PlayheadTicks)} s";
         ZoomText.Text = $"{Timeline.PixelsPerSecond:0.#} px/s";
         SplitButton.IsEnabled = FindSelectedClip(session.GetProject().Project) is not null;
@@ -510,11 +511,12 @@ public partial class MainWindow : Window
         var project = baseline.Project;
         var selected = FindSelectedClip(project);
         var caption = project?.Sequences.FirstOrDefault(s=>s.Id==selectedSequenceId)?.Tracks.SelectMany(t=>t.Captions).FirstOrDefault(c=>c.Id==selectedClipId);
-        CaptionInspector.Visibility = caption is null ? Visibility.Collapsed : Visibility.Visible;
-        CaptionTextInspector.Visibility = CaptionInspector.Visibility;
+        bool note = project?.Sequences.FirstOrDefault(s => s.Id == selectedSequenceId)?.Tracks.Any(t => t.Kind == TrackKind.EditNote && t.Captions.Any(c => c.Id == selectedClipId)) == true;
+        CaptionInspector.Visibility = caption is null || note ? Visibility.Collapsed : Visibility.Visible;
+        CaptionTextInspector.Visibility = caption is null ? Visibility.Collapsed : Visibility.Visible;
         if(caption is not null && selectedSequenceId is { } captionSequence)
         {
-            CaptionTextInspector.Configure(session, captionSequence, caption.Id, result => Show(result, EditorText.Choose("字幕を変更しました。", "Caption updated.")));
+            CaptionTextInspector.Configure(session, captionSequence, caption.Id, result => Show(result, note ? EditorText.Choose("編集メモを変更しました。", "Editing note updated.") : EditorText.Choose("字幕を変更しました。", "Caption updated.")), isEditNote: note);
             CaptionInspector.Configure(session,captionSequence,[caption.Id],result=>Show(result,EditorText.Choose("字幕スタイルを変更しました。", "Caption style updated.")));
         }
         else CaptionTextInspector.Clear();

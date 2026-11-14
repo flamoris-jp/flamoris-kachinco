@@ -16,7 +16,8 @@ internal static class Program
         {
             try
             {
-                if (args is ["--caption-timing"]) { await CaptionTimingChecks.Run(); exit = 0; return; }
+                if (args is ["--caption-timing"]) { await CaptionTimingChecks.Run();
+            await CaptionTimingChecks.Run(Kachinco.Core.TrackKind.EditNote); exit = 0; return; }
                 if(args is ["--caption-styles",var screenshot]) { await CaptionStyleChecks.Run(screenshot);exit=0;return; }
                 if (args is ["--export-bench", var project, var output, var device])
                 {
@@ -38,9 +39,11 @@ internal static class Program
                 await NextMvChecks.Run();
                 await TimelineRippleChecks.Run();
                 await CaptionTimingChecks.Run();
+            await CaptionTimingChecks.Run(Kachinco.Core.TrackKind.EditNote);
                 await CreationWorkflowChecks.Run();
                 await InspectorChecks.Run(main);
                 await CaptionTextChecks.Run(main);
+            EditNoteChecks.Run(main);
                 await CaptionStyleChecks.Run();
                 await VolumeChecks.Run(main);
                 await EffectChecks.Run(main);

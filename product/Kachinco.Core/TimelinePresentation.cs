@@ -82,7 +82,7 @@ public static class TimelineLanes
         for (int i = 0; i < tracks.Length; i++)
         {
             var t = tracks[i]; rows.Add(new(t.Id, t.Kind));
-            if (t.Kind != TrackKind.Subtitle && !tracks.Skip(i + 1).Any(l => l.Kind == t.Kind)) rows.Add(new(null, t.Kind));
+            if ((t.Kind is TrackKind.Video or TrackKind.Audio) && !tracks.Skip(i + 1).Any(l => l.Kind == t.Kind)) rows.Add(new(null, t.Kind));
         }
         foreach (var kind in new[] { TrackKind.Video, TrackKind.Audio })
             if (!tracks.Any(t => t.Kind == kind)) rows.Add(new(null, kind));

@@ -8,14 +8,14 @@ using Kachinco.Core;
 
 internal static class CaptionTimingChecks
 {
-    public static async Task Run()
+    public static async Task Run(TrackKind kind = TrackKind.Subtitle)
     {
         using var session = new EditorSession();
         var sequence = Guid.NewGuid(); var track = Guid.NewGuid(); var id = Guid.NewGuid();
         const long t = TimelineTime.TicksPerSecond;
         Check(session.Execute(new([new CreateProject(Guid.NewGuid(), "Caption drag"),
             new CreateSequence(sequence, "Timeline", SequenceSettings.Landscape, 10 * t),
-            new AddTrack(sequence, track, "S1", TrackKind.Subtitle),
+            new AddTrack(sequence, track, kind == TrackKind.EditNote ? "M1" : "S1", kind),
             new AddCaption(sequence, track, new(id, t, 2 * t, "�̎� / lyric") { Style = new(FontSize: 58) })])).Success, "fixture");
         var surface = new TimelineSurface { Width = 950, Height = 240 };
         var window = new Window { Content = surface, Width = 990, Height = 300, ShowInTaskbar = false };

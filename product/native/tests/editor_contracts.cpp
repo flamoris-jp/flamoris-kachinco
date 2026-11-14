@@ -158,7 +158,58 @@ static int caption_style_contracts() {
     bad=patch;bad["commands"][0]["value"]["patch"]={{"surprise",true}};REQUIRE(request(s,bad.dump()).at("success")==false);
     kn_editor_destroy(s);return 0;
 }
+
+static int edit_note_contracts() {
+    kn_editor_session* s=nullptr;REQUIRE(kn_editor_create(10,&s)==KN_OK);
+    commit(s,edit(json::array({
+        command("CreateProject",{{"projectId",id(1)},{"name","notes"}}),
+        command("CreateSequence",{{"sequenceId",id(2)},{"name","sequence"},{"settings",{{"width",1920},{"height",1080},{"frameRate",{{"numerator",24},{"denominator",1}}}}},{"durationTicks",60}})
+    })));
+    const auto before=snapshot(s).at("project");
+    auto legacy=request(nullptr,json({{"action","serialize"},{"project",before}}).dump());
+    REQUIRE(json::parse(legacy.at("value").get<std::string>())["schemaVersion"]==2);
+    commit(s,edit(json::array({
+        command("AddTrack",{{"sequenceId",id(2)},{"trackId",id(3)},{"name","M1"},{"kind",3}}),
+        command("AddCaption",{{"sequenceId",id(2)},{"trackId",id(3)},{"caption",{{"id",id(4)},{"startTicks",10},{"durationTicks",20},{"text","引きを速める"},{"enabled",true}}}})
+    })));
+    const auto after=snapshot(s).at("project");
+    auto encoded=request(nullptr,json({{"action","serialize"},{"project",after}}).dump());
+    REQUIRE(encoded.at("diagnostics").empty());auto file=json::parse(encoded.at("value").get<std::string>());
+    REQUIRE(file["schemaVersion"]==9);REQUIRE(file["project"]["sequences"][0]["tracks"][0]["kind"]=="EditNote");
+    auto decoded=request(nullptr,json({{"action","deserialize"},{"text",file.dump()}}).dump());
+    REQUIRE(decoded.at("diagnostics").empty());
+    REQUIRE(request(nullptr,json({{"action","serialize"},{"project",decoded.at("value")}}).dump()).at("value")==encoded.at("value"));
+    auto old=file;old["schemaVersion"]=8;REQUIRE(!request(nullptr,json({{"action","deserialize"},{"text",old.dump()}}).dump()).at("diagnostics").empty());
+    old["project"]["sequences"][0]["tracks"][0]["kind"]="Audio,Subtitle";
+    REQUIRE(!request(nullptr,json({{"action","deserialize"},{"text",old.dump()}}).dump()).at("diagnostics").empty());
+    auto invalid=after;invalid["sequences"][0]["tracks"][0]["clips"].push_back(nullptr);
+    REQUIRE(!request(nullptr,json({{"action","validate"},{"project",invalid}}).dump()).at("diagnostics").empty());
+    commit(s,{{"action","undo"}});REQUIRE(snapshot(s).at("project")==before);
+    commit(s,{{"action","redo"}});REQUIRE(snapshot(s).at("project")==after);
+    auto update=edit(json::array({command("UpdateCaption",{{"sequenceId",id(2)},{"captionId",id(4)},{"startTicks",20},{"durationTicks",30},{"text","布が招く"},{"enabled",false}})}));
+    commit(s,update);auto edited=snapshot(s).at("project");REQUIRE(edited["sequences"][0]["tracks"][0]["captions"][0]["startTicks"]==20);
+    auto bad=update;bad["commands"][0]["value"]["durationTicks"]=100;
+    REQUIRE(request(s,bad.dump()).at("success")==false);REQUIRE(snapshot(s).at("project")==edited);
+    commit(s,edit(json::array({command("DeleteCaption",{{"sequenceId",id(2)},{"captionId",id(4)}})})));
+    auto empty=request(nullptr,json({{"action","serialize"},{"project",snapshot(s).at("project")}}).dump());
+    REQUIRE(json::parse(empty.at("value").get<std::string>())["schemaVersion"]==9);
+    kn_editor_destroy(s);
+    // One canonical native activity test: kind 3 never becomes kind 2 or audio.
+    kn_eval_item items[2]{};
+    for(int i=0;i<2;++i) {auto& c=items[i];c.start=10;c.duration=20;c.index=i;c.kind=i+2;c.enabled=c.track_enabled=1;c.appearance.scale_x=c.appearance.scale_y=c.appearance.opacity=c.gain=1;}
+    kn_timeline* timeline=nullptr;REQUIRE(kn_timeline_create(60,items,2,&timeline)==KN_OK);
+    kn_eval_result values[2]{};uint32_t count=0;
+    REQUIRE(kn_timeline_evaluate(timeline,9,0,values,2,&count)==KN_OK&&count==0);
+    REQUIRE(kn_timeline_evaluate(timeline,10,0,values,2,&count)==KN_OK&&count==2&&values[0].kind==2&&values[1].kind==3);
+    REQUIRE(kn_timeline_evaluate(timeline,30,0,values,2,&count)==KN_OK&&count==0);
+    REQUIRE(kn_timeline_evaluate(timeline,10,5,values,2,&count)==KN_OK&&count==0);
+    REQUIRE(kn_timeline_set_speed(timeline,1,2,40)==KN_INVALID_ARGUMENT);
+    kn_timeline_destroy(timeline);
+    return 0;
+}
+
 int main() {
+    REQUIRE(edit_note_contracts()==0);
     REQUIRE(caption_style_contracts()==0);
     REQUIRE(history_contracts()==0);
     REQUIRE(ripple_contracts()==0);

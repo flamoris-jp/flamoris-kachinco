@@ -114,6 +114,7 @@ public partial class MainWindow
     }
     private void RefreshPlaybackFeedback()
     {
+        RefreshEditNoteOverlay();
         if (playback is null || PlaybackStatus is null) return;
         if (playback.State == InteractivePreviewState.Failed)
         {
@@ -354,7 +355,7 @@ public partial class MainWindow
         if (!CaptionTextInspector.TryApply()) return;
         var sequence = session.GetProject().Project?.Sequences.FirstOrDefault(x => x.Id == selectedSequenceId);
         if (sequence is null) return;
-        var result = SrtCodec.Write(sequence.Tracks.Where(t => t.Enabled).SelectMany(t => t.Captions));
+        var result = SrtCodec.Write(sequence);
         if (!result.Success) { ShowErrors(result.Diagnostics); return; }
         var picker = new SaveFileDialog { Filter = "SRT (*.srt)|*.srt", DefaultExt = ".srt", FileName = "captions.srt" };
         if (picker.ShowDialog(this) != true) return;

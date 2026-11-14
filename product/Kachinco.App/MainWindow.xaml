@@ -78,6 +78,11 @@
         <MenuItem Header="{DynamicResource Shell.DeleteselectedclipD}" Click="Delete_Click" InputGestureText="Delete" />
       </MenuItem>
       <MenuItem x:Name="SequenceMenu" Header="{DynamicResource Shell.SequenceS}"><MenuItem x:Name="AddVideoTrackMenu" Header="{DynamicResource Shell.Addvideotrack}" Tag="Video" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Addaudiotrack}" Tag="Audio" Click="AddTrack_Click" /><MenuItem Header="{DynamicResource Shell.Changeduration}" Click="SequenceDuration_Click" /></MenuItem>
+      <MenuItem Header="{DynamicResource Shell.EditNotes}">
+        <MenuItem Header="{DynamicResource Shell.CreateEditNote}" Click="CreateEditNote_Click" />
+        <MenuItem Header="{DynamicResource Shell.EditEditNotes}" Click="EditEditNotes_Click" />
+        <MenuItem x:Name="ShowEditNotesMenu" Header="{DynamicResource Shell.ShowEditNotes}" IsCheckable="True" IsChecked="True" Click="ShowEditNotes_Click" />
+      </MenuItem>
       <MenuItem Header="{DynamicResource Shell.TitleImage}">
         <MenuItem Header="{DynamicResource Shell.TitleFromFile}" Click="TitleFromFile_Click"/>
         <MenuItem Header="{DynamicResource Shell.TitleFromFrame}" Click="TitleFromFrame_Click"/>
@@ -176,6 +181,7 @@
             <ListBox.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="{DynamicResource Shell.CreateCaptionAtPlayhead}" Click="CreateCaptionAtPlayhead_Click" />
+                <MenuItem Header="{DynamicResource Shell.CreateEditNote}" Click="CreateEditNote_Click" />
                 <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
               </ContextMenu>
             </ListBox.ContextMenu>
@@ -199,6 +205,12 @@
       <Border Grid.Column="2" Background="#202124" Padding="8">
         <Grid>
           <Image x:Name="PreviewImage" Stretch="Uniform" />
+          <Border x:Name="EditNotesOverlay" VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="12" Padding="10" Background="#DE30270C" Visibility="Collapsed" IsHitTestVisible="False" MaxHeight="180" ClipToBounds="True">
+            <StackPanel>
+              <TextBlock Text="{DynamicResource Shell.EditNoteOverlayLabel}" Foreground="#FFD166" FontWeight="Bold" />
+              <TextBlock x:Name="EditNotesOverlayText" Foreground="#FFF0C2" TextWrapping="Wrap" Margin="0,4,0,0" />
+            </StackPanel>
+          </Border>
           <Viewbox Stretch="Uniform" IsHitTestVisible="False"><Canvas x:Name="ClapperCanvas" Width="1920" Height="1080" /></Viewbox>
           <StackPanel x:Name="WelcomePanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380">
             <TextBlock Text="FLAMORIS Kachinco" Foreground="#E7E7E7" FontSize="20" TextAlignment="Center" Margin="0,0,0,12"/>
@@ -318,6 +330,7 @@
             <local:TimelineSurface.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="{DynamicResource Shell.CreateCaptionAtPlayhead}" Click="CreateCaptionAtPlayhead_Click" />
+                <MenuItem Header="{DynamicResource Shell.CreateEditNote}" Click="CreateEditNote_Click" />
                 <MenuItem Header="{DynamicResource Shell.ImportSRTAtPlayhead}" Click="ImportSrtAtPlayhead_Click" />
                 <MenuItem Header="{DynamicResource Shell.StyleAllCaptions}" Click="StyleAllCaptions_Click" />
               </ContextMenu>

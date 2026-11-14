@@ -108,6 +108,13 @@ Some capabilities have explicit boundaries:
 
 The full engineering status and outstanding acceptance evidence live in [PROGRESS.md](PROGRESS.md), [the roadmap](docs/roadmap.md), and [Windows creation-workflow acceptance](staging/windows-creation-workflow.md).
 
+## Editing notes / 編集メモ
+
+Timed production directions can be placed on gold M tracks, moved/trimmed like captions,
+and shown as an editor-only overlay. They persist in the project and share UI/MCP
+history, but are excluded from video, title/frame capture and SRT export.
+[Editing notes guide / 使い方](docs/editing-notes.md). Source implementation; deployment and physical Windows acceptance are separate.
+
 ## KineticTypo / キネタイ companion
 
 The Windows package now includes `kinetai/KineticTypo.App.exe`: a separate C# WPF

@@ -39,6 +39,7 @@ extern "C" {
 #define KN_CAP_KINETIC_TEXT UINT64_C(131072)
 #define KN_CAP_KINETIC_PROGRAM_V2 UINT64_C(262144)
 #define KN_CAP_KINETIC_GLYPHS UINT64_C(524288)
+#define KN_CAP_EDIT_NOTES UINT64_C(1048576)
 #define KN_TICKS_PER_SECOND INT64_C(35280000)
 #define KN_OK INT32_C(0)
 #define KN_INVALID_ARGUMENT INT32_C(1)
@@ -149,7 +150,8 @@ KN_API const char* KN_CALL kn_gpu_shader_diagnostics(const kn_gpu_preview* previ
 KN_API int32_t KN_CALL kn_gpu_diagnostic_without_optimization(kn_gpu_preview* preview, int32_t* error) KN_NOEXCEPT;
 
 
-/* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting. */
+/* Snapshot-only evaluation input; IDs are canonical UUID hex halves for ordinal sorting.
+   kind: 0 video, 1 audio, 2 subtitle, 3 editing note (authoring overlay only). */
 typedef struct kn_eval_item {
     int64_t start, duration, source;
     uint64_t id_high, id_low;

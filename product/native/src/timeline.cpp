@@ -19,7 +19,7 @@ static int64_t source_at(const kn_timeline* t,const kn_eval_item& item,int64_t l
 int32_t KN_CALL kn_timeline_set_speed(kn_timeline* t,int32_t index,int32_t rate,int64_t span) noexcept {
     if(!t||(rate!=1&&rate!=2&&rate!=4&&rate!=8)||span<=0) return KN_INVALID_ARGUMENT;
     auto item=std::find_if(t->items.begin(),t->items.end(),[&](const auto& c){return c.index==index;});
-    if(item==t->items.end()||item->kind==2||span>INT64_MAX-item->source||item->duration!=span/rate+(span%rate!=0)) return KN_INVALID_ARGUMENT;
+    if(item==t->items.end()||item->kind>=2||span>INT64_MAX-item->source||item->duration!=span/rate+(span%rate!=0)) return KN_INVALID_ARGUMENT;
     try {t->speeds[index]={rate,span};return KN_OK;} catch(const std::bad_alloc&) {return KN_OUT_OF_MEMORY;} catch(...) {return KN_INTERNAL_ERROR;}
 }
 int32_t KN_CALL kn_timeline_source_tick(const kn_timeline* t,int32_t index,int64_t tick,int64_t* output) noexcept {
@@ -89,7 +89,7 @@ int32_t KN_CALL kn_timeline_create(int64_t duration, const kn_eval_item* items, 
         for (uint32_t i=0; i<count; ++i) {
             const auto& c=items[i]; const auto& a=c.appearance;
             if (c.start < 0 || c.duration <= 0 || c.start > duration || c.duration > duration-c.start || c.source < 0 ||
-                c.duration > std::numeric_limits<int64_t>::max()-c.source || c.track < 0 || c.index < 0 || c.kind < 0 || c.kind > 2 ||
+                c.duration > std::numeric_limits<int64_t>::max()-c.source || c.track < 0 || c.index < 0 || c.kind < 0 || c.kind > 3 ||
                 !std::isfinite(c.gain) || c.gain < 0 || c.gain > 16 || !std::isfinite(a.opacity) || a.opacity < 0 || a.opacity > 1 ||
                 !std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(a.scale_x) || !std::isfinite(a.scale_y) ||
                 a.scale_x <= 0 || a.scale_y <= 0 || !std::isfinite(a.rotation) || a.blend < 0 || a.blend > 1) return KN_INVALID_ARGUMENT;
