@@ -638,7 +638,7 @@ public partial class TimelineSurface : UserControl
         foreach (var track in value.Tracks.Reverse())
         {
             counts.TryGetValue(track.Kind, out int number); number++; counts[track.Kind] = number;
-            labels[track.Id] = $"{(track.Kind == TrackKind.Video ? "V" : track.Kind == TrackKind.Audio ? "A" : "S")}{number}";
+            labels[track.Id] = $"{(track.Kind == TrackKind.Video ? "V" : track.Kind == TrackKind.Audio ? "A" : track.Kind == TrackKind.EditNote ? "M" : "S")}{number}";
         }
         return labels;
     }

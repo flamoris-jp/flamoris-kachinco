@@ -10,6 +10,9 @@ public sealed class CaptionTextEditor : StackPanel
 {
     private readonly TextBox text = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
         MinHeight = 90, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly TextBlock heading = new() { Margin = new(0,0,0,4) };
+    private readonly Button apply = new() { Margin = new(0,4,0,4) };
+    private bool editNote;
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap };
     private EditorSession? session;
     private ProjectSnapshot? baseline;
@@ -21,9 +24,9 @@ public sealed class CaptionTextEditor : StackPanel
 
     public CaptionTextEditor()
     {
-        Children.Add(new TextBlock { Text = T("字幕クリップの文章", "Caption clip text"), Margin = new(0,0,0,4) });
+        heading.Text = T("字幕クリップの文章", "Caption clip text"); Children.Add(heading);
         Children.Add(text);
-        var apply = new Button { Content = T("字幕を適用", "Apply caption"), Margin = new(0,4,0,4) };
+        apply.Content = T("字幕を適用", "Apply caption");
         apply.Click += (_, _) => TryApply();
         Children.Add(apply);
         Children.Add(new TextBlock { Text = T("Ctrl+Enterで適用。Ctrl+Sでプロジェクト保存。", "Ctrl+Enter applies. Ctrl+S saves the project."), TextWrapping = TextWrapping.Wrap });
@@ -36,8 +39,11 @@ public sealed class CaptionTextEditor : StackPanel
         };
     }
 
-    public void Configure(EditorSession editor, Guid sequence, Guid captionId, Action<EditResult> onChanged)
+    public void Configure(EditorSession editor, Guid sequence, Guid captionId, Action<EditResult> onChanged, bool isEditNote = false)
     {
+        editNote = isEditNote;
+        heading.Text = editNote ? T("編集メモの文章（書出し対象外）", "Editing note text (never exported)") : T("字幕クリップの文章", "Caption clip text");
+        apply.Content = editNote ? T("メモを適用", "Apply note") : T("字幕を適用", "Apply caption");
         bool keepDraft = session == editor && document == editor.DocumentToken && sequenceId == sequence && caption?.Id == captionId && HasChanges;
         session = editor; sequenceId = sequence; changed = onChanged;
         if (keepDraft)
@@ -60,13 +66,13 @@ public sealed class CaptionTextEditor : StackPanel
         if (session is null || baseline is null || caption is null || document != session.DocumentToken)
         { status.Text = T("プロジェクトが変わりました。字幕を選び直してください。", "Project changed. Select the caption again."); return false; }
         if (string.IsNullOrWhiteSpace(text.Text))
-        { status.Text = T("字幕の文章を入力してください。", "Enter caption text."); return false; }
+        { status.Text = editNote ? T("編集メモを入力してください。", "Enter editing note text.") : T("字幕の文章を入力してください。", "Enter caption text."); return false; }
         var result = session.Execute(new([new UpdateCaption(sequenceId, caption.Id, caption.StartTicks,
             caption.DurationTicks, text.Text, caption.Enabled)], baseline.Revision));
         if (!result.Success)
         { status.Text = string.Join(" / ", result.Diagnostics.Select(d => d.Message)); return false; }
         caption = caption with { Text = text.Text }; baseline = session.GetProject();
-        status.Text = T("字幕を適用しました。プロジェクト保存でファイルに残せます。", "Caption applied. Save the project to keep it on disk.");
+        status.Text = editNote ? T("メモを適用しました。プロジェクト保存でファイルに残せます。", "Note applied. Save the project to keep it on disk.") : T("字幕を適用しました。プロジェクト保存でファイルに残せます。", "Caption applied. Save the project to keep it on disk.");
         if (notify) changed?.Invoke(result);
         return true;
     }

@@ -51,7 +51,7 @@ public sealed class KineticTests
         Assert.IsTrue(session.Execute(new([new SetTextComposition(asset.Id, document.ToJsonString())], session.GetProject().Revision)).Success);
         Assert.IsTrue(session.Undo().Success); Assert.AreEqual(asset.TextComposition, session.GetProject().Project!.Assets[0].TextComposition);
         var plain = project with { Assets = [], Sequences = [] }; var legacy = ProjectJson.Serialize(plain); StringAssert.Contains(legacy.Value!, "\"schemaVersion\": 2"); Assert.IsFalse(legacy.Value!.Contains("textComposition"));
-        Assert.IsFalse(ProjectJson.Deserialize(encoded.Value!.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 9")).Success);
+        Assert.IsFalse(ProjectJson.Deserialize(encoded.Value!.Replace("\"schemaVersion\": 8", "\"schemaVersion\": 10")).Success);
     }
     [TestMethod]
     public void ShortenedTextCannotSilentlyInvalidateHostClipsAndReturnIdentityIsBound()

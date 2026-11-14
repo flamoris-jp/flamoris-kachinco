@@ -13,9 +13,10 @@ public partial class TimelineSurface
 
     private void DrawCaption(Caption caption, int row)
     {
+        bool note = sequence!.Tracks.First(t => t.Captions.Any(c => c.Id == caption.Id)).Kind == TrackKind.EditNote;
         double width = ToDouble(viewport.TicksToPixels(caption.DurationTicks));
         var grid = new Grid { Width = width, Height = geometry.Row(row).ClipHeight,
-            Background = Brushes.DarkMagenta, Tag = caption.Id, ClipToBounds = true,
+            Background = note ? Brushes.DarkGoldenrod : Brushes.DarkMagenta, Tag = caption.Id, ClipToBounds = true,
             Opacity = sequence!.Tracks.First(t => t.Captions.Any(c => c.Id == caption.Id)).Enabled ? 1 : .45,
             ToolTip = CaptionTooltip(caption.Text, caption.StartTicks, caption.DurationTicks) };
         grid.Children.Add(new Border { BorderBrush = caption.Id == selectedClipId ? Brushes.White : Brushes.Transparent,
@@ -44,9 +45,9 @@ public partial class TimelineSurface
             }
             thumb.ToolTip = edge switch
             {
-                TrimEdge.Start => EditorText.Choose("字幕の開始を調整", "Adjust caption start"),
-                TrimEdge.End => EditorText.Choose("字幕の終了を調整", "Adjust caption end"),
-                _ => EditorText.Choose("字幕を左右に移動", "Move caption horizontally")
+                TrimEdge.Start => note ? EditorText.Choose("編集メモの開始を調整", "Adjust note start") : EditorText.Choose("字幕の開始を調整", "Adjust caption start"),
+                TrimEdge.End => note ? EditorText.Choose("編集メモの終了を調整", "Adjust note end") : EditorText.Choose("字幕の終了を調整", "Adjust caption end"),
+                _ => note ? EditorText.Choose("編集メモを左右に移動", "Move note horizontally") : EditorText.Choose("字幕を左右に移動", "Move caption horizontally")
             };
             thumb.DragStarted += (_, _) =>
             {

@@ -9,7 +9,11 @@ public sealed record EvaluatedCaption(Guid TrackId, Guid CaptionId, string Text)
 { public CaptionStyle? Style { get; init; } }
 public sealed record EvaluatedFrame(Guid SequenceId, long Tick, SequenceSettings Settings,
     ImmutableArray<EvaluatedVideoLayer> VideoLayers, ImmutableArray<EvaluatedAudio> Audio,
-    ImmutableArray<EvaluatedCaption> Captions);
+    ImmutableArray<EvaluatedCaption> Captions)
+{
+    // Authoring overlays only; renderers consume Captions, never EditNotes.
+    public ImmutableArray<EvaluatedCaption> EditNotes { get; init; } = [];
+}
 public sealed record AudioRangeContribution(Guid TrackId, Guid ClipId, Guid MediaAssetId,
     long TimelineStartTicks, long SourceStartTicks, long DurationTicks, double Gain)
 { public int PlaybackRate { get; init; } = 1; }
@@ -57,7 +61,7 @@ public sealed class TimelineEvaluator : IDisposable
             {
                 var id = caption.Id.ToString("N");
                 items.Add(new(caption.StartTicks, caption.DurationTicks, 0,
-                    Convert.ToUInt64(id[..16],16),Convert.ToUInt64(id[16..],16), trackIndex, ids.Count, 2,
+                    Convert.ToUInt64(id[..16],16),Convert.ToUInt64(id[16..],16), trackIndex, ids.Count, (int)track.Kind,
                     caption.Enabled ? 1 : 0, new(0,0,1,1,0,1,0), 1, 0, track.Enabled ? 1 : 0));
                 ids.Add((track.Id, null, caption));
             }
@@ -79,6 +83,7 @@ public sealed class TimelineEvaluator : IDisposable
         var video = ImmutableArray.CreateBuilder<EvaluatedVideoLayer>();
         var audio = ImmutableArray.CreateBuilder<EvaluatedAudio>();
         var captions = ImmutableArray.CreateBuilder<EvaluatedCaption>();
+        var notes = ImmutableArray.CreateBuilder<EvaluatedCaption>();
         foreach (var value in native.Evaluate(tick))
         {
             var id = identities[value.Index];
@@ -89,9 +94,10 @@ public sealed class TimelineEvaluator : IDisposable
                     new(new(a.X,a.Y,a.ScaleX,a.ScaleY,a.Rotation),a.Opacity,(BlendMode)a.Blend)));
             }
             else if (value.Kind == 1) audio.Add(new(id.TrackId,id.Clip!.Id,id.Clip.MediaAssetId,Project.Assets.First(asset => asset.Id == id.Clip.MediaAssetId).Kind == MediaKind.Image ? 0 : value.SourceStart,value.Gain));
-            else captions.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text) { Style = id.Caption.Style });
+            else if (value.Kind == 2) captions.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text) { Style = id.Caption.Style });
+            else if (value.Kind == 3) notes.Add(new(id.TrackId,id.Caption!.Id,id.Caption.Text) { Style = id.Caption.Style });
         }
-        return Result<EvaluatedFrame>.Ok(new(Sequence.Id,tick,Sequence.Settings,video.ToImmutable(),audio.ToImmutable(),captions.ToImmutable()));
+        return Result<EvaluatedFrame>.Ok(new(Sequence.Id,tick,Sequence.Settings,video.ToImmutable(),audio.ToImmutable(),captions.ToImmutable()) { EditNotes = notes.ToImmutable() });
     }
     public Result<ImmutableArray<AudioRangeContribution>> EvaluateAudioRange(long startTicks, long durationTicks)
     {

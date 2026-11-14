@@ -435,3 +435,10 @@ Do not commit audio or video files (including MP3, MP4, WAV, FLAC, M4A, OGG, MOV
 Store media outside Git in approved artifact/media storage. Commit references, SHA-256 digests, provenance, analysis results, scripts and small text/symbolic fixtures instead. Generate temporary synthetic media during tests when needed. Licensing review does not waive this storage policy. MIDI/project data and images retain their existing repository-specific rules.
 
 The `.gitignore` covers common audio/video extensions case-insensitively. Where installed, the `Media policy / No tracked audio or video` PR check also detects force-added files and LFS pointers by filename; it is not a content/archives scanner or a server-side push restriction. Do not rewrite history or remove external assets as part of this rule. See the [shared policy](https://github.com/flamoris-jp/flamoris-commons/blob/main/docs/repository-policy.md#121-audio-and-video-storage).
+
+## Timed editing notes authority
+
+- ADR 0032 adds TrackKind.EditNote, caption-shaped entries and conditional v9. Native owns validation/history/codec/activity; UI and MCP reuse the existing guarded caption commands.
+- EvaluatedFrame.EditNotes is an authoring projection only. Never include it in Captions or media pixels. Video, title/MCP capture and project-level SRT export exclude notes. Keep subtitle list/style scopes separate.
+- Required native capabilities are 1179647. Keep producer and Hub edit_batch AddTrack enum descriptors aligned. Existing projects without notes retain conditional v2–v8 encoding.
+- Run EditNoteTests, native editor contracts and Windows note/drag smoke; physical interaction is separate.

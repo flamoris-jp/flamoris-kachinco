@@ -30,7 +30,7 @@ static int64_t ticks(const json& v) {
     auto s=text(v); if(s.empty()) throw std::invalid_argument("tick"); bool plus=s[0]=='+'; const char* begin=s.data()+(plus?1:0); if(begin==s.data()+s.size()||(plus&&*begin=='-')) throw std::invalid_argument("tick");
     int64_t n=0; auto r=std::from_chars(begin,s.data()+s.size(),n); if(r.ec!=std::errc()||r.ptr!=s.data()+s.size()) throw std::invalid_argument("tick"); return n;
 }
-static const std::vector<std::string> media={"Mov","Wav","Image","KineticText","MaskedVideo"},track={"Video","Audio","Subtitle"},blend={"Normal","Screen"},geometry={"Point","Rectangle"};
+static const std::vector<std::string> media={"Mov","Wav","Image","KineticText","MaskedVideo"},track={"Video","Audio","Subtitle","EditNote"},blend={"Normal","Screen"},geometry={"Point","Rectangle"};
 static int enum_value(const json& v,const std::vector<std::string>& names) {
     auto name=text(v); for(char& c:name) if(c>='A'&&c<='Z') c=static_cast<char>(c+32);
     int result=0;size_t start=0;
@@ -73,6 +73,7 @@ static json encode_clip(json c,bool curves,bool visual,bool speed) {
 }
 json encode_file(const json& p) {
     bool curves=false,visual=false,speed=false,titles=false,styles=false;
+    bool notes=false;for(const auto& seq:p.at("sequences"))for(const auto& t:seq.at("tracks"))if(integer(t.at("kind"))==3)notes=true;
     bool kinetic=false;for(const auto& a:p.at("assets"))if(integer(a.at("kind"))>=3)kinetic=true;
     for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("captions"))
         if(!c.value("style",json(nullptr)).is_null()) styles=true;
@@ -84,14 +85,14 @@ json encode_file(const json& p) {
         if(c.at("appearance").contains("automation")&&!c.at("appearance").at("automation").empty()) visual=true;
     for(const auto& s:p.at("sequences")) for(const auto& t:s.at("tracks")) for(const auto& c:t.at("clips"))
         if(c.at("audio").contains("volumePoints")&&!c.at("audio").at("volumePoints").empty()) curves=true;
-    json result={{"format","flamoris-kachinco"},{"schemaVersion",kinetic?8:styles?7:titles?6:speed?5:visual?4:curves?3:2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
+    json result={{"format","flamoris-kachinco"},{"schemaVersion",notes?9:kinetic?8:styles?7:titles?6:speed?5:visual?4:curves?3:2},{"timebase",std::to_string(KN_TICKS_PER_SECOND)},{"project",{{"id",p.at("id")},{"name",p.at("name")},{"assets",json::array()},{"sequences",json::array()}}},{"authoring",json::array()},{"generatedAssets",json::array()}};
     for(auto a:sorted(p.at("assets"))) {
-        if(!kinetic){a.erase("textComposition");a.erase("maskSourcePath");}else{if(!a.contains("textComposition"))a["textComposition"]=nullptr;if(!a.contains("maskSourcePath"))a["maskSourcePath"]=nullptr;}
+        if(!kinetic&&!notes){a.erase("textComposition");a.erase("maskSourcePath");}else{if(!a.contains("textComposition"))a["textComposition"]=nullptr;if(!a.contains("maskSourcePath"))a["maskSourcePath"]=nullptr;}
         const auto pr=a.value("provenance",json(nullptr)); a.erase("provenance"); a["kind"]=media.at(static_cast<size_t>(integer(a.at("kind")))); a["durationTicks"]=std::to_string(integer(a.at("durationTicks"))); result["project"]["assets"].push_back(a);
         if(!pr.is_null()) result["generatedAssets"].push_back({{"mediaAssetId",a.at("id")},{"recipeId",pr.at("recipeId")},{"recipeRevision",pr.at("recipeRevision")},{"sourceSha256",pr.at("sourceSha256")},{"outputSha256",pr.at("outputSha256")}});
     }
     for(auto s:sorted(p.at("sequences"))) {
-        if(titles||styles||kinetic) {
+        if(titles||styles||kinetic||notes) {
             if(!s.contains("titleImage")) s["titleImage"]=nullptr;
             if(!s.contains("titleSlot")) s["titleSlot"]=nullptr;
             if(!s["titleImage"].is_null()&&!s["titleImage"]["sourceFrameTicks"].is_null())
@@ -101,7 +102,7 @@ json encode_file(const json& p) {
         for(auto& c:clappers) {c["startTicks"]=std::to_string(integer(c.at("startTicks"))); c["durationTicks"]=std::to_string(integer(c.at("durationTicks"))); if(!c.at("geometry").is_null()) c["geometry"]["kind"]=geometry.at(static_cast<size_t>(integer(c.at("geometry").at("kind"))));}
         result["authoring"].push_back({{"sequenceId",s.at("id")},{"clappers",clappers},{"recipes",recipes}}); s.erase("clappers"); s.erase("recipes");
         auto fps=s.at("settings").at("frameRate"); s["settings"].erase("frameRate"); s["settings"]["fpsNumerator"]=fps.at("numerator"); s["settings"]["fpsDenominator"]=fps.at("denominator"); s["durationTicks"]=std::to_string(integer(s.at("durationTicks")));
-        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c,curves||visual||speed||titles||styles||kinetic,visual||speed||titles||styles||kinetic,speed||titles||styles||kinetic); for(auto& c:captions) {if(styles||kinetic) {if(!c.contains("style")) c["style"]=nullptr;} else c.erase("style");c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
+        for(auto& t:s["tracks"]) {t["kind"]=track.at(static_cast<size_t>(integer(t.at("kind")))); auto clips=sorted(t.at("clips"),true),captions=sorted(t.at("captions"),true); for(auto& c:clips) c=encode_clip(c,curves||visual||speed||titles||styles||kinetic||notes,visual||speed||titles||styles||kinetic||notes,speed||titles||styles||kinetic||notes); for(auto& c:captions) {if(styles||kinetic||notes) {if(!c.contains("style")) c["style"]=nullptr;} else c.erase("style");c["startTicks"]=std::to_string(integer(c.at("startTicks")));c["durationTicks"]=std::to_string(integer(c.at("durationTicks")));} t["clips"]=clips;t["captions"]=captions;}
         result["project"]["sequences"].push_back(s);
     }
     return result;
@@ -112,7 +113,7 @@ json decode_file(const std::string& raw) {
     int32_t schema;
     try { schema=i32(first.at("schemaVersion")); }
     catch(...) { throw rejected{error("INVALID_ENVELOPE","An integer schemaVersion is required.")}; }
-    if(schema!=1&&schema!=2&&schema!=3&&schema!=4&&schema!=5&&schema!=6&&schema!=7&&schema!=8) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
+    if(schema!=1&&schema!=2&&schema!=3&&schema!=4&&schema!=5&&schema!=6&&schema!=7&&schema!=8&&schema!=9) throw rejected{error("SCHEMA_UNSUPPORTED","Schema "+std::to_string(schema)+" is not supported.")};
     auto root=parse(raw);
     if(schema==1) fields(root,{"format","schemaVersion","timebase","project"}); else fields(root,{"format","schemaVersion","timebase","project","authoring","generatedAssets"});
     if(text(root.at("format"))!="flamoris-kachinco"||ticks(root.at("timebase"))!=KN_TICKS_PER_SECOND) throw std::invalid_argument("envelope");
@@ -135,7 +136,7 @@ json decode_file(const std::string& raw) {
         } else fields(s,{"id","name","settings","durationTicks","tracks"});s["id"]=guid(s.at("id"));s["name"]=text(s.at("name"));s["durationTicks"]=ticks(s.at("durationTicks"));
         auto settings=s.at("settings"); fields(settings,{"width","height","fpsNumerator","fpsDenominator"}); s["settings"]={{"width",i32(settings.at("width"))},{"height",i32(settings.at("height"))},{"frameRate",{{"numerator",i32(settings.at("fpsNumerator"))},{"denominator",i32(settings.at("fpsDenominator"))}}}}; array(s.at("tracks"));
         for(auto& t:s["tracks"]) {
-            fields(t,{"id","name","kind","enabled","clips","captions"});t["id"]=guid(t.at("id"));t["name"]=text(t.at("name"));t["kind"]=enum_value(t.at("kind"),track);t["enabled"]=boolean(t.at("enabled"));array(t.at("clips"));array(t.at("captions"));
+            fields(t,{"id","name","kind","enabled","clips","captions"});t["id"]=guid(t.at("id"));t["name"]=text(t.at("name"));t["kind"]=schema>=9?strict_enum(t.at("kind"),track):enum_value(t.at("kind"),std::vector<std::string>{"Video","Audio","Subtitle"});if(schema<9&&integer(t.at("kind"))>2)throw std::invalid_argument("legacy track kind");t["enabled"]=boolean(t.at("enabled"));array(t.at("clips"));array(t.at("captions"));
             for(auto& c:t["clips"]) {
                 if(schema>=5) fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio","playbackRate","sourceDurationTicks"}); else fields(c,{"id","mediaAssetId","startTicks","sourceInTicks","durationTicks","enabled","appearance","audio"});
                 if(schema>=5) {c["playbackRate"]=i32(c.at("playbackRate"));c["sourceDurationTicks"]=ticks(c.at("sourceDurationTicks"));}c["id"]=guid(c.at("id"));c["mediaAssetId"]=guid(c.at("mediaAssetId"));for(const char* k:{"startTicks","sourceInTicks","durationTicks"}) c[k]=ticks(c.at(k));c["enabled"]=boolean(c.at("enabled"));
